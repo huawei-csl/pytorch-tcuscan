@@ -1,0 +1,32 @@
+#!/usr/bin/python3
+# coding=utf-8
+#
+# Copyright (C) 2023-2024. Huawei Technologies Co., Ltd. All rights reserved.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+# ===============================================================================
+
+import pytest
+import torch
+import torch_npu
+import sys, os
+
+sys.path.append(os.getcwd())
+import add_custom
+
+torch.npu.config.allow_internal_format = False
+
+
+def test_add_custom_ops():
+    length = [8, 2048]
+    x = torch.rand(length, device="cpu", dtype=torch.float16)
+    y = torch.rand(length, device="cpu", dtype=torch.float16)
+
+    x_npu = x.npu()
+    y_npu = y.npu()
+    output = add_custom.run_add_custom(x_npu, y_npu)
+    cpuout = torch.add(x, y)
+
+    assert torch.all_close(output, cpuout)
