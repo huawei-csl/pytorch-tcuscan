@@ -12,7 +12,6 @@ import torch
 import torch_npu
 import sys, os
 
-sys.path.append(os.getcwd())
 import add_custom
 
 torch.npu.config.allow_internal_format = False
