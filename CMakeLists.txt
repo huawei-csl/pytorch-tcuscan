@@ -1,10 +1,11 @@
 cmake_minimum_required(VERSION 3.16.0)
-project(Ascend_C)
+project(ascendc-pybind)
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # user-defined configuration
-set(SOC_VERSION "Ascend310P3" CACHE STRING "system on chip type")
+set(SOC_VERSION "Ascend910B4" CACHE STRING "system on chip type")
 set(ASCEND_CANN_PACKAGE_PATH "/usr/local/Ascend/ascend-toolkit/latest" CACHE PATH "ASCEND CANN package installation directory")
 set(RUN_MODE "npu" CACHE STRING "run mode: npu")
 set(CMAKE_BUILD_TYPE "Debug" CACHE STRING "Build type Release/Debug (default Debug)" FORCE)
@@ -17,14 +18,15 @@ elseif(EXISTS ${ASCEND_CANN_PACKAGE_PATH}/compiler/tikcpp/ascendc_kernel_cmake)
 elseif(EXISTS ${ASCEND_CANN_PACKAGE_PATH}/ascendc_devkit/tikcpp/samples/cmake)
     set(ASCENDC_CMAKE_DIR ${ASCEND_CANN_PACKAGE_PATH}/ascendc_devkit/tikcpp/samples/cmake)
 else()
-    message(FATAL_ERROR "ascendc_kernel_cmake does not exist, please check whether the cann package is installed.")
+    message(FATAL_ERROR "ascendc_kernel_cmake does not exist, please check whether the CANN package is installed.")
 endif()
 
 include(${ASCENDC_CMAKE_DIR}/ascendc.cmake)
 
-# ascendc_library use to add kernel file to generate ascendc library
+# ascendc_library use to add kernel file to generate AscendC library
 ascendc_library(kernels STATIC
     add_custom.cpp
+    # /* Add you kernels here */
 )
 
 add_library(pybind11_lib SHARED pybind11.cpp)
@@ -32,17 +34,31 @@ target_link_libraries(pybind11_lib PRIVATE
   kernels
   torch_npu
 )
+
+# Sets the PyTorch installation path on env variable 'TORCH_PATH'
 execute_process(COMMAND python3 -c "import os; import torch; print(os.path.dirname(torch.__file__))"
   OUTPUT_STRIP_TRAILING_WHITESPACE
   OUTPUT_VARIABLE TORCH_PATH
 )
 message("TORCH_PATH is ${TORCH_PATH}")
+
+# Set the Ascend PyTorch (torch_npu) installation path on env variable 'TORCH_NPU_PATH'
 set(ENV{ASCEND_HOME_PATH} ${ASCEND_CANN_PACKAGE_PATH})
 execute_process(COMMAND python3 -c "import os; import torch_npu; print(os.path.dirname(torch_npu.__file__))"
   OUTPUT_STRIP_TRAILING_WHITESPACE
   OUTPUT_VARIABLE TORCH_NPU_PATH
 )
 message("TORCH_NPU_PATH is ${TORCH_NPU_PATH}")
+
+# Set the pybind11 include dir on env variable 'PYBIND11_INC'
+execute_process(COMMAND python3 -m pybind11 --includes
+  OUTPUT_STRIP_TRAILING_WHITESPACE
+  OUTPUT_VARIABLE PYBIND11_INC
+)
+string(REPLACE " " ";" PYBIND11_INC ${PYBIND11_INC})
+message("PYBIND11_INC is ${PYBIND11_INC}")
+
+
 target_link_directories(pybind11_lib PRIVATE
   ${TORCH_PATH}/lib
   ${TORCH_NPU_PATH}/lib
@@ -52,11 +68,7 @@ target_include_directories(pybind11_lib PRIVATE
   ${TORCH_PATH}/include
   ${TORCH_PATH}/include/torch/csrc/api/include
 )
-execute_process(COMMAND python3 -m pybind11 --includes
-  OUTPUT_STRIP_TRAILING_WHITESPACE
-  OUTPUT_VARIABLE PYBIND11_INC
-)
-string(REPLACE " " ";" PYBIND11_INC ${PYBIND11_INC})
+
 target_compile_options(pybind11_lib PRIVATE
   ${PYBIND11_INC}
   -D_GLIBCXX_USE_CXX11_ABI=0

@@ -10,7 +10,7 @@ SHORT=v:,
 LONG=soc-version:,
 OPTS=$(getopt -a --options $SHORT --longoptions $LONG -- "$@")
 eval set -- "$OPTS"
-SOC_VERSION="Ascend310P3"
+SOC_VERSION="Ascend910B4"
 
 while :; do
     case "$1" in
@@ -44,14 +44,9 @@ source $_ASCEND_INSTALL_PATH/bin/setenv.bash
 echo "Current compile soc version is ${SOC_VERSION}"
 
 set -e
-pip3 install pybind11
 rm -rf build
 mkdir -p build
 cmake -B build \
     -DSOC_VERSION=${SOC_VERSION} \
     -DASCEND_CANN_PACKAGE_PATH=${_ASCEND_INSTALL_PATH}
 cmake --build build -j
-(
-    cd build
-    python3 ../add_custom_test.py
-)
