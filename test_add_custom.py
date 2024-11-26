@@ -27,6 +27,6 @@ def test_add_custom_ops():
     x_npu = x.npu()
     y_npu = y.npu()
     output = add_custom.run_add_custom(x_npu, y_npu)
-    cpuout = torch.add(x, y)
+    cpuout = torch.add(x, y).npu()
 
-    assert torch.all_close(output, cpuout)
+    assert torch.allclose(output, cpuout)
