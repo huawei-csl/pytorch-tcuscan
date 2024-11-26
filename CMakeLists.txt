@@ -83,4 +83,5 @@ set_target_properties(pybind11_lib PROPERTIES
   PREFIX "" SUFFIX ""
 )
 
-
+set_target_properties(pybind11_lib PROPERTIES
+  LIBRARY_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR})

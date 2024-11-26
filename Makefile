@@ -2,6 +2,10 @@
 
 all: build test
 
+clean:
+	rm -rf build/ __pycache__/
+	rm add_custom*.so
+
 setup_once:
 	pip3 install pybind11 pyyaml
 	pip3 install torch==2.1.0+cpu  --index-url https://download.pytorch.org/whl/cpu
@@ -11,5 +15,5 @@ build: build.sh add_custom.cpp pybind11.cpp
 	./build.sh -v ASCEND910B4
 
 test: test_add_custom.py
-	cd build/ && pytest ../test_add_custom.py
+	pytest test_add_custom.py
 

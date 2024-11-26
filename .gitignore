@@ -1,2 +1,3 @@
+add_custom*.so
 build/
 __pycache__/
