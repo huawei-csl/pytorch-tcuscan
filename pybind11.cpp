@@ -13,7 +13,7 @@
 #include "aclrtlaunch_add_custom.h"
 #include "torch_npu/csrc/core/npu/NPUStream.h"
 
-namespace my_add {
+namespace asc {
 at::Tensor run_add_custom(const at::Tensor &x, const at::Tensor &y) {
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   at::Tensor z = at::empty_like(x);
@@ -28,9 +28,9 @@ at::Tensor run_add_custom(const at::Tensor &x, const at::Tensor &y) {
    const_cast<void *>(z.storage().data()), totalLength);
   return z;
 }
-}  // namespace my_add
+}  // namespace asc
 
 PYBIND11_MODULE(add_custom, m) {
   m.doc() = "add_custom pybind11 interfaces";  // optional module docstring
-  m.def("run_add_custom", &my_add::run_add_custom, "");
+  m.def("run_add_custom", &asc::run_add_custom, "");
 }

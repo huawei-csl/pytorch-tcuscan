@@ -8,7 +8,6 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # ===============================================================================
 
-import pytest
 import torch
 import torch_npu
 import sys, os
