@@ -40,7 +40,7 @@ execute_process(COMMAND python3 -c "import os; import torch; print(os.path.dirna
   OUTPUT_STRIP_TRAILING_WHITESPACE
   OUTPUT_VARIABLE TORCH_PATH
 )
-message("TORCH_PATH is ${TORCH_PATH}")
+
 
 # Set the Ascend PyTorch (torch_npu) installation path on env variable 'TORCH_NPU_PATH'
 set(ENV{ASCEND_HOME_PATH} ${ASCEND_CANN_PACKAGE_PATH})
@@ -48,7 +48,7 @@ execute_process(COMMAND python3 -c "import os; import torch_npu; print(os.path.d
   OUTPUT_STRIP_TRAILING_WHITESPACE
   OUTPUT_VARIABLE TORCH_NPU_PATH
 )
-message("TORCH_NPU_PATH is ${TORCH_NPU_PATH}")
+
 
 # Set the pybind11 include dir on env variable 'PYBIND11_INC'
 execute_process(COMMAND python3 -m pybind11 --includes
@@ -56,8 +56,13 @@ execute_process(COMMAND python3 -m pybind11 --includes
   OUTPUT_VARIABLE PYBIND11_INC
 )
 string(REPLACE " " ";" PYBIND11_INC ${PYBIND11_INC})
-message("PYBIND11_INC is ${PYBIND11_INC}")
 
+message("***********************************************************")
+message("* ASCEND_CANN_PACKAGE_PATH : ${ASCEND_CANN_PACKAGE_PATH}")
+message("* TORCH_PATH               : ${TORCH_PATH}")
+message("* TORCH_NPU_PATH           : ${TORCH_NPU_PATH}")
+message("* PYBIND11_INC             : ${PYBIND11_INC}")
+message("***********************************************************")
 
 target_link_directories(pybind11_lib PRIVATE
   ${TORCH_PATH}/lib
