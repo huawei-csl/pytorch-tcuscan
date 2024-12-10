@@ -1,4 +1,4 @@
-.PHONY: all setup_once build test
+.PHONY: all clean setup_once build test
 
 all: build test
 

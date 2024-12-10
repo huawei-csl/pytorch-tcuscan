@@ -18,6 +18,7 @@ at::Tensor run_add_custom(const at::Tensor &x, const at::Tensor &y) {
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   at::Tensor z = at::empty_like(x);
   uint32_t blockDim = 8;
+  uint32_t tileLen = 128;
   uint32_t totalLength = 1;
   for (uint32_t size : x.sizes()) {
     totalLength *= size;
@@ -25,7 +26,7 @@ at::Tensor run_add_custom(const at::Tensor &x, const at::Tensor &y) {
   ACLRT_LAUNCH_KERNEL(add_custom)
   (blockDim, acl_stream, const_cast<void *>(x.storage().data()),
    const_cast<void *>(y.storage().data()),
-   const_cast<void *>(z.storage().data()), totalLength);
+   const_cast<void *>(z.storage().data()), totalLength, tileLen);
   return z;
 }
 }  // namespace asc

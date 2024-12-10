@@ -9,8 +9,7 @@
 # ===============================================================================
 
 import torch
-import torch_npu
-import sys, os
+import torch_npu  # noqa
 
 import add_custom
 
@@ -18,7 +17,7 @@ torch.npu.config.allow_internal_format = False
 
 
 def test_add_custom_ops():
-    length = [8, 2048]
+    length = [40 * 2048]
     x = torch.rand(length, device="cpu", dtype=torch.float16)
     y = torch.rand(length, device="cpu", dtype=torch.float16)
 
@@ -27,4 +26,5 @@ def test_add_custom_ops():
     output = add_custom.run_add_custom(x_npu, y_npu)
     cpuout = torch.add(x, y).npu()
 
+    assert output.shape == cpuout.shape, "Output shape does not match expected shape."
     assert torch.allclose(output, cpuout)
