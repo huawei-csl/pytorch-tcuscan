@@ -18,3 +18,5 @@ build: build.sh add_custom.cpp pybind11.cpp
 test: test_add_custom.py
 	pytest test_add_custom.py
 
+profile: profile_add_custom.py
+	python profile_add_custom.py --bench vadd
