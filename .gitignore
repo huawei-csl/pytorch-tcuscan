@@ -1,3 +1,4 @@
+bench_results_*.csv
 add_custom*.so
 build/
 __pycache__/
