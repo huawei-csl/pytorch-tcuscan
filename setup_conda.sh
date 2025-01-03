@@ -1,3 +1,3 @@
 
 
-conda install pybind11 cmake pytest
+conda install pybind11 cmake pytest numpy
