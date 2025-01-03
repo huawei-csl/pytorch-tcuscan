@@ -1,0 +1,82 @@
+default:
+  image: registry-eu.inhuawei.com:5050/zrc-von-neumann-lab/tcuscan/docker-cann:20.04-x86-8.0.RC3.alpha003
+  tags: [cpu]
+  before_script:
+    - pip3 config --user set global.index http://cmc-cd-mirror.rnd.huawei.com/pypi
+    - pip3 config --user set global.index-url http://cmc-cd-mirror.rnd.huawei.com/pypi/simple/
+    - pip3 config --user set global.trusted-host cmc-cd-mirror.rnd.huawei.com
+
+stages:
+   - linter
+   - build
+   - tests
+
+# Define the workflow rules manually to make sure only a single pipeline
+# is created for each MR update. Without that, GitLab creates one pipeline
+# for branch update and one for MR update.
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - when: never
+
+shell_check:
+  image: registry-eu.inhuawei.com:5050/zrc-von-neumann-lab/tcuscan/koalaman/shellcheck-alpine:stable
+  stage: linter
+  dependencies: []
+  before_script:
+    - shellcheck --version
+  script:
+    - find . -type f -name '*.sh' -print0 | xargs -0 shellcheck -x
+
+
+black:
+  stage: linter
+  image: registry-eu.inhuawei.com:5050/zrc-von-neumann-lab/tcuscan/python:3.9
+  script:
+    - pip3 install -U pip
+    - pip3 install black==24.4.2 # The version here should be the same as in .pre-commit-config.yaml
+    - black --check .
+
+
+clang_linter:
+  stage: linter
+  dependencies: []
+  before_script:
+    - export DEBIAN_FRONTEND=noninteractive
+    - apt-get update && apt-get install -y clang-format git-core
+  script:
+    - linter_errors=$(find src/ test/ -iname '*.h' -o -iname '*.cpp' | xargs clang-format -n -style=file 2>&1 || true)
+    - echo "$linter_errors"
+    - if [ ! -z "$linter_errors" ]; then echo "Detected formatting issues; please fix"; exit 1; else echo "Formatting is correct"; exit 0; fi
+
+secret_detection:
+  stage: linter
+  dependencies: []
+  before_script: []
+  image:
+    name: registry-eu.inhuawei.com:5050/zrc-von-neumann-lab/tcuscan/zricethezav/gitleaks:v8.18.2
+    entrypoint: [""]
+  script:
+    - gitleaks detect -v --source .
+
+
+build:
+  tags:
+    - baremetal
+  stage: build
+  needs: []
+  dependencies: []
+  script:
+    - make setup_ci
+    - make build
+
+unit_test:
+  tags:
+    - baremetal
+  stage: tests
+  needs: []
+  dependencies: []
+  script:
+    - make setup_ci
+    - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make build test

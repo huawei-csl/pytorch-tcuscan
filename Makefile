@@ -6,6 +6,9 @@ clean:
 	rm -rf build/ __pycache__/
 	rm add_custom*.so
 
+setup_ci:
+	pip3 install --cache-dir=/scratch/TCUSCAN/wheels/ -r requirements.txt
+
 # Setup a virtualenv first
 # python3 -m venv venv
 setup_once:
@@ -22,7 +25,7 @@ build: build.sh add_custom.cpp pybind11.cpp
 	./build.sh -v ASCEND910B2
 
 test: test_add_custom.py
-	pytest test_add_custom.py
+	python3 -m pytest
 
 profile: profile_add_custom.py
 	python profile_add_custom.py --bench vadd

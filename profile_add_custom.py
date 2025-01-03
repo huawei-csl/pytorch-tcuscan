@@ -35,6 +35,7 @@ if DEVICE == "npu":
     import torch_npu
 
     import add_custom
+
     torch.npu.config.allow_internal_format = False
 
     NPU_DEVICE = "npu:1"
