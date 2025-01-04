@@ -1,4 +1,4 @@
-.PHONY: all clean setup_once build test
+.PHONY: all clean setup_ci setup_once setup_once_aarch64 build test profile
 
 all: build test
 
