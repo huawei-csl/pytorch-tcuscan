@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16.0)
-project(ascendc-pybind)
+project(tcuscan)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -25,11 +25,11 @@ include(${ASCENDC_CMAKE_DIR}/ascendc.cmake)
 
 # ascendc_library use to add kernel file to generate AscendC library
 ascendc_library(kernels STATIC
-    add_custom.cpp
+    src/add_custom.cpp
     # /* Add you kernels here */
 )
 
-add_library(pybind11_lib SHARED pybind11.cpp)
+add_library(pybind11_lib SHARED src/pybind11.cpp)
 target_link_libraries(pybind11_lib PRIVATE
   kernels
   torch_npu
