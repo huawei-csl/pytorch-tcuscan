@@ -3,7 +3,7 @@
 all: build test
 
 clean:
-	rm -rf build/ __pycache__/
+	rm -rf build/ tests/__pycache__/
 	rm -f *.so
 
 setup_ci:
@@ -20,10 +20,10 @@ setup_once_aarch64:
 	pip3 install torch_npu-2.4.0-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl --index-url https://download.pytorch.org/whl/cpu
 
 build: build.sh src/add_custom.cpp src/pybind11.cpp
-	./build.sh -v ASCEND910B2
+	./build.sh -v ASCEND910B4
 
 test: tests/test_add_custom.py
 	python3 -m pytest tests/
 
 profile: profile_tcuscan_ops.py
-	python profile_tcuscan_ops.py --bench vadd
+	python profile_tcuscan_ops.py --bench diff

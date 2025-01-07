@@ -1,5 +1,5 @@
 *.log
 bench_results_*.csv
-add_custom*.so
+*.so
 build/
 __pycache__/

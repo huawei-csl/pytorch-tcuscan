@@ -26,6 +26,7 @@ include(${ASCENDC_CMAKE_DIR}/ascendc.cmake)
 # ascendc_library use to add kernel file to generate AscendC library
 ascendc_library(kernels STATIC
     src/add_custom.cpp
+    src/kernel_diff.cpp
     # /* Add you kernels here */
 )
 
@@ -84,7 +85,7 @@ execute_process(COMMAND python3-config --extension-suffix
   OUTPUT_VARIABLE PYBIND11_SUFFIX
 )
 set_target_properties(pybind11_lib PROPERTIES
-  OUTPUT_NAME add_custom${PYBIND11_SUFFIX}
+  OUTPUT_NAME tcuscan_ops${PYBIND11_SUFFIX}
   PREFIX "" SUFFIX ""
 )
 

@@ -1,0 +1,1615 @@
+/**
+ * Copyright (c) Huawei Technologies Co., Ltd. 2024. All rights reserved.
+ *
+ * @file kernel_utils.h
+ * @brief Common building blocks for kernels.
+ */
+
+#pragma once
+#include <type_traits>
+
+#include "ascendc_kernel_operator.h"
+
+using namespace AscendC;
+
+namespace kernel_utils {
+
+/// @brief Number of bytes for a required alignment in UB.
+constexpr uint16_t UB_ALIGNMENT = 32;
+/// @brief Number of bytes per data block.
+constexpr uint16_t DATA_BLOCK_SIZE = 32;
+/// Maximum size of the L2 cache.
+constexpr int32_t L2_SIZE = 192 * 1024 * 1024;
+/// Global memory allocation alignment, added only for performance.
+constexpr int32_t GM_ALIGNMENT = 256;
+
+/**
+ * @brief Get the size of the fractal used internally by hardware along the
+ * matrix K dimension.
+ *
+ * @tparam DataType Data type used for matrix multiplication.
+ * @return The size of K dimension of the fractal.
+ */
+template <typename T>
+constexpr __aicore__ inline uint16_t GetFractalK() {
+  if constexpr (sizeof(T) == 2) {
+    return 16;
+  }
+  return 32;
+}
+
+/**
+ * @brief Get the size of the fractal used internally by hardware along the
+ * matrix M/N dimensions.
+ *
+ * @tparam DataType Data type used for matrix multiplication.
+ * @return The size of both M and N dimensions of the fractal.
+ */
+template <typename T>
+constexpr __aicore__ inline uint16_t GetFractalMN() {
+  return 16;
+}
+
+namespace exec_mode {
+
+/**
+ * @brief Kernel for cube core that might be used to enable mix mode.
+ *
+ * This kernel does a single small cube core operation. It can be used to enable
+ * mixed mode when only vector operations are used. This is useful when hw
+ * synchronization is needed.
+ *
+ */
+class KernelNoOpCube {
+ public:
+  /**
+   * @brief Class constructor.
+   *
+   */
+  __aicore__ inline KernelNoOpCube() {}
+  /**
+   * @brief Initialize buffers.
+   *
+   */
+  __aicore__ inline void Init() {
+    pipe.InitBuffer(a2_q_, 1, tile_size_ * sizeof(half));
+    pipe.InitBuffer(b2_q_, 1, tile_size_ * sizeof(half));
+    pipe.InitBuffer(co1_q_, 1, tile_size_ * sizeof(float));
+  }
+  /**
+   * @brief Issue a small matrix multiplication instruction.
+   *
+   */
+  __aicore__ inline void Process() {
+    LocalTensor<half> a2_lt = a2_q_.AllocTensor<half>();
+    LocalTensor<half> b2_lt = b2_q_.AllocTensor<half>();
+    LocalTensor<float> co1_lt = co1_q_.AllocTensor<float>();
+    Mmad(co1_lt, a2_lt, b2_lt,
+         {tile_size_, tile_size_, tile_size_, false, 0, false, false, false});
+    a2_q_.FreeTensor(a2_lt);
+    b2_q_.FreeTensor(b2_lt);
+    co1_q_.FreeTensor(co1_lt);
+  }
+
+ private:
+  TPipe pipe;
+
+  TQue<QuePosition::A2, 1> a2_q_;
+  TQue<QuePosition::B2, 1> b2_q_;
+  TQue<QuePosition::CO1, 1> co1_q_;
+
+  constexpr static uint16_t tile_size_ = 32;
+};
+
+/**
+ * @brief Kernel for vector core that might be used to enable mix mode.
+ *
+ * This kernel does a single small vector core operation. It can be used to
+ * enable mixed mode when only cube operations are used. This is useful when hw
+ * synchronization is needed.
+ */
+class KernelNoOpVector {
+ public:
+  /**
+   * @brief Class constructor.
+   *
+   */
+  __aicore__ inline KernelNoOpVector() {}
+  /**
+   * @brief Initialize buffers.
+   *
+   */
+  __aicore__ inline void Init() {
+    pipe.InitBuffer(vec_buf_, tile_size_ * sizeof(float));
+  }
+  /**
+   * @brief Issue a small vector instruction.
+   *
+   */
+  __aicore__ inline void Process() {
+    const LocalTensor<float> lt = vec_buf_.Get<float>();
+    Adds(lt, lt, 1.f, tile_size_);
+  }
+
+ private:
+  TPipe pipe;
+
+  TBuf<QuePosition::VECCALC> vec_buf_;
+  constexpr static uint16_t tile_size_ = 32;
+};
+
+/**
+ * @brief Executes a small instruction on cube cores.
+ *
+ * Might be used to enable mix mode in a vector-only kernel.
+ */
+__aicore__ inline void EnableCubeCores() {
+  if ASCEND_IS_AIC {
+    KernelNoOpCube op;
+    op.Init();
+    op.Process();
+  }
+}
+
+/**
+ * @brief Executes a small instruction on vector cores.
+ *
+ * Might be used to enable mix mode in a cube-only kernel.
+ */
+__aicore__ inline void EnableVectorCores() {
+  if ASCEND_IS_AIV {
+    KernelNoOpVector op;
+    op.Init();
+    op.Process();
+  }
+}
+
+/**
+ * @brief Makes the execution fail if the function is called from AIC core.
+ *
+ * Asserts only on CPU target, the check is done at runtime.
+ */
+__aicore__ inline void AssertIsAIV() {
+#ifdef ASCENDC_CPU_DEBUG
+  ASCENDC_ASSERT(g_coreType == AIV, {
+    KERNEL_LOG(KERNEL_ERROR, "The function can only be called on AIV cores.");
+  });
+#endif
+}
+
+/**
+ * @brief Makes the execution fail if the function is called from AIV core.
+ *
+ * Asserts only on CPU target, the check is done at runtime.
+ */
+__aicore__ inline void AssertIsAIC() {
+#ifdef ASCENDC_CPU_DEBUG
+  ASCENDC_ASSERT(g_coreType == AIC, {
+    KERNEL_LOG(KERNEL_ERROR, "The function can only be called on AIC cores.");
+  });
+#endif
+}
+
+/**
+ * @brief  Makes the execution fail if the LocalTensor is not in the position.
+ *
+ * Asserts only on CPU target, the check is done at runtime.
+ *
+ * @tparam T Local tensor data type.
+ * @param lt Local tensor to check.
+ * @param position Tensor position to check.
+ */
+// clang-format off
+template <typename T>
+__aicore__ inline void AssertLocalTensorIsIn([[maybe_unused]] const LocalTensor<T> &lt,
+                                             [[maybe_unused]] TPosition position) {
+#ifdef ASCENDC_CPU_DEBUG
+    const TPosition pos = TPosition(lt.GetPosition());
+    ASCENDC_ASSERT(pos == position, {
+        KERNEL_LOG(KERNEL_ERROR,
+                   "LocalTensor is not in correct Queue position.");
+    });
+#endif
+}
+// clang-format on
+
+/**
+ * @brief  Makes the execution fail if the LocalTensor is not in L1 (A1 or B1).
+ *
+ * Asserts only on CPU target, the check is done at runtime.
+ *
+ * @tparam T Local tensor data type.
+ * @param lt Local tensor to check.
+ */
+// clang-format off
+template <typename T>
+__aicore__ inline void AssertLocalTensorIsInL1(
+    [[maybe_unused]] const LocalTensor<T> &lt) {
+#ifdef ASCENDC_CPU_DEBUG
+    const TPosition pos = TPosition(lt.GetPosition());
+    ASCENDC_ASSERT(pos == TPosition::A1 || pos == TPosition::B1, {
+        KERNEL_LOG(KERNEL_ERROR, "LocalTensor is not in L1 (A1 or B1).");
+    });
+#endif
+}
+// clang-format on
+
+/**
+ * @brief  Makes the execution fail if the LocalTensor is not in L0 (A2 or B2).
+ *
+ * Asserts only on CPU target, the check is done at runtime.
+ *
+ * @tparam T Local tensor data type.
+ * @param lt Local tensor to check.
+ */
+// clang-format off
+template <typename T>
+__aicore__ inline void AssertLocalTensorIsInL0(
+    [[maybe_unused]] const LocalTensor<T> &lt) {
+#ifdef ASCENDC_CPU_DEBUG
+    const TPosition pos = TPosition(lt.GetPosition());
+    ASCENDC_ASSERT(pos == TPosition::A2 || pos == TPosition::B2, {
+        KERNEL_LOG(KERNEL_ERROR, "LocalTensor is not in L0 (A2 or B2).");
+    });
+#endif
+}
+// clang-format on
+
+}  // namespace exec_mode
+
+namespace copy {
+
+/**
+ * @brief Perform a copy from global tensor (ND layout) to local tensor (NZ
+ * layout).
+ *
+ * @tparam DataType Data type of the tensors.
+ * @tparam FractalHeight Height of the fractal used internally by hardware.
+ * @tparam FractalWidth Width of the fractal used internally by hardware.
+ *
+ * @param [in] dst Destination local tensor.
+ * @param [in] src Source global tensor.
+ * @param [in] fractals_h Number of fractal patterns in the height dimension of
+ * the input tensor.
+ * @param [in] fractals_w Number of fractal patterns in the width dimension of
+ * the input tensor.
+ */
+template <typename DataType, uint16_t FractalHeight = 16,
+          uint16_t FractalWidth = 16>
+__aicore__ inline void CopyND2NZ(const LocalTensor<DataType> &dst,
+                                 const GlobalTensor<DataType> &src,
+                                 uint16_t fractals_h, uint16_t fractals_w) {
+  exec_mode::AssertLocalTensorIsInL1(dst);
+  if (fractals_w == 1) {
+    DataCopy(dst, src, dst.GetSize());
+    return;
+  }
+  Nd2NzParams params;
+  params.ndNum = 1;
+  params.nValue = fractals_h * FractalHeight;
+  params.dValue = fractals_w * FractalWidth;
+  params.srcDValue = params.dValue;
+  params.dstNzC0Stride = params.nValue;
+  params.dstNzNStride = 1;
+  DataCopy(dst, src, params);
+}
+
+/**
+ * @brief Copy a tensor from CO1 to CO2 queue.
+ *
+ * @tparam DstDataType Data type of the destination tensor.
+ * @tparam SrcDataType Data type of the source tensor.
+ * @tparam DstNumBuffers Depth of the destination queue.
+ * @tparam SrcNumBuffers Depth of the source queue.
+ *
+ * @param [in] dst_q Destination queue. The position must be CO2.
+ * @param [in] src_q Source queue. The position must be CO1.
+ * @param [in] num_fractals Number of fractals to copy. Usually fractal is 16x16
+ * elements.
+ */
+template <typename DstDataType, typename SrcDataType, int32_t DstNumBuffers,
+          int32_t SrcNumBuffers>
+__aicore__ inline void CopyCL0ToL1(TQue<QuePosition::CO2, DstNumBuffers> &dst_q,
+                                   TQue<QuePosition::CO1, SrcNumBuffers> &src_q,
+                                   int32_t num_fractals) {
+  exec_mode::AssertIsAIC();
+  const LocalTensor<DstDataType> dst_lt =
+      dst_q.template AllocTensor<DstDataType>();
+  LocalTensor<SrcDataType> src_lt = src_q.template DeQue<SrcDataType>();
+
+  DataCopyParams params;
+  params.blockCount = 1;
+  params.blockLen = num_fractals;
+  DataCopyEnhancedParams enhancedParams;
+  enhancedParams.blockMode = BlockMode::BLOCK_MODE_MATRIX;
+  DataCopy(dst_lt, src_lt, params, enhancedParams);
+
+  dst_q.EnQue(dst_lt);
+  src_q.FreeTensor(src_lt);
+}
+
+/**
+ * @brief Copy data from tensor allocated in L0C to tensor allocated in L1.
+ *
+ * @tparam DstDataType Data type of the destination tensor.
+ * @tparam SrcDataType Data type of the source tensor.
+ *
+ * @param [in] dst_lt Destination local tensor.
+ * @param [in] src_lt Source local tensor.
+ * @param [in] height Height of the matrix.
+ * @param [in] width Width of the matrix.
+ */
+template <typename DstDataType, typename SrcDataType>
+__aicore__ inline void CopyL0CToL1(const LocalTensor<DstDataType> &dst_lt,
+                                   const LocalTensor<SrcDataType> &src_lt,
+                                   uint32_t height, uint32_t width) {
+  exec_mode::AssertIsAIC();
+  exec_mode::AssertLocalTensorIsIn(src_lt, QuePosition::CO1);
+  exec_mode::AssertLocalTensorIsInL1(dst_lt);
+  static_assert(
+      std::is_same_v<SrcDataType, float> && std::is_same_v<DstDataType, half>,
+      "Unsupported data types. Please add support yourself.");
+
+  FixpipeParamsV220 params;
+  params.nSize = width;
+  params.mSize = height;
+  params.srcStride = height;
+  params.dstStride = width;
+  params.ndNum = 1;
+  params.quantPre = QuantMode_t::F322F16;
+
+  Fixpipe<DstDataType, SrcDataType, CFG_NZ>(dst_lt, src_lt, params);
+}
+
+/**
+ * @brief Copy a tensor from CO1 queue to B1 queue.
+ *
+ * @tparam DstDataType Data type of the destination tensor.
+ * @tparam SrcDataType Data type of the source tensor.
+ * @tparam B1NumBuffers Depth of the B1 queue.
+ * @tparam CO1NumBuffers Depth of the CO1 queue.
+ *
+ * @param [in] dst_q Destination queue. The position must be B1.
+ * @param [in] src_q Source queue. The position must be CO1.
+ * @param [in] height Height of the matrix.
+ * @param [in] width Width of the matrix.
+ */
+template <typename DstDataType, typename SrcDataType, int32_t B1NumBuffers,
+          int32_t C01NumBuffers>
+__aicore__ inline void CopyC01ToB1(TQue<QuePosition::B1, B1NumBuffers> &dst_q,
+                                   TQue<QuePosition::CO1, C01NumBuffers> &src_q,
+                                   uint32_t height, uint32_t width) {
+  exec_mode::AssertIsAIC();
+  LocalTensor<SrcDataType> src_lt = src_q.template DeQue<SrcDataType>();
+  const LocalTensor<DstDataType> dst_lt =
+      dst_q.template AllocTensor<DstDataType>();
+
+  CopyL0CToL1(dst_lt, src_lt, height, width);
+
+  src_q.FreeTensor(src_lt);
+  dst_q.EnQue(dst_lt);
+}
+
+/**
+ * @brief Copy a tensor from CO1 queue to global memory.
+ *
+ * @tparam DataType Data type of the source tensor.
+ * @tparam QNumBuffers Depth of the queue.
+ *
+ * @param [in] global Destination global tensor.
+ * @param [in] src_q Source queue. The position must be CO1.
+ * @param [in] height Height of the matrix.
+ * @param [in] width Width of the matrix.
+ */
+template <typename DataType, int32_t QNumBuffers>
+__aicore__ inline void CopyCL0ToGlobal(
+    const GlobalTensor<DataType> &global,
+    TQue<QuePosition::CO1, QNumBuffers> &src_q, uint32_t height,
+    uint32_t width) {
+  exec_mode::AssertIsAIC();
+  constexpr uint16_t fractal_size = GetFractalMN<DataType>();
+
+  LocalTensor<DataType> lt = src_q.template DeQue<DataType>();
+
+  FixpipeParams<DataType> params;
+  params.cburstNum = height;
+  params.burstLen = width * fractal_size * sizeof(DataType) / DATA_BLOCK_SIZE;
+  params.dstStride = height;
+
+  Nz2NdParams nz2nd_params;
+  nz2nd_params.nz2ndEn = true;
+  nz2nd_params.originalNSize = height;
+  params.nz2ndParams = nz2nd_params;
+
+  Fixpipe(global, lt, params);
+
+  src_q.FreeTensor(lt);
+}
+
+/**
+ * @brief Copy a tensor from global memory to the local tensor in L1 memory.
+ *
+ * The queue's position must be either A1 or B1. The data layout is transformed
+ * from ND to NZ.
+ *
+ * @tparam FractalHeight Height of the fractal used internally by hardware.
+ * @tparam FractalWidth Width of the fractal used internally by hardware.
+ * @tparam DataType Data type of the tensor.
+ *
+ * @param [in] local Destination local tensor. Must be alocated from either A1
+ * or B1 queue.
+ * @param [in] global Source global tensor.
+ * @param [in] fractals_h Number of fractal patterns in the height dimension of
+ * the input matrix.
+ * @param [in] fractals_w Number of fractal patterns in the width dimension of
+ * the input matrix.
+ */
+template <uint16_t FractalHeight, uint16_t FractalWidth, typename DataType>
+__aicore__ inline void CopyGmToL1(const LocalTensor<DataType> &local,
+                                  const GlobalTensor<DataType> &global,
+                                  uint16_t fractals_h, uint16_t fractals_w) {
+  exec_mode::AssertIsAIC();
+  exec_mode::AssertLocalTensorIsInL1(local);
+  kernel_utils::copy::CopyND2NZ<DataType, FractalHeight, FractalWidth>(
+      local, global, fractals_h, fractals_w);
+}
+
+/**
+ * @brief Copy a tensor from global memory to the queue in A L1 memory.
+ *
+ * The data layout is transformed from ND to NZ.
+ *
+ * @tparam DataType Data type of the tensor.
+ * @tparam QNumBuffers Depth of the queue.
+ *
+ * @param [in] q Destination queue. The position must be A1.
+ * @param [in] global Source global tensor.
+ * @param [in] fractals_h Number of fractal patterns in the height dimension of
+ * the input matrix.
+ * @param [in] fractals_w Number of fractal patterns in the width dimension of
+ * the input matrix.
+ */
+template <typename DataType, int32_t QNumBuffers>
+__aicore__ inline void CopyGmToL1A(TQue<QuePosition::A1, QNumBuffers> &q,
+                                   const GlobalTensor<DataType> &global,
+                                   uint16_t fractals_h, uint16_t fractals_w) {
+  exec_mode::AssertIsAIC();
+  const LocalTensor<DataType> lt = q.template AllocTensor<DataType>();
+  kernel_utils::copy::CopyGmToL1<GetFractalMN<DataType>(),
+                                 GetFractalK<DataType>()>(
+      lt, global, fractals_h, fractals_w);
+  q.EnQue(lt);
+}
+
+/**
+ * @brief Copy a tensor from global memory to the queue in B L1 memory.
+ *
+ * The data layout is transformed from ND to NZ.
+ *
+ * @tparam DataType Data type of the tensor.
+ * @tparam QNumBuffers Depth of the queue.
+ *
+ * @param [in] q Destination queue. The position must be B1.
+ * @param [in] global Source global tensor.
+ * @param [in] fractals_h Number of fractal patterns in the height dimension of
+ * the input matrix.
+ * @param [in] fractals_w Number of fractal patterns in the width dimension of
+ * the input matrix.
+ */
+template <typename DataType, int32_t QNumBuffers>
+__aicore__ inline void CopyGmToL1B(TQue<QuePosition::B1, QNumBuffers> &q,
+                                   const GlobalTensor<DataType> &global,
+                                   uint16_t fractals_h, uint16_t fractals_w) {
+  exec_mode::AssertIsAIC();
+  const LocalTensor<DataType> lt = q.template AllocTensor<DataType>();
+  kernel_utils::copy::CopyGmToL1<GetFractalK<DataType>(),
+                                 GetFractalMN<DataType>()>(
+      lt, global, fractals_h, fractals_w);
+  q.EnQue(lt);
+}
+
+/**
+ * @brief Copy a tensor from global memory to the queue in B L0 memory.
+ *
+ * The data layout is transformed from column-major to NZ.
+ *
+ * @tparam DataType Data type of the tensor.
+ * @tparam QNumBuffersB2 Depth of the B2 queue.
+ * @tparam QNumBuffersB1 Depth of the B1 queue.
+ *
+ * @param [in] b2_q Destination queue. The position must be B2.
+ * @param [in] b1_q Intermediate queue. The position must be B1.
+ * @param [in] global Source global tensor.
+ * @param [in] fractals_h Number of fractal patterns in the height dimension of
+ * the input matrix.
+ * @param [in] fractals_w Number of fractal patterns in the width dimension of
+ * the input matrix.
+ */
+template <typename DataType, int32_t QNumBuffersB2, int32_t QNumBuffersB1>
+__aicore__ inline void CopyTransposedGmToL0B(
+    TQue<QuePosition::B2, QNumBuffersB2> &b2_q,
+    TQue<QuePosition::B1, QNumBuffersB1> &b1_q,
+    const GlobalTensor<DataType> &global, uint16_t fractals_h,
+    uint16_t fractals_w) {
+  exec_mode::AssertIsAIC();
+  // Copy with ND -> NZ transform.
+  // But data in GM is transposed (column-major layout) so the resulting
+  // layout is ZN (instead of NZ). And ZN is a layout `Mmad` expects for the B
+  // operand.
+  kernel_utils::copy::CopyGmToL1B(b1_q, global, fractals_h, fractals_w);
+
+  // Plain copy from L1 to L0B, because the layout is already correct.
+  LocalTensor<DataType> src = b1_q.template DeQue<DataType>();
+  const LocalTensor<DataType> dst = b2_q.template AllocTensor<DataType>();
+
+  LoadData2dParams params;
+  params.repeatTimes = fractals_w * fractals_h;
+  params.srcStride = 1;
+  params.ifTranspose = false;
+
+  LoadData(dst, src, params);
+
+  b1_q.FreeTensor(src);
+  b2_q.EnQue(dst);
+}
+
+/**
+ * @brief Copy a tensor from global memory to the queue in A L1 memory.
+ *
+ * The data layout is not transformed so the source data layout should already
+ * be NZ.
+ *
+ * @tparam DataType Data type of the tensor.
+ * @tparam QNumBuffers Depth of the queue.
+ *
+ * @param [in] q Destination queue. The position must be A1.
+ * @param [in] global Source global tensor.
+ */
+template <typename DataType, int32_t QNumBuffers>
+__aicore__ inline void CopyPlainGmToL1A(TQue<QuePosition::A1, QNumBuffers> &q,
+                                        const GlobalTensor<DataType> &global) {
+  exec_mode::AssertIsAIC();
+  const LocalTensor<DataType> lt = q.template AllocTensor<DataType>();
+  DataCopy(lt, global, lt.GetSize());
+  q.EnQue(lt);
+}
+
+/**
+ * @brief Copy a tensor from global memory to the queue in B L1 memory.
+ *
+ * The data layout is not transformed so the source data layout should already
+ * be NZ.
+ *
+ * @tparam DataType Data type of the tensor.
+ * @tparam QNumBuffers Depth of the queue.
+ *
+ * @param [in] q Destination queue. The position must be B1.
+ * @param [in] global Source global tensor.
+ */
+template <typename DataType, int32_t QNumBuffers>
+__aicore__ inline void CopyPlainGmToL1B(TQue<QuePosition::B1, QNumBuffers> &q,
+                                        const GlobalTensor<DataType> &global) {
+  exec_mode::AssertIsAIC();
+  const LocalTensor<DataType> lt = q.template AllocTensor<DataType>();
+  DataCopy(lt, global, lt.GetSize());
+  q.EnQue(lt);
+}
+
+/**
+ * @brief Copy data from tensor allocated in L1 to tensor allocated in L0.
+ *
+ * @tparam FractalHeight Height of the fractal used internally by hardware.
+ * @tparam FractalWidth Width of the fractal used internally by hardware.
+ * @tparam DataType Data type of the tensor.
+ *
+ * @param [in] dst Destination local tensor.
+ * @param [in] src Source local tensor.
+ * @param [in] fractals_h Number of fractal patterns in the height dimension of
+ * the input tensor.
+ * @param [in] fractals_w Number of fractal patterns in the width dimension of
+ * the input tensor.
+ * @param [in] transpose Indicates whether or not to transpose the matrix. If
+ * set, the function performs an NZ to ZN transformation. Otherwise, it performs
+ * NZ to ZZ one.
+ */
+template <uint16_t FractalHeight, uint16_t FractalWidth, typename DataType>
+__aicore__ inline void CopyL1ToL0(const LocalTensor<DataType> &dst,
+                                  const LocalTensor<DataType> &src,
+                                  uint16_t fractals_h, uint16_t fractals_w,
+                                  bool transpose) {
+  exec_mode::AssertIsAIC();
+  exec_mode::AssertLocalTensorIsInL1(src);
+  exec_mode::AssertLocalTensorIsInL0(dst);
+
+  int src_offset = 0;
+  int dst_offset = 0;
+
+  for (uint16_t i = 0; i < fractals_h; ++i) {
+    LoadData2dParams params;
+    params.repeatTimes = fractals_w;
+    params.srcStride = fractals_h;
+    params.ifTranspose = transpose;
+
+    LoadData(dst[dst_offset], src[src_offset], params);
+
+    src_offset += FractalWidth * FractalHeight;
+    dst_offset += fractals_w * FractalWidth * FractalHeight;
+  }
+}
+
+/**
+ * @brief Copy a tensor from a given A L1 to A L0 queue.
+ *
+ * The function performs an NZ to ZZ layout transformation.
+ *
+ * @tparam DataType Data type of the tensor.
+ * @tparam FreeSrc Indicates whether the source tensor should be freed or
+ * enqueued back.
+ * @tparam L0NumBuffers Depth of the destination queue.
+ * @tparam L1NumBuffers Depth of the source queue.
+ *
+ * @param [in] l0_q Destination queue. The position must be A2.
+ * @param [in] l1_q Source queue. The position must be A1.
+ * @param [in] fractals_h Number of fractal patterns in the height dimension of
+ * the input matrix.
+ * @param [in] fractals_w Number of fractal patterns in the width dimension of
+ * the input matrix.
+ */
+template <typename DataType, bool FreeSrc, int32_t L0NumBuffers,
+          int32_t L1NumBuffers>
+__aicore__ inline void CopyL1ToL0A(TQue<QuePosition::A2, L0NumBuffers> &l0_q,
+                                   TQue<QuePosition::A1, L1NumBuffers> &l1_q,
+                                   uint16_t fractals_h, uint16_t fractals_w) {
+  exec_mode::AssertIsAIC();
+  const LocalTensor<DataType> l0_lt = l0_q.template AllocTensor<DataType>();
+  LocalTensor<DataType> l1_lt = l1_q.template DeQue<DataType>();
+
+  CopyL1ToL0<GetFractalMN<DataType>(), GetFractalK<DataType>()>(
+      l0_lt, l1_lt, fractals_h, fractals_w, false /* transpose */);
+
+  if constexpr (FreeSrc) {
+    l1_q.FreeTensor(l1_lt);
+  } else {
+    l1_q.EnQue(l1_lt);
+  }
+  l0_q.EnQue(l0_lt);
+}
+
+/**
+ * @brief Check if matrix B should be tranposed when moved from B L1 to B L0.
+ *
+ * Matrix tranpose is not supported for 8-bit data types.
+ *
+ * @tparam DataType Data type used for matrix multiplication.
+ * @return Indicates whether matrix B should be transposed.
+ */
+template <typename T>
+constexpr __aicore__ inline bool ShouldTransposeB() {
+  if constexpr (sizeof(T) == 2) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * @brief Copy a tensor from a given B L1 to B L0 queue.
+ *
+ * The function performs an NZ to ZN layout transformation.
+ *
+ * @tparam DataType Data type of the tensor.
+ * @tparam FreeSrc Indicates whether the source tensor should be freed or
+ * enqueued back.
+ * @tparam L0NumBuffers Depth of the destination queue.
+ * @tparam L1NumBuffers Depth of the source queue.
+ *
+ * @param [in] l0_q Destination queue. The position must be B2.
+ * @param [in] l1_q Source queue. The position must be B1.
+ * @param [in] fractals_h Number of fractal patterns in the height dimension of
+ * the input matrix.
+ * @param [in] fractals_w Number of fractal patterns in the width dimension of
+ * the input matrix.
+ */
+template <typename DataType, bool FreeSrc, int32_t L0NumBuffers,
+          int32_t L1NumBuffers>
+__aicore__ inline void CopyL1ToL0B(TQue<QuePosition::B2, L0NumBuffers> &l0_q,
+                                   TQue<QuePosition::B1, L1NumBuffers> &l1_q,
+                                   uint16_t fractals_h, uint16_t fractals_w) {
+  exec_mode::AssertIsAIC();
+  LocalTensor<DataType> l1_lt = l1_q.template DeQue<DataType>();
+  const LocalTensor<DataType> l0_lt = l0_q.template AllocTensor<DataType>();
+  constexpr bool transpose = ShouldTransposeB<DataType>();
+  CopyL1ToL0<GetFractalK<DataType>(), GetFractalMN<DataType>()>(
+      l0_lt, l1_lt, fractals_h, fractals_w, transpose);
+
+  if constexpr (FreeSrc) {
+    l1_q.FreeTensor(l1_lt);
+  } else {
+    l1_q.EnQue(l1_lt);
+  }
+  l0_q.EnQue(l0_lt);
+}
+
+/**
+ * @brief Copy an tensor from a local tensor in L1 to B L0 queue.
+ *
+ * The function performs an NZ to ZN layout transformation.
+ *
+ * @tparam DataType Data type of the tensor.
+ * @tparam L0NumBuffers Depth of the destination queue.
+ * @tparam L1NumBuffers Depth of the source queue.
+ *
+ * @param [in] l0_q Destination queue. The position must be B2.
+ * @param [in] l1_lt Source local tensor. The position must be B1.
+ * @param [in] fractals_h Number of fractal patterns in the height dimension of
+ * the input matrix.
+ * @param [in] fractals_w Number of fractal patterns in the width dimension of
+ * the input matrix.
+ */
+template <typename DataType, int32_t L0NumBuffers>
+__aicore__ inline void CopyL1ToL0B(TQue<QuePosition::B2, L0NumBuffers> &l0_q,
+                                   LocalTensor<DataType> &l1_lt,
+                                   uint16_t fractals_h, uint16_t fractals_w) {
+  exec_mode::AssertIsAIC();
+  exec_mode::AssertLocalTensorIsInL1(l1_lt);
+  const LocalTensor<DataType> l0_lt = l0_q.template AllocTensor<DataType>();
+  constexpr bool transpose = ShouldTransposeB<DataType>();
+  CopyL1ToL0<GetFractalK<DataType>(), GetFractalMN<DataType>()>(
+      l0_lt, l1_lt, fractals_h, fractals_w, transpose);
+
+  l0_q.EnQue(l0_lt);
+}
+
+/**
+ * @brief Copy a tensor from global memory the the VECIN queue.
+ *
+ * @tparam DataType Data type of the tensor.
+ * @tparam QNumBuffers Depth of the queue.
+ *
+ * @param [in] q Destination queue. The position must be VECIN.
+ * @param [in] global Source global tensor.
+ * @param [in] num_elems Number of elements to load. By default, the function
+ * loads all the elements for the local tensor obtained from the queue. If the
+ * value is provided, the function will load \f$num_elems\f$ elements.
+ */
+template <typename DataType, int32_t QNumBuffers>
+__aicore__ inline void CopyGmToVec(TQue<QuePosition::VECIN, QNumBuffers> &q,
+                                   const GlobalTensor<DataType> &global,
+                                   uint32_t num_elems = 0) {
+  exec_mode::AssertIsAIV();
+  const LocalTensor<DataType> lt = q.template AllocTensor<DataType>();
+  if (!num_elems) num_elems = lt.GetSize();
+  if (num_elems % UB_ALIGNMENT == 0) {
+    DataCopy(lt, global, num_elems);
+  } else {
+    DataCopyExtParams params;
+    params.blockCount = 1;
+    params.blockLen = num_elems * sizeof(DataType);
+    params.srcStride = 0;
+    params.dstStride = 0;
+    DataCopyPad(lt, global, params, {});
+  }
+  q.EnQue(lt);
+}
+
+/**
+ * @brief Copy a tensor from a given queue to global memory.
+ *
+ * The queue's position must be VECOUT.
+ *
+ * @tparam DataType Data type of the tensor.
+ * @tparam VecNumBuffers Depth of the queue.
+ *
+ * @param [in] global Destination global tensor.
+ * @param [in] q Source queue. The position must be VECOUT.
+ * @param [in] num_elems Number of elements to store. By default, the function
+ * stores all the elements for the local tensor obtained from the queue. If the
+ * value is provided, the function will store \f$num_elems\f$ elements.
+ */
+template <typename DataType, int32_t VecNumBuffers>
+__aicore__ inline void CopyVecToGm(const GlobalTensor<DataType> &global,
+                                   TQue<QuePosition::VECOUT, VecNumBuffers> &q,
+                                   uint32_t num_elems = 0) {
+  exec_mode::AssertIsAIV();
+  LocalTensor<DataType> lt = q.template DeQue<DataType>();
+  if (!num_elems) num_elems = lt.GetSize();
+  if (num_elems % UB_ALIGNMENT == 0) {
+    DataCopy(global, lt, num_elems);
+  } else {
+    DataCopyExtParams params;
+    params.blockCount = 1;
+    params.blockLen = num_elems * sizeof(DataType);
+    params.srcStride = 0;
+    params.dstStride = 0;
+    DataCopyPad(global, lt, params);
+  }
+  q.FreeTensor(lt);
+}
+
+/**
+ * @brief Copy a local tensor to global memory.
+ *
+ * The function first copies the data from the local tensor to
+ * the provided VECOUT queue, and later from VECOUT queue to the global
+ * memory.
+ *
+ * @tparam DataType Data type of the tensor.
+ * @tparam VecoutNumBuffers Depth of the `vecout_q` queue.
+ *
+ * @param [in] global Destination global tensor.
+ * @param [in] vecout_q Queue used to hold an intermediate tensor. The position
+ * must be VECOUT.
+ * @param [in] lt Source tensor.
+ * @param [in] num_elems Number of elements to store. By default, the function
+ * stores all the elements of the local tensor. If the value is provided, the
+ * function will store \f$num_elems\f$ elements.
+ */
+template <typename DataType, int32_t VecoutNumBuffers>
+__aicore__ inline void CopyVecToGm(
+    const GlobalTensor<DataType> &global,
+    TQue<QuePosition::VECOUT, VecoutNumBuffers> &vecout_q,
+    const LocalTensor<DataType> &lt, uint32_t num_elems = 0) {
+  exec_mode::AssertIsAIV();
+  // Any UB position -> VECOUT
+  const uint32_t size =
+      num_elems ? AlignUp(num_elems, UB_ALIGNMENT) : lt.GetSize();
+  const LocalTensor<DataType> vecout_lt =
+      vecout_q.template AllocTensor<DataType>();
+  DataCopy(vecout_lt, lt, size);
+  vecout_q.EnQue(vecout_lt);
+
+  // VECOUT -> global
+  kernel_utils::copy::CopyVecToGm<DataType>(global, vecout_q, num_elems);
+}
+
+/**
+ * @brief Copy a tensor from a given queue to global memory.
+ *
+ * The queue's position must be VECIN.
+ * The function first copies the data from the input VECIN queue to
+ * the provided VECOUT queue, and later from VECOUT queue to the global
+ * memory.
+ *
+ * @tparam DataType Data type of the tensor.
+ * @tparam VecoutNumBuffers Depth of the `vecout_q` queue.
+ * @tparam SrcNumBuffers Depth of the input queue.
+ *
+ * @param [in] global Destination global tensor.
+ * @param [in] vecout_q Queue used to hold an intermediate tensor. The
+ * position must be VECOUT.
+ * @param [in] q Source queue. The position must be VECIN.
+ * @param [in] num_elems Number of elements to store. By default, the function
+ * stores all the elements for the local tensor obtained from the queue. If the
+ * value is provided, the function will store \f$num_elems\f$ elements.
+ */
+template <typename DataType, int32_t VecoutNumBuffers, int32_t SrcNumBuffers>
+__aicore__ inline void CopyVecToGm(
+    const GlobalTensor<DataType> &global,
+    TQue<QuePosition::VECOUT, VecoutNumBuffers> &vecout_q,
+    TQue<QuePosition::VECIN, SrcNumBuffers> &q, uint32_t num_elems = 0) {
+  exec_mode::AssertIsAIV();
+  LocalTensor<DataType> lt = q.template DeQue<DataType>();
+  kernel_utils::copy::CopyVecToGm<DataType>(global, vecout_q, lt, num_elems);
+  q.FreeTensor(lt);
+}
+
+/**
+ * @brief Copy a scalar value to global memory.
+ *
+ * The function first stores a scalar in the local tensor allocated from the
+ * VECOUT queue and then performs a data copy of that tensor to global memory.
+ * Optionally, the scalar might be accumulated using atomic add operation.
+ *
+ * Limitation: The function writes more than a single element. Usually the
+ * required size of the tensor from `vecout_q` must be at least 32 bytes. The
+ * same number of bytes is written to global memory.
+ *
+ * @tparam DataType Data type of the scalar.
+ * @tparam SrcNumBuffers Depth of the VECOUT queue.
+ *
+ * @param [in] global Destination global tensor.
+ * @param [in] vecout_q Queue used to hold an intermediate tensor. The position
+ * must be VECOUT.
+ * @param [in] scalar Scalar value to be copied.
+ */
+template <typename DataType, int32_t QNumBuffers>
+__aicore__ inline void CopyScalarToGm(
+    const GlobalTensor<DataType> &global,
+    TQue<QuePosition::VECOUT, QNumBuffers> &vecout_q, DataType scalar) {
+  exec_mode::AssertIsAIV();
+  {
+    const LocalTensor<DataType> lt = vecout_q.template AllocTensor<DataType>();
+    lt.SetValue(0, scalar);
+    vecout_q.EnQue(lt);
+  }
+  {
+    LocalTensor<DataType> lt = vecout_q.template DeQue<DataType>();
+    DataCopyExtParams params;
+    params.blockCount = 1;
+    params.blockLen = 1 * sizeof(DataType);
+    params.srcStride = 0;
+    params.dstStride = 0;
+    DataCopyPad(global, lt, params);
+    vecout_q.FreeTensor(lt);
+  }
+}
+
+}  // namespace copy
+
+namespace queue {
+
+/**
+ * @brief Free a tensor from a given queue.
+ *
+ * @tparam DataType Data type of the tensor.
+ * @tparam Q Type of the queue.
+ *
+ * @param [in] q Queue from which to free a tensor.
+ */
+template <typename DataType, typename Q>
+__aicore__ inline void FreeFromQ(Q &q) {
+  LocalTensor<DataType> lt = q.template DeQue<DataType>();
+  q.FreeTensor(lt);
+}
+
+namespace debug {
+
+/**
+ * @brief Free all the tensors from a given queue.
+ *
+ * @tparam DataType Data type of the tensor.
+ * @tparam Q Type of the queue.
+ *
+ * @param [in] q Queue from which to free the tensors.
+ */
+template <typename DataType, typename Q>
+__aicore__ inline void EmptyQ(Q &q) {
+  while (q.HasTensorInQue()) {
+    FreeFromQ<DataType>(q);
+  }
+}
+
+}  // namespace debug
+
+}  // namespace queue
+
+namespace sync {
+
+/**
+ * @brief Used to specifies the direction of synchronization when synchronizing
+ * cube and vectors within a single group.
+ *
+ * A single group consists of one cube core and two vector cores.
+ *
+ * Can be used to specify either the symmetric or asymetric synchronization.
+ */
+enum class GroupSyncDirection {
+  /// Asymetric synchronization - cube continues execution only after vectors
+  /// reach the synchronization point. Can be used when cube consumes the data
+  /// produced by vectors from the same group.
+  CUBE_WAIT_FOR_VEC,
+  /// Asymetric synchronization - vectors continue execution only after cube
+  /// reaches the synchronization point. Can be used when vectors consume the
+  /// data produced by cube from the same group.
+  VEC_WAIT_FOR_CUBE,
+  /// Symmetric synchronization - execution continues after cubes and vectors
+  /// synchronize at the same time
+  FULL
+};
+
+/**
+ * @brief Synchronize all blocks.
+ *
+ * @param [in] global_workspace Global tensor used to synchronize blocks.
+ * @param [in] local_workspace_q Queue from which the local synchronization
+ * tensor will be allocated. Position must be VECIN.
+ */
+__aicore__ inline void SyncAllBlocks(
+    const GlobalTensor<int32_t> &global_workspace,
+    TQue<QuePosition::VECIN, 1> &local_workspace_q) {
+  exec_mode::AssertIsAIV();
+  LocalTensor<int32_t> lt = local_workspace_q.AllocTensor<int32_t>();
+  SyncAll(global_workspace, lt);
+  local_workspace_q.FreeTensor(lt);
+}
+
+/**
+ * @brief Returns a synchronization config.
+ *
+ * @param [in] mode Synchronization mode.
+ * @param [in] flag_id Flag to use for synchronization.
+ * @return Synchronization config.
+ */
+__aicore__ inline int GetSyncConf(int mode, int flag_id) {
+  return 1 | (mode << 4) | (flag_id << 8);
+}
+
+/**
+ * @brief Synchronize cube and vector cores within a single group.
+ *
+ * @tparam Dir Direction of the synchronization.
+ */
+template <GroupSyncDirection Dir = GroupSyncDirection::FULL>
+__aicore__ inline void SyncGroup() {
+  const int mode = 2;
+
+  if constexpr (Dir == GroupSyncDirection::CUBE_WAIT_FOR_VEC) {
+    const int AIV_SET_FLAG_ID = 11;
+    if ASCEND_IS_AIV {
+      ffts_cross_core_sync(PIPE_MTE3, GetSyncConf(mode, AIV_SET_FLAG_ID));
+    }
+    if ASCEND_IS_AIC {
+      wait_flag_dev(AIV_SET_FLAG_ID);
+    }
+    return;
+  }
+  if constexpr (Dir == GroupSyncDirection::VEC_WAIT_FOR_CUBE) {
+    const int AIC_SET_FLAG_ID = 12;
+    if ASCEND_IS_AIC {
+      ffts_cross_core_sync(PIPE_FIX, GetSyncConf(mode, AIC_SET_FLAG_ID));
+    }
+    if ASCEND_IS_AIV {
+      wait_flag_dev(AIC_SET_FLAG_ID);
+    }
+    return;
+  }
+  if constexpr (Dir == GroupSyncDirection::FULL) {
+    const int AIV_SET_FLAG_ID = 11;
+    const int AIC_SET_FLAG_ID = 12;
+    if ASCEND_IS_AIV {
+      ffts_cross_core_sync(PIPE_MTE3, GetSyncConf(mode, AIV_SET_FLAG_ID));
+      wait_flag_dev(AIC_SET_FLAG_ID);
+    }
+    if ASCEND_IS_AIC {
+      ffts_cross_core_sync(PIPE_FIX, GetSyncConf(mode, AIC_SET_FLAG_ID));
+      wait_flag_dev(AIV_SET_FLAG_ID);
+    }
+    return;
+  }
+}
+
+/**
+ * @brief Synchronize all vector and all cube cores.
+ *
+ * This function provides an inter-AIV and inter-AIC synchronization.
+ * If called from vector cores, will synchronize all vector cores, if called
+ * from cube cores, will synchronize all cube cores.
+ * The synchronization between vector and cube cores is not guaranteed, for that
+ * `SyncGroup` should be used.
+ */
+__aicore__ inline void SyncAllCores() {
+  const int mode = 0;
+  if ASCEND_IS_AIV {
+    const int flag_id = 13;
+    ffts_cross_core_sync(PIPE_MTE3, GetSyncConf(mode, flag_id));
+    wait_flag_dev(flag_id);
+  }
+  if ASCEND_IS_AIC {
+    const int flag_id = 14;
+    ffts_cross_core_sync(PIPE_FIX, GetSyncConf(mode, flag_id));
+    wait_flag_dev(flag_id);
+  }
+}
+
+/**
+ * @brief Makes scalar unit wait for vector unit.
+ *
+ * Scalar unit continues execution only after all previous vector operations
+ * are finished.
+ */
+__aicore__ inline void ScalarWaitForVec() {
+  const TEventID event_id = GetTPipePtr()->FetchEventID(HardEvent::V_S);
+  SetFlag<HardEvent::V_S>(event_id);
+  WaitFlag<HardEvent::V_S>(event_id);
+}
+
+}  // namespace sync
+
+namespace reduce {
+
+/**
+ * @brief Reduce a tensor to a smaller tensor.
+ *
+ * The function takes the `src` tensor, divides it into parts of
+ * size of the `acc` tensor, reduces the parts together using
+ * element-wise addition and writes the result into `acc`.
+ *
+ * @tparam AllocateAcc Indicates whether the results should be accumulated or
+ * written to the `acc` tensor.
+ * @tparam DataType Data type of the tensors.
+ *
+ * @param [in] acc Accumulation tensor.
+ * @param [in] src Source tensor.
+ */
+template <bool AllocateAcc, typename DataType>
+__aicore__ inline void ReduceVecAdd(const LocalTensor<DataType> &acc,
+                                    const LocalTensor<DataType> &src) {
+  exec_mode::AssertIsAIV();
+  const uint32_t src_size = src.GetSize();
+  const uint32_t acc_size = acc.GetSize();
+
+  if (src_size == acc_size) {
+    DataCopy(acc, src, acc_size);
+  } else {
+    constexpr uint32_t i_start = AllocateAcc ? 2 : 0;
+    const uint32_t i_end = src_size / acc_size;
+    if constexpr (AllocateAcc) {
+      Add(acc, src[0], src[acc_size], acc_size);
+    }
+    for (uint32_t i = i_start; i < i_end; i++) {
+      Add(acc, src[i * acc_size], acc, acc_size);
+    }
+  }
+}
+
+/**
+ * @brief Reduce a tensor to scalar using add operation.
+ *
+ * @tparam DataType Data type of the tensor.
+ *
+ * @param [in] src Source tensor.
+ * @param [in] size Number of elements to reduce.
+ *
+ * @return The result of reduction.
+ */
+template <typename DataType>
+__aicore__ inline DataType ReduceScalarAdd(const LocalTensor<DataType> &src,
+                                           uint32_t size) {
+  DataType acc = 0;
+  for (uint32_t i = 0; i < size; i++) {
+    acc += src.GetValue(i);
+  }
+  return acc;
+}
+
+/**
+ * @brief Reduce a tensor to a smaller tensor using bitwise or.
+ *
+ * The function takes the `src` tensor, divides it into parts of
+ * size of the `acc` tensor, reduces the parts together using
+ * element-wise or operation and writes the result into `acc`.
+ *
+ * @tparam AllocateAcc Indicates whether the results should be accumulated or
+ * written to the `acc` tensor.
+ * @tparam DataType Data type of the tensors.
+ *
+ * @param [in] acc Accumulation tensor.
+ * @param [in] src Source tensor.
+ */
+template <bool AllocateAcc, typename DataType>
+__aicore__ inline void ReduceVecOr(const LocalTensor<DataType> &acc,
+                                   const LocalTensor<DataType> &src) {
+  exec_mode::AssertIsAIV();
+  const uint32_t src_size = src.GetSize();
+  const uint32_t acc_size = acc.GetSize();
+
+  if (src_size == acc_size) {
+    DataCopy(acc, src, acc_size);
+  } else {
+    constexpr uint32_t i_start = AllocateAcc ? 2 : 0;
+    const uint32_t i_end = src_size / acc_size;
+    if constexpr (AllocateAcc) {
+      Or(acc, src[0], src[acc_size], acc_size);
+    }
+    for (uint32_t i = i_start; i < i_end; i++) {
+      Or(acc, src[i * acc_size], acc, acc_size);
+    }
+  }
+}
+
+/**
+ * @brief Reduce a tensor to scalar using bitwise or operation.
+ *
+ * @tparam DataType Data type of the tensor.
+ *
+ * @param [in] src Source tensor.
+ *
+ * @return The result of reduction.
+ */
+template <typename DataType>
+__aicore__ inline DataType ReduceScalarOr(const LocalTensor<DataType> &src) {
+  exec_mode::AssertIsAIV();
+  DataType acc = 0;
+  for (uint32_t i = 0; i < src.GetSize(); i++) {
+    acc |= src.GetValue(i);
+  }
+  return acc;
+}
+
+}  // namespace reduce
+
+namespace cast {
+
+/**
+ * @brief Cast a tensor within a single queue.
+ *
+ * The function takes a tensor from the queue, casts it to a different data type
+ * and puts it to the same queue. The size in bytes of the source and
+ * destination data types must be the same.
+ *
+ * @tparam DstDataType Data type of the destination tensor.
+ * @tparam SrcDataType Data type of the source tensor.
+ * @tparam QPosition Position of the source queue. Must be either VECIN or
+ * VECCALC.
+ * @tparam QNumBuffers Depth of the source queue.
+ *
+ * @param [in] q Source queue. The position must be either VECIN or VECCALC.
+ */
+template <
+    typename DstDataType, typename SrcDataType, QuePosition QPosition,
+    int32_t QNumBuffers,
+    typename std::enable_if<(QPosition == QuePosition::VECIN ||
+                             QPosition == QuePosition::VECCALC) &&
+                                (sizeof(DstDataType) == sizeof(SrcDataType)),
+                            int>::type = 0>
+__aicore__ inline void CastInPlace(TQue<QPosition, QNumBuffers> &q) {
+  exec_mode::AssertIsAIV();
+  const LocalTensor<SrcDataType> src = q.template DeQue<SrcDataType>();
+  const LocalTensor<DstDataType> dst =
+      src.template ReinterpretCast<DstDataType>();
+  Cast(dst, src, RoundMode::CAST_NONE, src.GetSize());
+  q.EnQue(dst);
+}
+
+}  // namespace cast
+
+namespace data_cache {
+
+/**
+ * @brief Invalidates a single cacheline in data cache corresponding to the
+ * global memory address.
+ *
+ * @tparam T Data type of the buffer in global memory.
+ *
+ * @param global [in] Global tensor which first values are invalidated in data
+ * cache.
+ */
+template <typename T>
+__aicore__ inline void InvalidateLine(const GlobalTensor<T> &global) {
+  DataCacheCleanAndInvalid<T, CacheLine::SINGLE_CACHE_LINE,
+                           DcciDst::CACHELINE_OUT>(global);
+}
+}  // namespace data_cache
+
+namespace scalar {
+
+/**
+ * @brief Rounds an integral value up to the nearest multiple of a given
+ * alignment.
+ *
+ * @tparam T Data type of the value.
+ * @param [in] value Input value.
+ * @param [in] alignment Alignment to use.
+ * @return Aligned value.
+ */
+template <typename T,
+          typename std::enable_if<std::is_integral<T>::value, int>::type = 0>
+__aicore__ inline T AlignUp(T value, uint32_t alignment) {
+  const T tail = value % alignment;
+  if (!tail) {
+    return value;
+  }
+  const T padding = alignment - tail;
+  return value + padding;
+}
+
+/**
+ * @brief Performs a division on two integral numbers and rounds the result up
+ * to the nearest integer.
+ *
+ * @tparam T1 Data type of dividend.
+ * @tparam T2 Data type of divisor.
+ * @param [in] value Dividend.
+ * @param [in] divisor Divisor.
+ * @return Result of division.
+ */
+template <typename T1, typename T2,
+          typename std::enable_if<std::is_integral<T1>::value &&
+                                      std::is_integral<T2>::value,
+                                  int>::type = 0>
+__aicore__ inline T1 CeilDiv(T1 value, T2 divisor) {
+  return (value + divisor - 1) / divisor;
+}
+
+/**
+ * @brief Performs a division on two integral numbers and rounds the result down
+ * to the nearest integer.
+ *
+ * @tparam T1 Data type of dividend.
+ * @tparam T2 Data type of divisor.
+ * @param [in] value Dividend.
+ * @param [in] divisor Divisor.
+ * @return Result of division.
+ */
+template <typename T1, typename T2,
+          typename std::enable_if<std::is_integral<T1>::value &&
+                                      std::is_integral<T2>::value,
+                                  int>::type = 0>
+__aicore__ inline T1 FloorDiv(T1 value, T2 divisor) {
+  return value / divisor;
+}
+
+/**
+ * @brief Defines how the workload should be distributed among cores.
+ *
+ * The function returns the number of tiles to be processed by each block so
+ * that the depth of execution is minimized. If the workload is not balanced it
+ * will greedily assign as many tiles as possible starting from the first block,
+ * but keeping the maximum depth optimal. If `vec_len` is not divisible by
+ * `tile_size` the last tile will be smaller.
+ *
+ * @param [in] vec_len Size of the input vector.
+ * @param [in] tile_size Tile size.
+ * @param [in] block_n Number of blocks.
+ *
+ * @return Number of tiles assigned to the block calling the function.
+ */
+__aicore__ inline uint32_t GetWorkDistribution(uint32_t vec_len,
+                                               uint32_t tile_size,
+                                               uint32_t block_n) {
+  const uint32_t num_tiles = scalar::CeilDiv(vec_len, tile_size);
+  const uint32_t max_num_tiles_per_block = scalar::CeilDiv(num_tiles, block_n);
+  uint32_t num_tiles_to_process = max_num_tiles_per_block;
+  const int tiles_left =
+      (int)num_tiles - (int)(GetBlockIdx() * max_num_tiles_per_block);
+
+  if (tiles_left < 0) {
+    num_tiles_to_process = 0;
+  } else if (tiles_left < static_cast<int>(max_num_tiles_per_block)) {
+    num_tiles_to_process = tiles_left;
+  }
+  return num_tiles_to_process;
+}
+
+/**
+ * @brief Defines how the elements of a batch should be distributed among cores.
+ *
+ * The function returns the number of elements to be processed by each block so
+ * that the depth of execution is minimized. If the workload is not balanced it
+ * will assign one more element starting from the first block
+ *
+ * @param [in] batch_size Number of elements.
+ * @param [in] block_n Number of blocks.
+ *
+ * @return Number of elements assigned to the block calling the function.
+ */
+__aicore__ inline uint32_t GetBatchDistribution(uint32_t batch_size,
+                                                uint32_t block_n) {
+  // ISSUE: GetTaskRation() doesn't work for CPU
+  const uint32_t ai_core_idx = GetBlockIdx() / GetTaskRation();
+  if (ai_core_idx < batch_size % block_n)
+    return scalar::CeilDiv(batch_size, block_n);
+  else
+    return scalar::FloorDiv(batch_size, block_n);
+}
+
+/**
+ * @brief Reads a value from global memory.
+ *
+ * @tparam DataT Data type.
+ * @param [in] addr Address in GM.
+ * @param [in] offset Offset.
+ * @param [in] vec_len Size of the global buffer.
+ * @return Result of division.
+ */
+template <typename DataT>
+__aicore__ inline DataT GetGMValue(GM_ADDR addr, uint32_t offset,
+                                   uint32_t vec_len) {
+  ASCENDC_ASSERT(offset < vec_len, {
+    KERNEL_LOG(KERNEL_ERROR,
+               "GetGMValue is trying to access data out of bounds.");
+  });
+
+  GlobalTensor<DataT> gt;
+  gt.SetGlobalBuffer((__gm__ DataT *)addr, vec_len);
+
+  data_cache::InvalidateLine(gt);
+
+  return gt.GetValue(offset);
+}
+
+/**
+ * @brief Swaps two variables.
+ *
+ * @tparam DataT Data type.
+ * @param [in] v1 First variables.
+ * @param [in] v2 Second variables.
+ *
+ */
+template <typename DataT>
+__aicore__ inline void Swap(DataT &v1, DataT &v2) {
+  DataT tmp = v1;
+  v1 = v2;
+  v2 = tmp;
+}
+}  // namespace scalar
+
+namespace tiling {
+
+/**
+ * @brief Copies tiling structure from global memory to registers.
+ *
+ * @tparam TilingT Structure representing kernel tiling parameters.
+ * @param [in] tiling Pointer to the structure allocated in registers.
+ * @param [in] tiling_global Pointer to the structure in global memory.
+ */
+template <typename TilingT>
+__aicore__ inline void GetTilingData(TilingT *const tiling,
+                                     GM_ADDR tiling_global) {
+  uint32_t *const tiling_32b = reinterpret_cast<uint32_t *>(tiling);
+  const __gm__ uint32_t *const tiling_global_32b =
+      reinterpret_cast<__gm__ uint32_t *>(tiling_global);
+
+  for (uint32_t i = 0; i < sizeof(TilingT) / sizeof(uint32_t); i++) {
+    tiling_32b[i] = tiling_global_32b[i];
+  }
+}
+
+}  // namespace tiling
+
+namespace duplicate {
+
+/**
+ * @brief It is true if `DataType` is supported for the Duplicate instruction.
+ *
+ * @tparam DataType Data type to check.
+ */
+template <typename DataType>
+constexpr bool IsDuplicateSupported = std::is_same<DataType, uint16_t>::value ||
+                                      std::is_same<DataType, int16_t>::value ||
+                                      std::is_same<DataType, half>::value ||
+                                      std::is_same<DataType, uint32_t>::value ||
+                                      std::is_same<DataType, int32_t>::value ||
+                                      std::is_same<DataType, float>::value ||
+                                      std::is_same<DataType, bfloat16_t>::value;
+
+}  // namespace duplicate
+
+namespace cube_unit {
+
+/**
+ * @brief It is true if `DataType` is supported as input for the Cube unit.
+ *
+ * @tparam DataType Data type to check.
+ */
+template <typename DataType>
+constexpr bool IsCubeSupported =
+    std::is_same_v<DataType, half> || std::is_same_v<DataType, int8_t> ||
+    std::is_same_v<DataType, uint8_t>;
+
+/**
+ * @brief A type metafunction for Cube's input / output types. For input type
+ * half returns float, otherwise int32_t.
+ *
+ * @tparam InputT Input cube type. Must be half or int8_t.
+ */
+template <typename InputT>
+struct CubeOutType {
+  /// Type trait
+  using type = typename std::conditional<
+      std::is_same_v<InputT, half>, float,
+      typename std::conditional<std::is_same_v<InputT, int8_t>, int32_t,
+                                uint32_t>::type>::type;
+};
+
+/**
+ * @brief Syntactic sugar for `CubeOutType`
+ * @tparam T Input type
+ */
+template <typename T>
+using CubeOutType_t = typename CubeOutType<T>::type;
+
+/**
+ * @brief Multiply two matrices given their queues.
+ *
+ * The function deques the input matrices from A2 and B2 and computes their
+ * product using the cube unit. The output can be accumulated.
+ * After execution the input matrices are either freed or enqued again if they
+ * need to be reused.
+ *
+ * @tparam InputT Data type of the input matrices.
+ * @tparam accumulate_c If true accumulates the output adding it to the matrix
+ * in the CO1 queue.
+ * @tparam free_a If true it frees the first input matrix, if false it enques it
+ * to reuse it.
+ * @tparam free_b If true it frees the second input matrix, if false it enques
+ * it to reuse it.
+ *
+ * @param [in] q_a Input queue for the matrix A with position A2.
+ * @param [in] q_b Input queue for the matrix B with position B2.
+ * @param [in] q_c Output queue for the matrix C with position CO1.
+ * @param [in] M Height of matrix A.
+ * @param [in] N Width of matrix B.
+ * @param [in] K Width of matrix A and hwight of matrix B.
+ */
+template <typename InputT, bool accumulate_c = false, bool free_a = true,
+          bool free_b = true>
+__aicore__ inline void Multiply(TQue<QuePosition::A2, 1> &q_a,
+                                TQue<QuePosition::B2, 1> &q_b,
+                                TQue<QuePosition::CO1, 1> &q_c, uint16_t M,
+                                uint16_t N, uint16_t K) {
+  exec_mode::AssertIsAIC();
+  static_assert(IsCubeSupported<InputT>,
+                "Unsupported input Cube dtype. Please use half or int8_t.");
+  using OutputT = CubeOutType_t<InputT>;
+  LocalTensor<InputT> a2_lt = q_a.DeQue<InputT>();
+  LocalTensor<InputT> b2_lt = q_b.DeQue<InputT>();
+  LocalTensor<OutputT> c1_lt =
+      accumulate_c ? q_c.DeQue<OutputT>() : q_c.AllocTensor<OutputT>();
+
+  Mmad(c1_lt, a2_lt, b2_lt, {M, N, K, accumulate_c, 0, false, false, false});
+
+  q_c.EnQue<OutputT>(c1_lt);
+
+  if constexpr (free_a) {
+    q_a.FreeTensor(a2_lt);
+  } else {
+    q_a.EnQue(a2_lt);
+  }
+
+  if constexpr (free_b) {
+    q_b.FreeTensor(b2_lt);
+  } else {
+    q_b.EnQue(b2_lt);
+  }
+}
+
+/**
+ * @brief Initialize a local tensor that is allocated in Cube L1/L0
+ * (A1/A2/B1/B2) with a constant value
+ *
+ * @tparam T Input type can be half or int8 for now.
+ * @tparam Pos Input local tensor position.
+ * @param local_tensor Input local tensor to populate.
+ * @param value Value to populate `local_tensor` with.
+ * @param len Length of the local tensor to populate starting from index 0.
+ */
+template <typename T, TPosition Pos>
+__aicore__ inline void InitConstL1(LocalTensor<T> &local_tensor, T value,
+                                   uint16_t len) {
+  exec_mode::AssertIsAIC();
+  static_assert(Pos == TPosition::A1 || Pos == TPosition::B1 ||
+                    Pos == TPosition::A2 || Pos == TPosition::B2,
+                "Local tensor must be either in A1, B1, A2 or B2");
+  // If Pos is A1/B1, the block size is 32B else 512B
+  constexpr uint32_t block_size =
+      (Pos == TPosition::A1 || Pos == TPosition::B1) ? 32 : 256;
+
+  InitConstValueParams<T> params;
+  params.repeatTimes = 1;
+  params.blockNum = static_cast<uint16_t>(len * sizeof(T) / block_size);
+  params.dstGap = 0;
+  params.initValue = value;
+  InitConstValue<T>(local_tensor, params);
+}
+
+}  // namespace cube_unit
+
+namespace fp32 {
+/// @brief Float number with the smallest aboslute value.
+const float FP32_MIN_NORMAL = 0x1.000000p-126f;
+/// @brief Float number with the largest value.
+const float FP32_MAX_NORMAL = 0x1.fffffep+127f;
+/// @brief Difference between float 1 and the next representable value.
+const float FP32_EPSILON = 0x1.0p-23f;
+/// @brief Float 1.
+const float FP32_ONE = 1.0f;
+/// @brief Float 0.5.
+const float FP32_HALF = 0.5f;
+/// @brief Float 0.
+const float FP32_ZERO = 0.0f;
+/// @brief Next representable value after float 1.
+const float FP32_ONE_P_ULP = FP32_ONE + FP32_EPSILON;
+/// @brief Increment ratio
+const float FP32_INC = FP32_ONE_P_ULP * FP32_EPSILON * FP32_HALF;
+
+/**
+ * @brief Computes the next representable value
+ *
+ * @param [in] val Current value.
+ *
+ * @return Next representable value after the current value.
+ */
+__aicore__ inline float next_after(float val) { return val * FP32_INC + val; }
+}  // namespace fp32
+
+}  // namespace kernel_utils

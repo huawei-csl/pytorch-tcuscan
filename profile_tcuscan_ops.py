@@ -34,8 +34,11 @@ DEVICE = os.environ.get("DEVICE_TYPE", "npu")
 if DEVICE == "npu":
     import torch_npu
 
-    import add_custom
-
+    try:
+        import tcuscan_ops
+    except:
+        RuntimeError("Please run 'make build' first.")
+        exit(-1)
     torch.npu.config.allow_internal_format = False
 
     NPU_DEVICE = "npu:1"
@@ -123,9 +126,28 @@ def vadd_benchmark(device: Device, vec_len: int) -> float:
     y = torch.rand(vec_len, device=device.str, dtype=torch.float16)
 
     def run_vadd() -> None:
-        z = add_custom.run_add_custom(x, y)
+        z = tcuscan_ops.run_add_custom(x, y)
 
     return _run_benchmark(device, run_vadd)
+
+
+def diff_benchmark(device: Device, vec_len: int) -> float:
+    """
+    Benchmark vector diff kernel.
+
+    Args:
+        device: Device to run benchmark on.
+        vec_len: Input vector length.
+
+    Returns:
+        Average time in microseconds.
+    """
+    x = torch.rand(vec_len, device=device.str, dtype=torch.float16)
+
+    def run_diff() -> None:
+        z = tcuscan_ops.run_diff(x)
+
+    return _run_benchmark(device, run_diff)
 
 
 def benchmark(
@@ -164,6 +186,7 @@ if __name__ == "__main__":
         "--bench",
         choices=[
             "vadd",
+            "diff",
         ],
     )
     parser.add_argument("--dtype", choices=["int8", "fp16", "int16"])
@@ -193,6 +216,8 @@ if __name__ == "__main__":
 
     if bench == "vadd":
         benchmark(device, "vadd", "fp16", vadd_benchmark, sizes)
+    elif bench == "diff":
+        benchmark(device, "diff", "fp16", diff_benchmark, sizes)
     else:
         raise RuntimeError(
             f"Unsupported benchmark setup: bench:{bench}, dtype:{dtype}, s:{s}"

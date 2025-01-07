@@ -16,15 +16,14 @@ import tcuscan_ops
 torch.npu.config.allow_internal_format = False
 
 
-def test_add_custom_ops():
-    length = [40 * 2048]
+def test_tcuscan_diff():
+    length = [40 * 1024]
     x = torch.rand(length, device="cpu", dtype=torch.float16)
-    y = torch.rand(length, device="cpu", dtype=torch.float16)
 
+    x_cpu = torch.concat([torch.zeros(1, dtype=torch.float16), x])
     x_npu = x.npu()
-    y_npu = y.npu()
-    output = tcuscan_ops.run_add_custom(x_npu, y_npu)
-    cpuout = torch.add(x, y).npu()
+    output = tcuscan_ops.run_diff(x_npu)
+    cpuout = torch.diff(x_cpu).npu()
 
     assert output.shape == cpuout.shape, "Output shape does not match expected shape."
     assert torch.allclose(output, cpuout)
