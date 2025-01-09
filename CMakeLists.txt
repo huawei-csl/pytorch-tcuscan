@@ -27,8 +27,32 @@ include(${ASCENDC_CMAKE_DIR}/ascendc.cmake)
 ascendc_library(kernels STATIC
     src/add_custom.cpp
     src/kernel_diff.cpp
+    src/seg_scan_single_core.cpp
     # /* Add you kernels here */
 )
+
+ascendc_compile_definitions(kernels PRIVATE
+  -DHAVE_WORKSPACE
+)
+
+# TODO(anastasios) : double-check if needed
+#target_include_directories(kernels PRIVATE
+#    ${ASCEND_CANN_PACKAGE_PATH}/x86_64-linux/include
+#    ${ASCEND_CANN_PACKAGE_PATH}/runtime/include
+#    ${ASCEND_CANN_PACKAGE_PATH}/x86_64-linux/tikcpp/tikcfw
+#    ${ASCEND_CANN_PACKAGE_PATH}/x86_64-linux/tikcpp/tikcfw/interface
+#    ${ASCEND_CANN_PACKAGE_PATH}/x86_64-linux/tikcpp/tikcfw/impl
+#)
+
+target_link_libraries(kernels PRIVATE
+    ascendcl
+    c_sec
+    tiling_api
+    register
+    platform
+    ascendalog
+)
+
 
 add_library(pybind11_lib SHARED src/pybind11.cpp)
 target_link_libraries(pybind11_lib PRIVATE

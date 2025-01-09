@@ -144,10 +144,12 @@ class KernelDiff {
  * @param [in] vec_out Pointer ot the output vector.
  * @param [in] vec_len Dimension of the input vector.
  * @param [in] tile_len Tile length.
+ * @param [in] workspace Pointer to workspace.
  */
 template <bool ForceMixMode = true, typename InputT>
 __aicore__ inline void run_diff(GM_ADDR vec_in, GM_ADDR vec_out,
-                                uint32_t vec_len, uint32_t tile_len) {
+                                uint32_t vec_len, uint32_t tile_len,
+                                GM_ADDR workspace) {
   if constexpr (ForceMixMode) {
     exec_mode::EnableCubeCores();
   }

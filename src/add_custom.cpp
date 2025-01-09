@@ -154,7 +154,8 @@ class KernelAdd {
 
 extern "C" __global__ __aicore__ void add_custom(GM_ADDR x, GM_ADDR y,
                                                  GM_ADDR z, uint32_t vec_len,
-                                                 uint32_t tile_len) {
+                                                 uint32_t tile_len,
+                                                 GM_ADDR workspace) {
   KernelAdd op(vec_len, tile_len);
   op.Init(x, y, z);
   op.Process();
