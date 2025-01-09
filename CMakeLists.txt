@@ -25,14 +25,15 @@ include(${ASCENDC_CMAKE_DIR}/ascendc.cmake)
 
 # ascendc_library use to add kernel file to generate AscendC library
 ascendc_library(kernels STATIC
-    src/add_custom.cpp
-    src/kernel_diff.cpp
+    src/vadd.cpp
+    src/diff.cpp
     src/seg_scan_single_core.cpp
-    # /* Add you kernels here */
+    src/scan_multi_core.cpp
 )
 
 ascendc_compile_definitions(kernels PRIVATE
-  -DHAVE_WORKSPACE
+-DHAVE_WORKSPACE
+-DHAVE_TILING
 )
 
 # TODO(anastasios) : double-check if needed

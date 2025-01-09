@@ -12,37 +12,23 @@
 
 #include "aclrtlaunch_add_custom.h"
 #include "aclrtlaunch_diff.h"
+#include "aclrtlaunch_scan_multi_core.h"
 #include "aclrtlaunch_seg_scan_single_core.h"
-#include "host_utils.h"
 #include "tiling/platform/platform_ascendc.h"
+#include "tiling/tiling_diff.h"
+#include "tiling/tiling_scan_multi_core.h"
+#include "tiling/tiling_seg_scan_single_core.h"
+#include "tiling/tiling_vadd.h"
 #include "torch_npu/csrc/core/npu/NPUStream.h"
+#include "workspace.h"
 
-namespace seg_scan {
-template <typename InputVecT, typename OutputVecT, typename FlagVecT,
-          typename FlagOutputVecT>
-constexpr uint32_t GetWorkspaceSize(uint32_t vec_len, uint32_t matmul_size) {
-  const uint32_t padded_vec_len =
-      host_utils::AlignUp(vec_len, matmul_size * matmul_size);
-  const uint32_t padded_input_size = padded_vec_len * sizeof(InputVecT);
-  const uint32_t padded_input_rowwise_size =
-      padded_vec_len * sizeof(OutputVecT);
-
-  const uint32_t padded_flag_size = padded_vec_len * sizeof(FlagVecT);
-  const uint32_t padded_rowwise_flag_size =
-      padded_vec_len * sizeof(FlagOutputVecT);
-
-  const uint32_t total_size = padded_input_size + padded_input_rowwise_size +
-                              padded_flag_size + padded_rowwise_flag_size;
-  return total_size;
-}
-
-}  // namespace seg_scan
+static const char *SOC_VERSION = "Ascend910B4";
 
 namespace asc {
 
 at::Tensor alloc_workspace(uint32_t user_workspace_size, at::Device device) {
   const auto ascendc_platform =
-      platform_ascendc::PlatformAscendCManager::GetInstance();
+      platform_ascendc::PlatformAscendCManager::GetInstance(SOC_VERSION);
 
   const uint32_t system_workspace_size =
       static_cast<uint32_t>(ascendc_platform->GetLibApiWorkSpaceSize());
@@ -66,11 +52,24 @@ at::Tensor run_add_custom(const at::Tensor &x, const at::Tensor &y) {
 
   const at::Tensor workspace_tensor = alloc_workspace(0, device);
 
+  const VaddTiling tiling{totalLength, tileLen};
+
+  constexpr size_t tilingSize = sizeof(MultiCoreScanTiling);
+  const uint8_t *tilingHost = reinterpret_cast<const uint8_t *>(&tiling);
+  uint8_t *tilingDevice;
+
+  aclrtMalloc((void **)&tilingDevice, tilingSize, ACL_MEM_MALLOC_HUGE_FIRST);
+  aclrtMemcpy(tilingDevice, tilingSize, tilingHost, tilingSize,
+              ACL_MEMCPY_HOST_TO_DEVICE);
+
   ACLRT_LAUNCH_KERNEL(add_custom)
   (blockDim, acl_stream, const_cast<void *>(x.storage().data()),
    const_cast<void *>(y.storage().data()),
-   const_cast<void *>(z.storage().data()), totalLength, tileLen,
-   const_cast<void *>(workspace_tensor.storage().data()));
+   const_cast<void *>(z.storage().data()),
+   const_cast<void *>(workspace_tensor.storage().data()), tilingDevice);
+
+  aclrtFree(tilingDevice);
+
   return z;
 }
 
@@ -78,7 +77,7 @@ at::Tensor run_diff(const at::Tensor &x) {
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Tensor z = at::empty_like(x);
   const at::Device device = x.options().device();
-  const uint32_t tileLen = 1024;
+  const uint32_t tileLen = 256;
   uint32_t totalLength = 1;
   for (uint32_t size : x.sizes()) {
     totalLength *= size;
@@ -86,11 +85,23 @@ at::Tensor run_diff(const at::Tensor &x) {
 
   const at::Tensor workspace_tensor = alloc_workspace(0, device);
 
+  const DiffTiling tiling{totalLength, tileLen};
+  constexpr size_t tilingSize = sizeof(DiffTiling);
+  const uint8_t *tilingHost = reinterpret_cast<const uint8_t *>(&tiling);
+
+  uint8_t *tilingDevice;
+  aclrtMalloc((void **)&tilingDevice, tilingSize, ACL_MEM_MALLOC_HUGE_FIRST);
+  aclrtMemcpy(tilingDevice, tilingSize, tilingHost, tilingSize,
+              ACL_MEMCPY_HOST_TO_DEVICE);
+
   const uint32_t blockDim = static_cast<uint32_t>(totalLength / (10 * tileLen));
   ACLRT_LAUNCH_KERNEL(diff)
   (blockDim, acl_stream, const_cast<void *>(x.storage().data()),
-   const_cast<void *>(z.storage().data()), totalLength, tileLen,
-   const_cast<void *>(workspace_tensor.storage().data()));
+   const_cast<void *>(z.storage().data()),
+   const_cast<void *>(workspace_tensor.storage().data()), tilingDevice);
+
+  aclrtFree(tilingDevice);
+
   return z;
 }
 
@@ -102,7 +113,7 @@ at::Tensor run_seg_scan(const at::Tensor &x, const at::Tensor &f,
 
   const int S = U_s_half.sizes()[0];
 
-  const uint32_t tileLen = static_cast<uint32_t>(S);
+  const uint32_t matmul_size = static_cast<uint32_t>(S);
   uint32_t totalLength = 1;
   for (uint32_t size : x.sizes()) {
     totalLength *= size;
@@ -111,9 +122,19 @@ at::Tensor run_seg_scan(const at::Tensor &x, const at::Tensor &f,
   const at::Tensor z = at::empty(
       {totalLength}, at::TensorOptions().dtype(at::kFloat).device(device));
 
+  const SegScanSingleCoreTiling tiling{totalLength, matmul_size};
+
+  constexpr size_t tilingSize = sizeof(SegScanSingleCoreTiling);
+  const uint8_t *tilingHost = reinterpret_cast<const uint8_t *>(&tiling);
+
+  uint8_t *tilingDevice;
+  aclrtMalloc((void **)&tilingDevice, tilingSize, ACL_MEM_MALLOC_HUGE_FIRST);
+  aclrtMemcpy(tilingDevice, tilingSize, tilingHost, tilingSize,
+              ACL_MEMCPY_HOST_TO_DEVICE);
+
   const uint32_t user_workspace_size =
-      seg_scan::GetWorkspaceSize<int16_t, float, int8_t, int32_t>(totalLength,
-                                                                  tileLen);
+      workspace::seg_scan::GetWorkspaceSize<int16_t, float, int8_t, int32_t>(
+          totalLength, matmul_size);
   const at::Tensor workspace_tensor =
       alloc_workspace(user_workspace_size, device);
 
@@ -123,8 +144,65 @@ at::Tensor run_seg_scan(const at::Tensor &x, const at::Tensor &f,
    const_cast<void *>(f.storage().data()),
    const_cast<void *>(U_s_half.storage().data()),
    const_cast<void *>(U_s_int8.storage().data()),
-   const_cast<void *>(z.storage().data()), totalLength, tileLen,
-   const_cast<void *>(workspace_tensor.storage().data()));
+   const_cast<void *>(z.storage().data()),
+   const_cast<void *>(workspace_tensor.storage().data()), tilingDevice);
+
+  aclrtFree(tilingDevice);
+
+  return z;
+}
+
+at::Tensor run_scan_multi_core(const at::Tensor &x, const at::Tensor &U_s) {
+  auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
+  const at::Device device = x.options().device();
+  const auto ascendc_platform =
+      platform_ascendc::PlatformAscendCManager::GetInstance(SOC_VERSION);
+
+  const int S = U_s.sizes()[0];
+
+  const uint32_t matmul_size = static_cast<uint32_t>(S);
+  uint32_t totalLength = 1;
+  for (uint32_t size : x.sizes()) {
+    totalLength *= size;
+  }
+
+  const at::Tensor z = at::empty(
+      {totalLength}, at::TensorOptions().dtype(at::kFloat).device(device));
+
+  const uint32_t tile_elems = matmul_size * matmul_size;
+  const size_t num_tiles = totalLength / tile_elems;
+
+  uint32_t blockDim = ascendc_platform->GetCoreNum() / 2;
+  while (num_tiles % blockDim != 0) {
+    blockDim--;
+  }
+  if (blockDim <= 1) {
+    blockDim = 8;
+  }
+
+  const MultiCoreScanTiling tiling{blockDim, totalLength, matmul_size};
+
+  constexpr size_t tilingSize = sizeof(MultiCoreScanTiling);
+  const uint8_t *tilingHost = reinterpret_cast<const uint8_t *>(&tiling);
+
+  uint8_t *tilingDevice;
+  aclrtMalloc((void **)&tilingDevice, tilingSize, ACL_MEM_MALLOC_HUGE_FIRST);
+  aclrtMemcpy(tilingDevice, tilingSize, tilingHost, tilingSize,
+              ACL_MEMCPY_HOST_TO_DEVICE);
+
+  const uint32_t user_workspace_size =
+      workspace::mc_scan::GetWorkspaceSize<int16_t, float>(tiling);
+  const at::Tensor workspace_tensor =
+      alloc_workspace(user_workspace_size, device);
+
+  ACLRT_LAUNCH_KERNEL(scan_multi_core)
+  (blockDim, acl_stream, const_cast<void *>(x.storage().data()),
+   const_cast<void *>(U_s.storage().data()),
+   const_cast<void *>(z.storage().data()),
+   const_cast<void *>(workspace_tensor.storage().data()), tilingDevice);
+
+  aclrtFree(tilingDevice);
+
   return z;
 }
 }  // namespace asc
@@ -134,4 +212,5 @@ PYBIND11_MODULE(tcuscan_ops, m) {
   m.def("run_add_custom", &asc::run_add_custom, "AscendC Vector add");
   m.def("run_diff", &asc::run_diff, "AscendC Vector diff");
   m.def("run_seg_scan", &asc::run_seg_scan, "AscendC Segmented Scan");
+  m.def("run_scan_multi_core", &asc::run_scan_multi_core, "AscendC MCSCAN");
 }

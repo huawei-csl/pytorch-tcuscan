@@ -1,5 +1,5 @@
 /**
- * @file add_custom.cpp
+ * @file add_custom.h
  *
  * Copyright (C) 2024. Huawei Technologies Co., Ltd. All rights reserved.
  *
@@ -7,6 +7,8 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
  */
+#pragma once
+
 #include "kernel_operator.h"
 
 using namespace AscendC;
@@ -151,12 +153,3 @@ class KernelAdd {
   const uint32_t max_num_tiles_per_block_;
   const uint32_t global_offset_;
 };
-
-extern "C" __global__ __aicore__ void add_custom(GM_ADDR x, GM_ADDR y,
-                                                 GM_ADDR z, uint32_t vec_len,
-                                                 uint32_t tile_len,
-                                                 GM_ADDR workspace) {
-  KernelAdd op(vec_len, tile_len);
-  op.Init(x, y, z);
-  op.Process();
-}

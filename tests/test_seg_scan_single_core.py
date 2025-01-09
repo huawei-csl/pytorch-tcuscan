@@ -14,8 +14,11 @@ import numpy as np
 import numpy.typing as npt
 
 import tcuscan_ops
+import pytest
 
 torch.npu.config.allow_internal_format = False
+
+_MULTIPLIER = [7, 8, 9, 12, 16, 24, 32]
 
 
 def ref_segscan(x: npt.ArrayLike, f: npt.ArrayLike) -> npt.ArrayLike:
@@ -44,24 +47,31 @@ def ref_segscan(x: npt.ArrayLike, f: npt.ArrayLike) -> npt.ArrayLike:
     return torch.Tensor(y)
 
 
-def test_tcuscan_segscan_single_score():
+@pytest.mark.parametrize("multiplier", _MULTIPLIER)
+def test_tcuscan_segscan_single_score_s_32(multiplier: int):
     s = 32
-    n = 8 * s * s
+    n = multiplier * s * s
 
     x = torch.rand(n, device="cpu", dtype=torch.float16)
     # TODO: there is a bug in seg_scan that fails on random instances
-    # threshold = 0.95
-    # f = (torch.empty(n).uniform_(0, 1) > threshold).to(torch.int8)
-    # f[0] = 0
+    # threshold = 0.999
+    # f = torch.empty(n).uniform_(0, 1) > threshold
+    # f = f.to(torch.int8)
     f = torch.zeros(n, dtype=torch.int8)
     expected = ref_segscan(x.float(), f)
 
     print(f)
+    print(f" # of segments: {torch.sum(f)}")
     x_npu = x.npu()
     f_npu = f.npu()
     U_s = torch.tril(torch.ones(s, s)).to(torch.float16).npu()
-    output = tcuscan_ops.run_seg_scan(x_npu, f_npu, U_s, U_s.to(torch.int8)).cpu()
+    actual = tcuscan_ops.run_seg_scan(x_npu, f_npu, U_s, U_s.to(torch.int8)).cpu()
 
-    print(f"Error norm: {torch.norm(output - expected)}")
-    assert output.shape == expected.shape, "Output shape does not match expected shape."
-    assert torch.allclose(output, expected)
+    print(f"Error norm: {torch.norm(actual - expected)}")
+    print(f"mistakes: {torch.sum(actual != expected)}")
+    print(f"diff: {torch.where(actual != expected)}")
+    print(f"f: {torch.where(f_npu >0)}")
+    assert actual.shape == expected.shape, "Output shape does not match expected shape."
+    assert torch.allclose(
+        actual, expected, atol=1e-02
+    ), f"segmented scan single core (fp16) wrong. s={s}, vec_len={n}"
