@@ -12,12 +12,25 @@ import torch
 import torch_npu  # noqa
 
 import tcuscan_ops
+import pytest
 
 torch.npu.config.allow_internal_format = False
 
 
-def test_tcuscan_diff():
-    length = [40 * 1024]
+_DIFF_SIZES = [
+    10 * 1024,
+    20 * 1024,
+    30 * 1024,
+    40 * 1024,
+    80 * 1024,
+    1024 * 1024,
+    80 * 1024 - 10,
+]
+
+
+@pytest.mark.parametrize("length", _DIFF_SIZES)
+def test_tcuscan_diff(length: int):
+
     x = torch.rand(length, device="cpu", dtype=torch.float16)
 
     x_cpu = torch.concat([torch.zeros(1, dtype=torch.float16), x])
