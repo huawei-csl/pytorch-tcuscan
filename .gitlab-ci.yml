@@ -79,4 +79,5 @@ unit_test:
   dependencies: []
   script:
     - make setup_ci
+    - export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:$(pwd)/build/lib
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make build test

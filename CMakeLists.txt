@@ -3,6 +3,8 @@ project(tcuscan)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_BUILD_TYPE "Release")  # "Debug"
+
 
 # user-defined configuration
 set(SOC_VERSION "Ascend910B4" CACHE STRING "system on chip type")
@@ -24,7 +26,7 @@ endif()
 include(${ASCENDC_CMAKE_DIR}/ascendc.cmake)
 
 # ascendc_library use to add kernel file to generate AscendC library
-ascendc_library(kernels STATIC
+ascendc_library(kernels SHARED
     src/vadd.cpp
     src/diff.cpp
     src/seg_scan_single_core.cpp
@@ -35,6 +37,11 @@ ascendc_compile_definitions(kernels PRIVATE
 -DHAVE_WORKSPACE
 -DHAVE_TILING
 )
+
+ascendc_include_directories(kernels PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
 
 # TODO(anastasios) : double-check if needed
 #target_include_directories(kernels PRIVATE
@@ -57,8 +64,13 @@ target_link_libraries(kernels PRIVATE
 
 add_library(pybind11_lib SHARED src/pybind11.cpp)
 target_link_libraries(pybind11_lib PRIVATE
-  kernels
+  c10
+  torch
+  torch_cpu
   torch_npu
+  torch_python
+  tiling_api
+  kernels
 )
 
 # Sets the PyTorch installation path on env variable 'TORCH_PATH'

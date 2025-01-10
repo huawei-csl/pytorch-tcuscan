@@ -205,6 +205,7 @@ at::Tensor run_scan_multi_core(const at::Tensor &x, const at::Tensor &U_s) {
 
   return z;
 }
+
 }  // namespace asc
 
 PYBIND11_MODULE(tcuscan_ops, m) {
