@@ -1,8 +1,8 @@
 /**
  * Copyright (c) Huawei Technologies Co., Ltd. 2024. All rights reserved.
  *
- * @file kernel_diff.cpp
- * @brief Kernel implementing the diff kernel operation.
+ * @file diff.cpp
+ * @brief Entrypoint for diff kernel operation.
  */
 
 #include "kernels/diff.h"
