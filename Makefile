@@ -23,7 +23,7 @@ build: build.sh src/vadd.cpp src/diff.cpp src/seg_scan_single_core.cpp src/pybin
 	./build.sh -v ASCEND910B4
 
 test: tests/test_add_custom.py
-	python3 -m pytest tests/
+	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:$(shell pwd)/build/lib/ python3 -m pytest tests/
 
 profile: profile_tcuscan_ops.py
-	python profile_tcuscan_ops.py --bench diff
+	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:$(shell pwd)/build/lib/ python3 profile_tcuscan_ops.py --bench diff

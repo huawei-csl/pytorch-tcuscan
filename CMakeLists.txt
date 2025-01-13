@@ -31,6 +31,7 @@ ascendc_library(kernels SHARED
     src/diff.cpp
     src/seg_scan_single_core.cpp
     src/scan_multi_core.cpp
+    src/compress.cpp
 )
 
 ascendc_compile_definitions(kernels PRIVATE
