@@ -37,6 +37,12 @@ def test_mcscan_fp16_s_32():
     _test_fp16(s, max_iters)
 
 
+def test_mcscan_fp16_s_64():
+    s = 64
+    max_iters = 8
+    _test_fp16(s, max_iters)
+
+
 def test_mcscan_fp16_s_128():
     s = 128
     max_iters = 6
