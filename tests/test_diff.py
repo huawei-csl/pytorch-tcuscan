@@ -13,6 +13,8 @@ import torch_npu  # noqa
 
 import tcuscan_ops
 import pytest
+from math import ceil
+
 
 torch.npu.config.allow_internal_format = False
 
@@ -31,6 +33,28 @@ _DIFF_SIZES = [
 @pytest.mark.parametrize("length", _DIFF_SIZES)
 def test_tcuscan_diff(length: int):
 
+    x = torch.rand(length, device="cpu", dtype=torch.float16)
+
+    x_cpu = torch.concat([torch.zeros(1, dtype=torch.float16), x])
+    x_npu = x.npu()
+    output = tcuscan_ops.run_diff(x_npu)
+    cpuout = torch.diff(x_cpu).npu()
+
+    assert output.shape == cpuout.shape, "Output shape does not match expected shape."
+    assert torch.allclose(output, cpuout)
+
+
+def get_profiling_lengths():
+    num_cores = 20
+    s = 64
+    max_size = 1e8
+    max_iters = ceil(max_size / (num_cores * s * s))
+
+    return [i * num_cores * s * s for i in range(1, max_iters, 16 * 128 // s)]
+
+
+@pytest.mark.parametrize("length", get_profiling_lengths())
+def test_tcuscan_diff_profiling_lens(length: int):
     x = torch.rand(length, device="cpu", dtype=torch.float16)
 
     x_cpu = torch.concat([torch.zeros(1, dtype=torch.float16), x])
