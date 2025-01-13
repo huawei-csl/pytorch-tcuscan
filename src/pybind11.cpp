@@ -12,11 +12,13 @@
 
 #include "aclrtlaunch_add_custom.h"
 #include "aclrtlaunch_compress.h"
+#include "aclrtlaunch_csr_gather.h"
 #include "aclrtlaunch_diff.h"
 #include "aclrtlaunch_scan_multi_core.h"
 #include "aclrtlaunch_seg_scan_single_core.h"
 #include "tiling/platform/platform_ascendc.h"
 #include "tiling/tiling_compress.h"
+#include "tiling/tiling_csr_gather.h"
 #include "tiling/tiling_diff.h"
 #include "tiling/tiling_scan_multi_core.h"
 #include "tiling/tiling_seg_scan_single_core.h"
@@ -56,7 +58,7 @@ at::Tensor run_add_custom(const at::Tensor &x, const at::Tensor &y) {
 
   const VaddTiling tiling{totalLength, tileLen};
 
-  constexpr size_t tilingSize = sizeof(MultiCoreScanTiling);
+  constexpr size_t tilingSize = sizeof(VaddTiling);
   const uint8_t *tilingHost = reinterpret_cast<const uint8_t *>(&tiling);
   uint8_t *tilingDevice;
 
@@ -266,6 +268,48 @@ at::Tensor run_compress(const at::Tensor &x, const at::Tensor &mask,
   return z;
 }
 
+at::Tensor run_csr_gather(const at::Tensor &values, const at::Tensor &cols,
+                          const at::Tensor &x) {
+  auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
+  const at::Tensor z = at::empty_like(values);
+  const at::Device device = x.options().device();
+  const uint32_t blockDim = 8;
+  const uint32_t tileLen = 128;
+
+  uint32_t values_len = 1;
+  for (uint32_t size : values.sizes()) {
+    values_len *= size;
+  }
+
+  uint32_t x_len = 1;
+  for (uint32_t size : x.sizes()) {
+    x_len *= size;
+  }
+
+  const at::Tensor workspace_tensor = alloc_workspace(0, device);
+
+  const CSRGatherTiling tiling{values_len, x_len, tileLen};
+
+  constexpr size_t tilingSize = sizeof(CSRGatherTiling);
+  const uint8_t *tilingHost = reinterpret_cast<const uint8_t *>(&tiling);
+  uint8_t *tilingDevice;
+
+  aclrtMalloc((void **)&tilingDevice, tilingSize, ACL_MEM_MALLOC_HUGE_FIRST);
+  aclrtMemcpy(tilingDevice, tilingSize, tilingHost, tilingSize,
+              ACL_MEMCPY_HOST_TO_DEVICE);
+
+  ACLRT_LAUNCH_KERNEL(csr_gather)
+  (blockDim, acl_stream, const_cast<void *>(values.storage().data()),
+   const_cast<void *>(cols.storage().data()),
+   const_cast<void *>(x.storage().data()),
+   const_cast<void *>(z.storage().data()),
+   const_cast<void *>(workspace_tensor.storage().data()), tilingDevice);
+
+  aclrtFree(tilingDevice);
+
+  return z;
+}
+
 }  // namespace asc
 
 PYBIND11_MODULE(tcuscan_ops, m) {
@@ -274,5 +318,6 @@ PYBIND11_MODULE(tcuscan_ops, m) {
   m.def("run_diff", &asc::run_diff, "AscendC Vector diff");
   m.def("run_seg_scan", &asc::run_seg_scan, "AscendC Segmented Scan");
   m.def("run_scan_multi_core", &asc::run_scan_multi_core, "AscendC MCSCAN");
+  m.def("run_csr_gather", &asc::run_csr_gather, "AscendC CSR gather");
   m.def("run_compress", &asc::run_compress, "AscendC MCSCAN");
 }
