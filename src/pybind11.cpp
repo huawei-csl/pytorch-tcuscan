@@ -157,13 +157,11 @@ at::Tensor run_seg_scan(const at::Tensor &x, const at::Tensor &f,
   return z;
 }
 
-at::Tensor run_scan_multi_core(const at::Tensor &x, const at::Tensor &U_s) {
+at::Tensor run_scan_multi_core(const at::Tensor &x, int S) {
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();
   const auto ascendc_platform =
       platform_ascendc::PlatformAscendCManager::GetInstance(SOC_VERSION);
-
-  const int S = U_s.sizes()[0];
 
   const uint32_t matmul_size = static_cast<uint32_t>(S);
   uint32_t totalLength = 1;
@@ -203,7 +201,6 @@ at::Tensor run_scan_multi_core(const at::Tensor &x, const at::Tensor &U_s) {
 
   ACLRT_LAUNCH_KERNEL(scan_multi_core)
   (blockDim, acl_stream, const_cast<void *>(x.storage().data()),
-   const_cast<void *>(U_s.storage().data()),
    const_cast<void *>(z.storage().data()),
    const_cast<void *>(workspace_tensor.storage().data()), tilingDevice);
 
@@ -212,16 +209,13 @@ at::Tensor run_scan_multi_core(const at::Tensor &x, const at::Tensor &U_s) {
   return z;
 }
 
-at::Tensor run_compress(const at::Tensor &x, const at::Tensor &mask,
-                        const at::Tensor &U_s) {
+at::Tensor run_compress(const at::Tensor &x, const at::Tensor &mask, int S) {
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();
   const at::Tensor z = at::empty_like(x);
 
   const auto ascendc_platform =
       platform_ascendc::PlatformAscendCManager::GetInstance(SOC_VERSION);
-
-  const int S = U_s.sizes()[0];
 
   const uint32_t matmul_size = static_cast<uint32_t>(S);
   uint32_t totalLength = 1;
@@ -260,7 +254,6 @@ at::Tensor run_compress(const at::Tensor &x, const at::Tensor &mask,
   ACLRT_LAUNCH_KERNEL(compress)
   (blockDim, acl_stream, const_cast<void *>(x.storage().data()),
    const_cast<void *>(mask.storage().data()),
-   const_cast<void *>(U_s.storage().data()),
    const_cast<void *>(z.storage().data()),
    const_cast<void *>(workspace_tensor.storage().data()), tilingDevice);
 

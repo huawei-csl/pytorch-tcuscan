@@ -6,6 +6,7 @@
  * approach.
  */
 
+#include "kernels/constants.h"
 #include "kernels/kernel_scan_multi_core.h"
 #include "lib/matmul_intf.h"
 #include "tiling/tiling_scan_multi_core.h"
@@ -25,14 +26,11 @@ __aicore__ inline void CopyTiling(MultiCoreScanTiling *tiling,
  * @brief Run the multi core inclusive scan kernel.
  *
  * @param [in] input_vec Pointer to an input vector.
- * @param [in] upper_triangular Pointer to an upper-triangular matrix filled
- * with ones of size \f$\textit{matmul_size} \times \textit{matmul_size}\f$.
  * @param [in] output_vec Pointer to an output vector.
  * @param [in] workspace Pointer to the kernel workspace.
  * @param [in] tilingGm Pointer to the tiling buffer.
  */
 extern "C" __global__ __aicore__ void scan_multi_core(GM_ADDR input_vec,
-                                                      GM_ADDR upper_triangular,
                                                       GM_ADDR output_vec,
                                                       GM_ADDR workspace,
                                                       GM_ADDR tilingGm) {
@@ -42,9 +40,12 @@ extern "C" __global__ __aicore__ void scan_multi_core(GM_ADDR input_vec,
   // https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/80RC2alpha003/quickstart/quickstart/quickstart_18_0001.html?sub_id=%2Fzh%2FCANNCommunityEdition%2F80RC2alpha003%2Fdevguide%2Fopdevg%2Fascendcopdevg%2Fatlas_ascendc_10_0083.html
   GM_ADDR usrWorkspace = AscendC::GetUserWorkspace(workspace);
 
-  run_scan_multi_core_kernel<half>(input_vec, upper_triangular, output_vec,
-                                   usrWorkspace, tiling.num_elems,
-                                   tiling.matmul_size, 0);
+  // Select lower-triangular all-ones matrix staticly initialized on device
+  // See `kernel_constants.h`
+  GM_ADDR lower = load_tril_matrix<half>(tiling.matmul_size);
+
+  run_scan_multi_core_kernel<half>(input_vec, lower, output_vec, usrWorkspace,
+                                   tiling.num_elems, tiling.matmul_size, 0);
 
   /*
 

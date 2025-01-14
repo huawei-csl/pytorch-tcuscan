@@ -10,9 +10,7 @@ NUM_CORES = 20
 
 def masked_select_from_tcuscan(x, mask, s: int, output_size: int):
     "Implementes torch.masked_select using split operator."
-    # Setup TCUSCAN additional inputs
-    L_s = torch.tril(torch.ones((s, s))).to(torch.int8).npu()
-    z = tcuscan_ops.run_compress(x, mask, L_s)
+    z = tcuscan_ops.run_compress(x, mask, s)
     # TODO: the torch.sum below should be done in PyTorch. WIP
     return z[:output_size]
 

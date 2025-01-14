@@ -10,15 +10,13 @@ NUM_AI_CORES = 20
 
 def _test_fp16(s: int, max_iters: int):
 
-    U_s = torch.tril(torch.ones(s, s)).half().npu()
-
     for multiplier in range(1, max_iters):
         vec_len = multiplier * NUM_AI_CORES * s * s
         x = torch.randn(vec_len).half().npu()
 
         expected = torch.cumsum(x, dim=-1, dtype=torch.float32)
         torch.npu.synchronize()
-        actual = tcuscan_ops.run_scan_multi_core(x, U_s)
+        actual = tcuscan_ops.run_scan_multi_core(x, s)
         torch.npu.synchronize()
         assert torch.allclose(
             actual, expected, atol=1e-02
