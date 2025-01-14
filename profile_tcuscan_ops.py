@@ -12,6 +12,7 @@ import sys
 import types
 import typing
 from dataclasses import dataclass
+from functools import partial
 from math import ceil
 
 import torch
@@ -28,6 +29,8 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
+
+STR_TO_DTYPE = {"fp16": torch.float16, "int16": torch.int16, "int8": torch.int8}
 
 
 DEVICE = os.environ.get("DEVICE_TYPE", "npu")
@@ -131,6 +134,31 @@ def vadd_benchmark(device: Device, vec_len: int) -> float:
     return _run_benchmark(device, run_vadd)
 
 
+def clone_benchmark(device: Device, size: int, dtype: torch.dtype) -> float:
+    """
+    Benchmark torch.clone kernel.
+
+    Args:
+        device: Device to run benchmark on.
+        size: Size of the arrays to use.
+        dtype: Data type of the input array.
+
+    Returns:
+        Average time in microseconds.
+    """
+    if dtype == torch.float16:
+        x = torch.rand(size, device=device.str, dtype=dtype)
+    elif dtype == torch.int16:
+        x = torch.randint(0, 2**7 - 1, (size,), device=device.str, dtype=dtype)
+    else:
+        raise ValueError("Incorrect copy data type")
+
+    def run_clone() -> None:
+        z = torch.clone(x)
+
+    return _run_benchmark(device, run_clone)
+
+
 def diff_benchmark(device: Device, vec_len: int) -> float:
     """
     Benchmark vector diff kernel.
@@ -186,6 +214,7 @@ if __name__ == "__main__":
         "--bench",
         choices=[
             "vadd",
+            "copy",
             "diff",
         ],
     )
@@ -216,7 +245,16 @@ if __name__ == "__main__":
 
     if bench == "vadd":
         benchmark(device, "vadd", "fp16", vadd_benchmark, sizes)
-    elif bench == "diff":
+    elif bench == "copy" and dtype in ["int16", "fp16"]:
+        tdtype = STR_TO_DTYPE[dtype]
+        benchmark(
+            device,
+            "copy",
+            dtype,
+            partial(clone_benchmark, dtype=tdtype),
+            sizes,
+        )
+    elif bench == "diff" and dtype in ["fp16"]:
         benchmark(device, "diff", "fp16", diff_benchmark, sizes)
     else:
         raise RuntimeError(

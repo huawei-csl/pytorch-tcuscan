@@ -1,5 +1,6 @@
 *.log
 bench_results_*.csv
+*.png
 *.so
 build/
 __pycache__/

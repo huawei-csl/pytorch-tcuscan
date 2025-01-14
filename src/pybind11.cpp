@@ -81,7 +81,7 @@ at::Tensor run_diff(const at::Tensor &x) {
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Tensor z = at::empty_like(x);
   const at::Device device = x.options().device();
-  const uint32_t tileLen = 256;
+  const uint32_t tileLen = 10 * 1024;
   uint32_t totalLength = 1;
   for (uint32_t size : x.sizes()) {
     totalLength *= size;
@@ -98,7 +98,8 @@ at::Tensor run_diff(const at::Tensor &x) {
   aclrtMemcpy(tilingDevice, tilingSize, tilingHost, tilingSize,
               ACL_MEMCPY_HOST_TO_DEVICE);
 
-  const uint32_t blockDim = static_cast<uint32_t>(totalLength / (10 * tileLen));
+  uint32_t blockDim = static_cast<uint32_t>(totalLength / tileLen);
+  blockDim = blockDim > 40 ? 40 : blockDim;
   ACLRT_LAUNCH_KERNEL(diff)
   (blockDim, acl_stream, const_cast<void *>(x.storage().data()),
    const_cast<void *>(z.storage().data()),

@@ -23,7 +23,12 @@ build: build.sh src/vadd.cpp src/diff.cpp src/seg_scan_single_core.cpp src/pybin
 	./build.sh -v ASCEND910B4
 
 test: tests/test_add_custom.py
-	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:$(shell pwd)/build/lib/ python3 -m pytest tests/
+	 LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:$(shell pwd)/build/lib/  python3 -m pytest tests/
 
-profile: profile_tcuscan_ops.py
-	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:$(shell pwd)/build/lib/ python3 profile_tcuscan_ops.py --bench diff
+profile_%: profile_$*_fp116 profile_$*_int16
+
+profile_fp16_%:
+	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:$(shell pwd)/build/lib/ DEVICE_TYPE=npu python3 profile_tcuscan_ops.py --bench $* --dtype fp16
+
+profile_int16_%:
+	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:$(shell pwd)/build/lib/ DEVICE_TYPE=npu python3 profile_tcuscan_ops.py --bench $* --dtype int16
