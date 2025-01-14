@@ -98,7 +98,7 @@ at::Tensor run_diff(const at::Tensor &x) {
   aclrtMemcpy(tilingDevice, tilingSize, tilingHost, tilingSize,
               ACL_MEMCPY_HOST_TO_DEVICE);
 
-  uint32_t blockDim = static_cast<uint32_t>(totalLength / tileLen);
+  uint32_t blockDim = static_cast<uint32_t>(totalLength / 5 * tileLen);
   blockDim = blockDim > 40 ? 40 : blockDim;
   ACLRT_LAUNCH_KERNEL(diff)
   (blockDim, acl_stream, const_cast<void *>(x.storage().data()),
@@ -274,8 +274,7 @@ at::Tensor run_csr_gather(const at::Tensor &values, const at::Tensor &cols,
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Tensor z = at::empty_like(values);
   const at::Device device = x.options().device();
-  const uint32_t blockDim = 8;
-  const uint32_t tileLen = 128;
+  const uint32_t tileLen = 4 * 1024;
 
   uint32_t values_len = 1;
   for (uint32_t size : values.sizes()) {
@@ -299,6 +298,8 @@ at::Tensor run_csr_gather(const at::Tensor &values, const at::Tensor &cols,
   aclrtMemcpy(tilingDevice, tilingSize, tilingHost, tilingSize,
               ACL_MEMCPY_HOST_TO_DEVICE);
 
+  uint32_t blockDim = static_cast<uint32_t>(values_len / (4 * tileLen));
+  blockDim = blockDim > 60 ? 40 : blockDim;
   ACLRT_LAUNCH_KERNEL(csr_gather)
   (blockDim, acl_stream, const_cast<void *>(values.storage().data()),
    const_cast<void *>(cols.storage().data()),

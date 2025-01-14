@@ -178,6 +178,34 @@ def diff_benchmark(device: Device, vec_len: int) -> float:
     return _run_benchmark(device, run_diff)
 
 
+def csr_gather_benchmark(device: Device, vec_len: int) -> float:
+    """
+    Benchmark CSR gather kernel.
+
+    Args:
+        device: Device to run benchmark on.
+        vec_len: Input vector length.
+
+    Returns:
+        Average time in microseconds.
+    """
+
+    # Maximum value of x cannot exceed 20K (UB shared memory size)
+    max_x_len = 2 * 1024
+
+    input_x = torch.rand(max_x_len, device=device.str).half()
+
+    input_values = torch.randn(vec_len).half().npu()
+    input_cols = torch.randint(
+        low=0, high=max_x_len, size=(vec_len,), dtype=torch.int32
+    ).npu()
+
+    def run_csr_gather() -> None:
+        z = tcuscan_ops.run_csr_gather(input_values, input_cols, input_x)
+
+    return _run_benchmark(device, run_csr_gather)
+
+
 def benchmark(
     device: Device,
     op_name: str,
@@ -216,6 +244,7 @@ if __name__ == "__main__":
             "vadd",
             "copy",
             "diff",
+            "csr_gather",
         ],
     )
     parser.add_argument("--dtype", choices=["int8", "fp16", "int16"])
@@ -256,6 +285,8 @@ if __name__ == "__main__":
         )
     elif bench == "diff" and dtype in ["fp16"]:
         benchmark(device, "diff", "fp16", diff_benchmark, sizes)
+    elif bench == "csr_gather":
+        benchmark(device, "csr_gather", "fp16", csr_gather_benchmark, sizes)
     else:
         raise RuntimeError(
             f"Unsupported benchmark setup: bench:{bench}, dtype:{dtype}, s:{s}"

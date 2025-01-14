@@ -22,8 +22,8 @@ setup_once_aarch64:
 build: build.sh src/vadd.cpp src/diff.cpp src/seg_scan_single_core.cpp src/pybind11.cpp
 	./build.sh -v ASCEND910B4
 
-test: tests/test_add_custom.py
-	 LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:$(shell pwd)/build/lib/  python3 -m pytest tests/
+test:
+	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:$(shell pwd)/build/lib/  python3 -m pytest tests/
 
 profile_%: profile_$*_fp116 profile_$*_int16
 
