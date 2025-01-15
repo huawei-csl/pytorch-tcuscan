@@ -110,13 +110,9 @@ at::Tensor run_diff(const at::Tensor &x) {
   return z;
 }
 
-at::Tensor run_seg_scan(const at::Tensor &x, const at::Tensor &f,
-                        const at::Tensor &U_s_half,
-                        const at::Tensor &U_s_int8) {
+at::Tensor run_seg_scan(const at::Tensor &x, const at::Tensor &f, int S) {
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();
-
-  const int S = U_s_half.sizes()[0];
 
   const uint32_t matmul_size = static_cast<uint32_t>(S);
   uint32_t totalLength = 1;
@@ -146,8 +142,6 @@ at::Tensor run_seg_scan(const at::Tensor &x, const at::Tensor &f,
   ACLRT_LAUNCH_KERNEL(seg_scan_single_core)
   (1 /* single core*/, acl_stream, const_cast<void *>(x.storage().data()),
    const_cast<void *>(f.storage().data()),
-   const_cast<void *>(U_s_half.storage().data()),
-   const_cast<void *>(U_s_int8.storage().data()),
    const_cast<void *>(z.storage().data()),
    const_cast<void *>(workspace_tensor.storage().data()), tilingDevice);
 

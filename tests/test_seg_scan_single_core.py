@@ -58,10 +58,8 @@ def _test_tcuscan_segscan_single_core(n: int, s: int, segm_density: float):
     print(f" # of segments: {torch.sum(f)}")
     x_npu = x.npu()
     f_npu = f.npu()
-    U_s = torch.tril(torch.ones(s, s)).half().npu()
-    U_s_int8 = torch.tril(torch.ones(s, s)).to(torch.int8).npu()
     torch.npu.synchronize()
-    actual = tcuscan_ops.run_seg_scan(x_npu, f_npu, U_s, U_s_int8).cpu()
+    actual = tcuscan_ops.run_seg_scan(x_npu, f_npu, s).cpu()
     torch.npu.synchronize()
     expected = ref_segscan(x.float(), f)
 

@@ -5,6 +5,7 @@
  * @brief Launcher of seg_scan_single_core
  */
 
+#include "kernels/constants.h"
 #include "kernels/kernel_seg_scan_single_core.h"
 #include "lib/matmul_intf.h"
 #include "tiling/tiling_seg_scan_single_core.h"
@@ -89,25 +90,26 @@ __aicore__ inline void _run_kernel(GM_ADDR input_vec, GM_ADDR input_flag,
  *
  * @param [in] input_vec Pointer to an input data vector.
  * @param [in] input_flag Pointer to an input flag vector.
- * @param [in] upper_triangular_input Pointer to the upper triangular matrix
- * of the same type as the input vec.
- * @param [in] upper_triangular_flag Pointer to the upper triangular matrix
- * of the same type as the flag vec.
  * @param [in] output_vec Pointer to the output vector.
  * @param [in] workspace Pointer to the workspace struct.
  * @param [in] tilingGm Pointer to the tiling buffer.
  */
-extern "C" __global__ __aicore__ void seg_scan_single_core(
-    GM_ADDR input_vec, GM_ADDR input_flag, GM_ADDR upper_triangular_input,
-    GM_ADDR upper_triangular_flag, GM_ADDR output_vec, GM_ADDR workspace,
-    GM_ADDR tilingGm) {
+extern "C" __global__ __aicore__ void seg_scan_single_core(GM_ADDR input_vec,
+                                                           GM_ADDR input_flag,
+                                                           GM_ADDR output_vec,
+                                                           GM_ADDR workspace,
+                                                           GM_ADDR tilingGm) {
   SegScanSingleCoreTiling tiling;
   CopyTiling(&tiling, tilingGm);
+
+  // Select lower-triangular all-ones matrix staticly initialized on device
+  // See `constants.h`
+  GM_ADDR lower_half = load_tril_matrix<half>(tiling.matmul_size);
+  GM_ADDR lower_int8 = load_tril_matrix<int8_t>(tiling.matmul_size);
 
   // https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/80RC2alpha003/quickstart/quickstart/quickstart_18_0001.html?sub_id=%2Fzh%2FCANNCommunityEdition%2F80RC2alpha003%2Fdevguide%2Fopdevg%2Fascendcopdevg%2Fatlas_ascendc_10_0083.html
   GM_ADDR usrWorkspace = AscendC::GetUserWorkspace(workspace);
 
-  _run_kernel(input_vec, input_flag, upper_triangular_input,
-              upper_triangular_flag, output_vec, tiling.vec_len,
-              tiling.matmul_size, usrWorkspace);
+  _run_kernel(input_vec, input_flag, lower_half, lower_int8, output_vec,
+              tiling.vec_len, tiling.matmul_size, usrWorkspace);
 }

@@ -33,7 +33,7 @@ extern "C" __global__ __aicore__ void compress(GM_ADDR x, GM_ADDR mask,
       AscendC::GetUserWorkspace(workspace);  // Get the user workspace pointer.
 
   // Select lower-triangular all-ones matrix staticly initialized on device
-  // See `kernel_constants.h`
+  // See `constants.h`
   GM_ADDR lower = load_tril_matrix<int8_t>(tiling.scan_tile_size);
 
   const uint32_t in_size = tiling.size;

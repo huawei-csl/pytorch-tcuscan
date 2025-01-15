@@ -41,7 +41,7 @@ extern "C" __global__ __aicore__ void scan_multi_core(GM_ADDR input_vec,
   GM_ADDR usrWorkspace = AscendC::GetUserWorkspace(workspace);
 
   // Select lower-triangular all-ones matrix staticly initialized on device
-  // See `kernel_constants.h`
+  // See `constants.h`
   GM_ADDR lower = load_tril_matrix<half>(tiling.matmul_size);
 
   run_scan_multi_core_kernel<half>(input_vec, lower, output_vec, usrWorkspace,
