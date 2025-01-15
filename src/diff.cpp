@@ -5,8 +5,7 @@
  * @brief Entrypoint for diff kernel operation.
  */
 
-#include "kernels/diff.h"
-
+#include "kernels/kernel_diff.h"
 #include "tiling/tiling_diff.h"
 
 __aicore__ inline void CopyTiling(DiffTiling *tiling, GM_ADDR tilingGM) {

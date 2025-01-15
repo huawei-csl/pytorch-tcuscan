@@ -5,7 +5,7 @@
  * @brief vadd launcher
  */
 
-#include "kernels/add_custom.h"
+#include "kernels/kernel_vadd.h"
 #include "tiling/tiling_vadd.h"
 
 __aicore__ inline void CopyTiling(VaddTiling *tiling, GM_ADDR tilingGM) {

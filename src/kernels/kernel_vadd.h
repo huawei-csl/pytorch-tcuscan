@@ -1,11 +1,8 @@
 /**
- * @file add_custom.h
+ * Copyright (c) Huawei Technologies Co., Ltd. 2024-2025. All rights reserved.
  *
- * Copyright (C) 2024. Huawei Technologies Co., Ltd. All rights reserved.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * @file kernel_vadd.h
+ * @brief Kernel implementing a Vector add kernel operation.
  */
 #pragma once
 

@@ -1,6 +1,6 @@
 #pragma once
 /**
- * Copyright (c) Huawei Technologies Co., Ltd. 2022-2024. All rights reserved.
+ * Copyright (c) Huawei Technologies Co., Ltd. 2024-2025. All rights reserved.
  *
  * @file kernel_csr_gather.cpp
  * @brief Kernel implementing a CSR gather operation.
