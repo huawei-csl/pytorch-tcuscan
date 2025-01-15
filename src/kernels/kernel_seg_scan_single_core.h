@@ -127,8 +127,7 @@ class KernelSegScanRevertSpec {
                                    global_scanned_flag_[tile_idx * tile_len_],
                                    num_elems_to_process);
 
-    RevertSpecOnSegmentsWithinBlock(tile_idx, running_sum,
-                                    num_elems_to_process);
+    RevertSpecOnSegmentsWithinBlock(running_sum, num_elems_to_process);
 
     copy::CopyVecToGm<DataTypeT>(global_output_[tile_idx * tile_len_],
                                  vecout_q_, num_elems_to_process);
@@ -138,20 +137,16 @@ class KernelSegScanRevertSpec {
    * @brief Reverts speculation on a tile of both the input data and flag
    * vectors.
    *
-   * @param tile_idx Index of input tile.
    * @param running_sum Accumulation value of last element of previous tile.
    * @param num_elems Number of element to process.
    */
-  __aicore__ inline void RevertSpecOnSegmentsWithinBlock(uint32_t tile_idx,
-                                                         DataTypeT &running_sum,
+  __aicore__ inline void RevertSpecOnSegmentsWithinBlock(DataTypeT &running_sum,
                                                          uint32_t num_elems) {
     LocalTensor<DataTypeT> input_vec_lt = vecin_input_q_.DeQue<DataTypeT>();
     LocalTensor<FlagOutputT> flag_vec_lt =
         vecin_scanned_flag_q_.DeQue<FlagOutputT>();
 
     LocalTensor<DataTypeT> output_vec_lt = vecout_q_.AllocTensor<DataTypeT>();
-
-    (void)tile_idx;
 
     // Go over each segment and revert speculation, if necessary
     const int32_t num_segments = flag_vec_lt(tile_len_ - 1);
@@ -163,11 +158,14 @@ class KernelSegScanRevertSpec {
       Adds(output_vec_lt, input_vec_lt, running_sum, num_elems);
       PipeBarrier<PIPE_V>();
     } else {
-      Adds(output_vec_lt, input_vec_lt, running_sum, num_elems);
+      if (first_flag == 0) {
+        Adds(output_vec_lt, input_vec_lt, running_sum, num_elems);
+      } else {
+        DataCopy(output_vec_lt, input_vec_lt, num_elems);
+      }
       PipeBarrier<PIPE_V>();
       for (int16_t seg_idx = 1; seg_idx <= num_segments; seg_idx++) {
-        const DataTypeT delta =
-            GetDelta(output_vec_lt, flag_vec_lt, seg_idx, running_sum);
+        const float delta = GetDelta(output_vec_lt, flag_vec_lt, seg_idx);
 
         PipeBarrier<PIPE_V>();
 
@@ -191,19 +189,17 @@ class KernelSegScanRevertSpec {
    * @param input Input scanned tile of data.
    * @param flag Input scanned tile of flags.
    * @param segment_id The id of the input segment.
-   * @param running_sum Running sum from previous tile.
    * @return Delta correction value
    */
-  __aicore__ inline DataTypeT GetDelta(const LocalTensor<DataTypeT> &input,
-                                       const LocalTensor<FlagOutputT> &flag,
-                                       int16_t segment_id,
-                                       DataTypeT running_sum) {
+  __aicore__ inline float GetDelta(const LocalTensor<DataTypeT> &input,
+                                   const LocalTensor<FlagOutputT> &flag,
+                                   int16_t segment_id) {
     const int16_t segment_start_index =
         GetStartIndexOfSegment(flag, segment_id);
     PipeBarrier<PIPE_V>();
 
     const int16_t delta_index = segment_start_index - 1;
-    const DataTypeT delta = delta_index >= 0 ? input(delta_index) : running_sum;
+    const float delta = delta_index >= 0 ? input(delta_index) : 0;
 
     return delta;
   }
@@ -301,7 +297,7 @@ class KernelSegScanRevertSpec {
    */
   __aicore__ inline void FixSpecInPlace(LocalTensor<float> &output,
                                         LocalTensor<FlagOutputT> &flag,
-                                        int16_t segment_id, DataTypeT delta) {
+                                        int16_t segment_id, float delta) {
     if (delta == 0) {
       return;
     }
@@ -314,8 +310,8 @@ class KernelSegScanRevertSpec {
 
     LocalTensor<float> float_buf = tmp_float_buf_.Get<float>();
 
-    Muls(half_buf, half_buf, static_cast<half>(delta), tile_len_);
     Cast(float_buf, half_buf, RoundMode::CAST_NONE, tile_len_);
+    Muls(float_buf, float_buf, delta, tile_len_);
     Sub(output, output, float_buf, tile_len_);
   }
 

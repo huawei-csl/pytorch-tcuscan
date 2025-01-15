@@ -18,7 +18,7 @@ import pytest
 
 torch.npu.config.allow_internal_format = False
 
-_MULTIPLIER = [7, 8, 9, 12, 16, 24, 32]
+_MULTIPLIER = [1, 2, 3, 5, 8, 9, 12, 16, 24, 32]
 
 
 def ref_segscan(x: npt.ArrayLike, f: npt.ArrayLike) -> npt.ArrayLike:
@@ -47,31 +47,43 @@ def ref_segscan(x: npt.ArrayLike, f: npt.ArrayLike) -> npt.ArrayLike:
     return torch.Tensor(y)
 
 
-@pytest.mark.parametrize("multiplier", _MULTIPLIER)
-def test_tcuscan_segscan_single_score_s_32(multiplier: int):
-    s = 32
-    n = multiplier * s * s
-
-    x = torch.rand(n, device="cpu", dtype=torch.float16)
-    # TODO: there is a bug in seg_scan that fails on random instances
-    # threshold = 0.999
-    # f = torch.empty(n).uniform_(0, 1) > threshold
-    # f = f.to(torch.int8)
-    f = torch.zeros(n, dtype=torch.int8)
-    expected = ref_segscan(x.float(), f)
+def _test_tcuscan_segscan_single_core(n: int, s: int, segm_density: float):
+    rng = np.random.default_rng(seed=42)
+    input_x = rng.integers(0, 10, n).astype(np.float16)
+    x = torch.Tensor(input_x).half()
+    f = torch.empty(n).uniform_(0, 1) < segm_density
+    f = f.to(torch.int8)
 
     print(f)
     print(f" # of segments: {torch.sum(f)}")
     x_npu = x.npu()
     f_npu = f.npu()
-    U_s = torch.tril(torch.ones(s, s)).to(torch.float16).npu()
-    actual = tcuscan_ops.run_seg_scan(x_npu, f_npu, U_s, U_s.to(torch.int8)).cpu()
+    U_s = torch.tril(torch.ones(s, s)).half().npu()
+    U_s_int8 = torch.tril(torch.ones(s, s)).to(torch.int8).npu()
+    torch.npu.synchronize()
+    actual = tcuscan_ops.run_seg_scan(x_npu, f_npu, U_s, U_s_int8).cpu()
+    torch.npu.synchronize()
+    expected = ref_segscan(x.float(), f)
 
-    print(f"Error norm: {torch.norm(actual - expected)}")
-    print(f"mistakes: {torch.sum(actual != expected)}")
-    print(f"diff: {torch.where(actual != expected)}")
-    print(f"f: {torch.where(f_npu >0)}")
     assert actual.shape == expected.shape, "Output shape does not match expected shape."
     assert torch.allclose(
         actual, expected, atol=1e-02
     ), f"segmented scan single core (fp16) wrong. s={s}, vec_len={n}"
+
+
+@pytest.mark.parametrize("multiplier", _MULTIPLIER)
+def test_tcuscan_segscan_single_score_s_32_density_0_1(multiplier: int):
+    s = 32
+    segm_density = 0.1
+    n = multiplier * s * s
+
+    _test_tcuscan_segscan_single_core(n, s, segm_density)
+
+
+@pytest.mark.parametrize("multiplier", _MULTIPLIER)
+def test_tcuscan_segscan_single_score_s_32_density_0_5(multiplier: int):
+    s = 32
+    segm_density = 0.5
+    n = multiplier * s * s
+
+    _test_tcuscan_segscan_single_core(n, s, segm_density)

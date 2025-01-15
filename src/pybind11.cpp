@@ -143,9 +143,8 @@ at::Tensor run_seg_scan(const at::Tensor &x, const at::Tensor &f,
   const at::Tensor workspace_tensor =
       alloc_workspace(user_workspace_size, device);
 
-  const uint32_t blockDim = 1;
   ACLRT_LAUNCH_KERNEL(seg_scan_single_core)
-  (blockDim, acl_stream, const_cast<void *>(x.storage().data()),
+  (1 /* single core*/, acl_stream, const_cast<void *>(x.storage().data()),
    const_cast<void *>(f.storage().data()),
    const_cast<void *>(U_s_half.storage().data()),
    const_cast<void *>(U_s_int8.storage().data()),
