@@ -67,22 +67,12 @@ class KernelSegScanRevertSpec {
                     tile_len_ * sizeof(FlagOutputT));
     pipe.InitBuffer(vecout_q_, BUFFER_NUM, tile_len_ * sizeof(DataTypeT));
 
-    pipe.InitBuffer(tmp_uint8_buf_,
-                    tile_len_ * sizeof(uint8_t) /
-                        AscendCUtils::GetBitSize(sizeof(uint8_t)));
-    pipe.InitBuffer(tmp2_uint8_buf_, tile_len_ * sizeof(uint8_t));
-    pipe.InitBuffer(tmp3_uint8_buf_, tile_len_ * sizeof(uint8_t));
     pipe.InitBuffer(tmp1_int16_buf_, tile_len_ * sizeof(int16_t));
-    pipe.InitBuffer(dst_int16_buf_, tile_len_ * sizeof(int16_t));
     pipe.InitBuffer(dst2_int16_buf_, tile_len_ * sizeof(int16_t));
-    pipe.InitBuffer(tmp2_int16_buf_, tile_len_ * sizeof(int16_t));
     pipe.InitBuffer(tmp1_half_buf_, tile_len_ * sizeof(half));
-    pipe.InitBuffer(tmp2_half_buf_, tile_len_ * sizeof(half));
-    pipe.InitBuffer(tmp3_half_buf_, tile_len_ * sizeof(half));
     pipe.InitBuffer(tmp_get_start_half_buf_, tile_len_ * sizeof(half));
     pipe.InitBuffer(tmp_popzero_half_buf_, tile_len_ * sizeof(half));
     pipe.InitBuffer(tmp_float_buf_, tile_len_ * sizeof(float));
-    pipe.InitBuffer(tmp2_float_buf_, tile_len_ * sizeof(float));
     pipe.InitBuffer(tmp_get_start_float_buf_, tile_len_ * sizeof(float));
   }
 
@@ -322,21 +312,13 @@ class KernelSegScanRevertSpec {
   TQue<QuePosition::VECIN, BUFFER_NUM> vecin_scanned_flag_q_;
   TQue<QuePosition::VECOUT, BUFFER_NUM> vecout_q_;
 
-  TBuf<QuePosition::VECCALC> tmp_uint8_buf_;
-  TBuf<QuePosition::VECCALC> tmp2_uint8_buf_;
-  TBuf<QuePosition::VECCALC> tmp3_uint8_buf_;
   TBuf<QuePosition::VECCALC> tmp1_int16_buf_;
-  TBuf<QuePosition::VECCALC> tmp2_int16_buf_;
-  TBuf<QuePosition::VECCALC> dst_int16_buf_;
   TBuf<QuePosition::VECCALC> dst2_int16_buf_;
   TBuf<QuePosition::VECCALC> tmp1_half_buf_;
-  TBuf<QuePosition::VECCALC> tmp2_half_buf_;
-  TBuf<QuePosition::VECCALC> tmp3_half_buf_;
   TBuf<QuePosition::VECCALC> tmp_get_start_float_buf_;
   TBuf<QuePosition::VECCALC> tmp_get_start_half_buf_;
   TBuf<QuePosition::VECCALC> tmp_popzero_half_buf_;
   TBuf<QuePosition::VECCALC> tmp_float_buf_;
-  TBuf<QuePosition::VECCALC> tmp2_float_buf_;
 
   GlobalTensor<DataTypeT> global_input_;
   GlobalTensor<FlagOutputT> global_scanned_flag_;
