@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 # coding=utf-8
 #
-# Copyright (C) 2023-2024. Huawei Technologies Co., Ltd. All rights reserved.
+# Copyright (C) 2024-2025. Huawei Technologies Co., Ltd. All rights reserved.
 #
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -30,20 +30,6 @@ _DIFF_SIZES = [
 ]
 
 
-@pytest.mark.parametrize("length", _DIFF_SIZES)
-def test_tcuscan_diff(length: int):
-
-    x = torch.rand(length, device="cpu", dtype=torch.float16)
-
-    x_cpu = torch.concat([torch.zeros(1, dtype=torch.float16), x])
-    x_npu = x.npu()
-    output = tcuscan_ops.run_diff(x_npu)
-    cpuout = torch.diff(x_cpu).npu()
-
-    assert output.shape == cpuout.shape, "Output shape does not match expected shape."
-    assert torch.allclose(output, cpuout)
-
-
 def get_profiling_lengths():
     num_cores = 20
     s = 64
@@ -53,14 +39,33 @@ def get_profiling_lengths():
     return [i * num_cores * s * s for i in range(1, max_iters, 16 * 128 // s)]
 
 
-@pytest.mark.parametrize("length", get_profiling_lengths())
-def test_tcuscan_diff_profiling_lens(length: int):
-    x = torch.rand(length, device="cpu", dtype=torch.float16)
+def _test_tcuscan_diff(length: int, dtype: torch.dtype):
+    x = torch.rand(length, device="cpu", dtype=dtype)
 
-    x_cpu = torch.concat([torch.zeros(1, dtype=torch.float16), x])
+    x_cpu = torch.concat([torch.zeros(1, dtype=dtype), x])
     x_npu = x.npu()
     output = tcuscan_ops.run_diff(x_npu)
     cpuout = torch.diff(x_cpu).npu()
 
     assert output.shape == cpuout.shape, "Output shape does not match expected shape."
     assert torch.allclose(output, cpuout)
+
+
+@pytest.mark.parametrize("length", _DIFF_SIZES)
+def test_tcuscan_diff_fp16(length: int):
+    _test_tcuscan_diff(length, torch.float16)
+
+
+@pytest.mark.parametrize("length", _DIFF_SIZES)
+def test_tcuscan_diff_fp32(length: int):
+    _test_tcuscan_diff(length, torch.float32)
+
+
+@pytest.mark.parametrize("length", get_profiling_lengths())
+def test_tcuscan_diff_fp16_profiling_lens(length: int):
+    _test_tcuscan_diff(length, torch.float16)
+
+
+@pytest.mark.parametrize("length", get_profiling_lengths())
+def test_tcuscan_diff_fp32_profiling_lens(length: int):
+    _test_tcuscan_diff(length, torch.float32)

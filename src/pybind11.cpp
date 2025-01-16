@@ -14,7 +14,8 @@
 #include "aclrtlaunch_compress_fp16.h"
 #include "aclrtlaunch_compress_fp32.h"
 #include "aclrtlaunch_csr_gather.h"
-#include "aclrtlaunch_diff.h"
+#include "aclrtlaunch_diff_fp16.h"
+#include "aclrtlaunch_diff_fp32.h"
 #include "aclrtlaunch_scan_multi_core.h"
 #include "aclrtlaunch_seg_scan_single_core.h"
 #include "tiling/platform/platform_ascendc.h"
@@ -81,8 +82,9 @@ at::Tensor run_add_custom(const at::Tensor &x, const at::Tensor &y) {
 at::Tensor run_diff(const at::Tensor &x) {
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Tensor z = at::empty_like(x);
+  const auto dtype = x.options().dtype();
   const at::Device device = x.options().device();
-  const uint32_t tileLen = 10 * 1024;
+  const uint32_t tileLen = 5 * 1024;
   uint32_t totalLength = 1;
   for (uint32_t size : x.sizes()) {
     totalLength *= size;
@@ -101,10 +103,18 @@ at::Tensor run_diff(const at::Tensor &x) {
 
   uint32_t blockDim = static_cast<uint32_t>(totalLength / 5 * tileLen);
   blockDim = blockDim > 40 ? 40 : blockDim;
-  ACLRT_LAUNCH_KERNEL(diff)
-  (blockDim, acl_stream, const_cast<void *>(x.storage().data()),
-   const_cast<void *>(z.storage().data()),
-   const_cast<void *>(workspace_tensor.storage().data()), tilingDevice);
+
+  if (dtype == torch::kHalf) {
+    ACLRT_LAUNCH_KERNEL(diff_fp16)
+    (blockDim, acl_stream, const_cast<void *>(x.storage().data()),
+     const_cast<void *>(z.storage().data()),
+     const_cast<void *>(workspace_tensor.storage().data()), tilingDevice);
+  } else {
+    ACLRT_LAUNCH_KERNEL(diff_fp32)
+    (blockDim, acl_stream, const_cast<void *>(x.storage().data()),
+     const_cast<void *>(z.storage().data()),
+     const_cast<void *>(workspace_tensor.storage().data()), tilingDevice);
+  }
 
   aclrtFree(tilingDevice);
 
