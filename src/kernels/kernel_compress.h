@@ -235,13 +235,34 @@ __aicore__ inline void run_compress_uint16(GM_ADDR in, GM_ADDR mask,
   run_scan_multi_core_kernel<int8_t, true>(
       mask, upper, scan_res, scan_workspace, in_size, scan_tile_size);
 
-  if ASCEND_IS_AIC {
-    return;
+  if ASCEND_IS_AIV {
+    SyncAll<true /*isAIVOnly*/>();
+
+    KernelCompress<half> op(in_size, compress_tile_size);
+    op.Init(in, mask, scan_res, out);
+    op.Process();
   }
+}
 
-  SyncAll<true /*isAIVOnly*/>();
+__aicore__ inline void run_compress_fp32(GM_ADDR in, GM_ADDR mask, GM_ADDR out,
+                                         GM_ADDR upper, GM_ADDR workspace,
+                                         uint32_t in_size,
+                                         uint16_t scan_tile_size,
+                                         uint32_t compress_tile_size) {
+  const uint32_t scan_res_size =
+      scalar::AlignUp(in_size * sizeof(float), GM_ALIGNMENT);
 
-  KernelCompress<half> op(in_size, compress_tile_size);
-  op.Init(in, mask, scan_res, out);
-  op.Process();
+  GM_ADDR const scan_res = workspace;
+  GM_ADDR const scan_workspace = scan_res + scan_res_size;
+
+  run_scan_multi_core_kernel<int8_t, true>(
+      mask, upper, scan_res, scan_workspace, in_size, scan_tile_size);
+
+  if ASCEND_IS_AIV {
+    SyncAll<true /*isAIVOnly*/>();
+
+    KernelCompress<float> op(in_size, compress_tile_size);
+    op.Init(in, mask, scan_res, out);
+    op.Process();
+  }
 }

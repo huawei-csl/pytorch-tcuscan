@@ -11,7 +11,8 @@
 #include <torch/extension.h>
 
 #include "aclrtlaunch_add_custom.h"
-#include "aclrtlaunch_compress.h"
+#include "aclrtlaunch_compress_fp16.h"
+#include "aclrtlaunch_compress_fp32.h"
 #include "aclrtlaunch_csr_gather.h"
 #include "aclrtlaunch_diff.h"
 #include "aclrtlaunch_scan_multi_core.h"
@@ -205,6 +206,7 @@ at::Tensor run_scan_multi_core(const at::Tensor &x, int S) {
 at::Tensor run_compress(const at::Tensor &x, const at::Tensor &mask, int S) {
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();
+  const auto dtype = x.options().dtype();
   const at::Tensor z = at::empty_like(x);
 
   const auto ascendc_platform =
@@ -244,11 +246,19 @@ at::Tensor run_compress(const at::Tensor &x, const at::Tensor &mask, int S) {
   const at::Tensor workspace_tensor =
       alloc_workspace(user_workspace_size, device);
 
-  ACLRT_LAUNCH_KERNEL(compress)
-  (blockDim, acl_stream, const_cast<void *>(x.storage().data()),
-   const_cast<void *>(mask.storage().data()),
-   const_cast<void *>(z.storage().data()),
-   const_cast<void *>(workspace_tensor.storage().data()), tilingDevice);
+  if (dtype == torch::kHalf or dtype == torch::kInt16) {
+    ACLRT_LAUNCH_KERNEL(compress_fp16)
+    (blockDim, acl_stream, const_cast<void *>(x.storage().data()),
+     const_cast<void *>(mask.storage().data()),
+     const_cast<void *>(z.storage().data()),
+     const_cast<void *>(workspace_tensor.storage().data()), tilingDevice);
+  } else {
+    ACLRT_LAUNCH_KERNEL(compress_fp32)
+    (blockDim, acl_stream, const_cast<void *>(x.storage().data()),
+     const_cast<void *>(mask.storage().data()),
+     const_cast<void *>(z.storage().data()),
+     const_cast<void *>(workspace_tensor.storage().data()), tilingDevice);
+  }
 
   aclrtFree(tilingDevice);
 
