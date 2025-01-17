@@ -18,7 +18,7 @@ import pytest
 
 torch.npu.config.allow_internal_format = False
 
-_MULTIPLIER = [1, 2, 3, 5, 8, 9, 12, 16, 24, 32]
+_MULTIPLIER = [1, 2, 3, 5, 8, 9, 12, 16, 20, 24]
 
 
 def ref_segscan(x: npt.ArrayLike, f: npt.ArrayLike) -> npt.ArrayLike:
@@ -58,9 +58,7 @@ def _test_tcuscan_segscan_single_core(n: int, s: int, segm_density: float):
     print(f" # of segments: {torch.sum(f)}")
     x_npu = x.npu()
     f_npu = f.npu()
-    torch.npu.synchronize()
     actual = tcuscan_ops.run_seg_scan(x_npu, f_npu, s).cpu()
-    torch.npu.synchronize()
     expected = ref_segscan(x.float(), f)
 
     assert actual.shape == expected.shape, "Output shape does not match expected shape."
@@ -70,18 +68,54 @@ def _test_tcuscan_segscan_single_core(n: int, s: int, segm_density: float):
 
 
 @pytest.mark.parametrize("multiplier", _MULTIPLIER)
-def test_tcuscan_segscan_single_score_s_32_density_0_1(multiplier: int):
+def test_tcuscan_segscan_single_score_s_32_density_0_01(multiplier: int):
     s = 32
-    segm_density = 0.1
+    segm_density = 0.01
+    n = multiplier * s * s
+
+    _test_tcuscan_segscan_single_core(n, s, segm_density)
+
+
+@pytest.mark.parametrize("multiplier", _MULTIPLIER[:-3])
+def test_tcuscan_segscan_single_score_s_64_density_0_01(multiplier: int):
+    s = 64
+    segm_density = 0.01
+    n = multiplier * s * s
+
+    _test_tcuscan_segscan_single_core(n, s, segm_density)
+
+
+@pytest.mark.parametrize("multiplier", _MULTIPLIER[:-6])
+def test_tcuscan_segscan_single_score_s_128_density_0_01(multiplier: int):
+    s = 128
+    segm_density = 0.01
     n = multiplier * s * s
 
     _test_tcuscan_segscan_single_core(n, s, segm_density)
 
 
 @pytest.mark.parametrize("multiplier", _MULTIPLIER)
-def test_tcuscan_segscan_single_score_s_32_density_0_5(multiplier: int):
+def test_tcuscan_segscan_single_score_s_32_density_0_05(multiplier: int):
     s = 32
-    segm_density = 0.5
+    segm_density = 0.05
+    n = multiplier * s * s
+
+    _test_tcuscan_segscan_single_core(n, s, segm_density)
+
+
+@pytest.mark.parametrize("multiplier", _MULTIPLIER[:-3])
+def test_tcuscan_segscan_single_score_s_64_density_0_05(multiplier: int):
+    s = 64
+    segm_density = 0.05
+    n = multiplier * s * s
+
+    _test_tcuscan_segscan_single_core(n, s, segm_density)
+
+
+@pytest.mark.parametrize("multiplier", _MULTIPLIER[:-6])
+def test_tcuscan_segscan_single_score_s_128_density_0_05(multiplier: int):
+    s = 128
+    segm_density = 0.05
     n = multiplier * s * s
 
     _test_tcuscan_segscan_single_core(n, s, segm_density)

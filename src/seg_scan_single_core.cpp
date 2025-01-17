@@ -67,19 +67,25 @@ __aicore__ inline void _run_kernel(GM_ADDR input_vec, GM_ADDR input_flag,
     }
   } else {
     // Scanned input flags should be written to the workspace
-    GM_ADDR const flag_ws = workspace;
+
+    GM_ADDR const ws_output = workspace;
+    const uint32_t ws_offset = vec_len * sizeof(OutputT);
+    GM_ADDR const ws_output_flag = workspace + ws_offset;
+
+    sync::SyncGroup<sync::GroupSyncDirection::FULL>();
 
     if ASCEND_IS_AIC {
       KernelScan2PSingleCore<half, int8_t, /*SyncAfter*/ true> op(
           matmul_size, matmul_size, vec_len);
-      op.Init(input_vec, input_flag, u_s_half, u_s_int8, output_vec, flag_ws);
+      op.Init(input_vec, input_flag, u_s_half, u_s_int8, ws_output,
+              ws_output_flag);
       op.Process();
     }
 
     if ASCEND_IS_AIV {
       KernelSegScanRevertSpec<OutputT, FlagOutputT> op_vec(matmul_size,
                                                            vec_len);
-      op_vec.Init(output_vec, flag_ws, output_vec);
+      op_vec.Init(ws_output, ws_output_flag, output_vec);
       op_vec.Process();
     }
   }

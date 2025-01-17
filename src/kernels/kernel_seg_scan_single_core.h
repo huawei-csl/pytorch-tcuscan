@@ -68,12 +68,12 @@ class KernelSegScanRevertSpec {
     pipe.InitBuffer(vecout_q_, BUFFER_NUM, tile_len_ * sizeof(DataTypeT));
 
     pipe.InitBuffer(tmp1_int16_buf_, tile_len_ * sizeof(int16_t));
-    pipe.InitBuffer(dst2_int16_buf_, tile_len_ * sizeof(int16_t));
     pipe.InitBuffer(tmp1_half_buf_, tile_len_ * sizeof(half));
-    pipe.InitBuffer(tmp_get_start_half_buf_, tile_len_ * sizeof(half));
-    pipe.InitBuffer(tmp_popzero_half_buf_, tile_len_ * sizeof(half));
-    pipe.InitBuffer(tmp_float_buf_, tile_len_ * sizeof(float));
+    pipe.InitBuffer(tmp2_half_buf_, tile_len_ * sizeof(half));
     pipe.InitBuffer(tmp_get_start_float_buf_, tile_len_ * sizeof(float));
+    pipe.InitBuffer(tmp_get_start_half_buf_, tile_len_ * sizeof(half));
+    pipe.InitBuffer(tmp_float_buf_, tile_len_ * sizeof(float));
+    pipe.InitBuffer(vec_calc_buf_, tile_len_ * sizeof(float));
   }
 
   /**
@@ -88,13 +88,11 @@ class KernelSegScanRevertSpec {
       sync::SyncGroup<sync::GroupSyncDirection::FULL>();
 
       // FIXME: uses only one vector core
-      if (GetSubBlockIdx() > 0) {
-        continue;
-      }
-
-      for (uint32_t i = 0; i < tile_len_; i++) {
-        VecIter(tile_idx, running_sum);
-        tile_idx++;
+      if (GetBlockIdx() == 0 and GetSubBlockIdx() == 0) {
+        for (uint32_t i = 0; i < tile_len_; i++) {
+          VecIter(tile_idx, running_sum);
+          tile_idx++;
+        }
       }
     }
   }
@@ -135,42 +133,38 @@ class KernelSegScanRevertSpec {
     LocalTensor<DataTypeT> input_vec_lt = vecin_input_q_.DeQue<DataTypeT>();
     LocalTensor<FlagOutputT> flag_vec_lt =
         vecin_scanned_flag_q_.DeQue<FlagOutputT>();
-
     LocalTensor<DataTypeT> output_vec_lt = vecout_q_.AllocTensor<DataTypeT>();
+
+    LocalTensor<DataTypeT> inplace_calc_vec = vec_calc_buf_.Get<DataTypeT>();
 
     // Go over each segment and revert speculation, if necessary
     const int32_t num_segments = flag_vec_lt(tile_len_ - 1);
-    const int16_t first_flag = flag_vec_lt(0);
-    if (num_segments == 1 and first_flag == 1) {
-      DataCopy(output_vec_lt, input_vec_lt, num_elems);
-      PipeBarrier<PIPE_V>();
-    } else if (num_segments == 0) {
-      Adds(output_vec_lt, input_vec_lt, running_sum, num_elems);
-      PipeBarrier<PIPE_V>();
+    const int32_t first_flag = flag_vec_lt(0);
+
+    if (first_flag == static_cast<int32_t>(1)) {
+      DataCopy(inplace_calc_vec, input_vec_lt, num_elems);
     } else {
-      if (first_flag == 0) {
-        Adds(output_vec_lt, input_vec_lt, running_sum, num_elems);
-      } else {
-        DataCopy(output_vec_lt, input_vec_lt, num_elems);
-      }
-      PipeBarrier<PIPE_V>();
-      for (int16_t seg_idx = 1; seg_idx <= num_segments; seg_idx++) {
-        const float delta = GetDelta(output_vec_lt, flag_vec_lt, seg_idx);
-
-        PipeBarrier<PIPE_V>();
-
-        FixSpecInPlace(output_vec_lt, flag_vec_lt, seg_idx, delta);
-        PipeBarrier<PIPE_V>();
-      }
+      Adds(inplace_calc_vec, input_vec_lt, running_sum, num_elems);
     }
 
-    vecout_q_.EnQue<DataTypeT>(output_vec_lt);
-    vecin_input_q_.FreeTensor<DataTypeT>(input_vec_lt);
-    vecin_scanned_flag_q_.FreeTensor<FlagOutputT>(flag_vec_lt);
+    PipeBarrier<PIPE_ALL>();
+    for (int16_t seg_idx = 1; seg_idx <= num_segments; seg_idx++) {
+      sync::ScalarWaitForVec();
+      const float delta = GetDelta(inplace_calc_vec, flag_vec_lt, seg_idx);
+
+      FixSpecInPlace(inplace_calc_vec, flag_vec_lt, seg_idx, delta);
+    }
 
     if (num_elems == tile_len_) {
-      running_sum = output_vec_lt(tile_len_ - 1);
+      sync::ScalarWaitForVec();
+      running_sum = inplace_calc_vec(tile_len_ - 1);
     }
+
+    DataCopy(output_vec_lt, inplace_calc_vec, num_elems);
+
+    vecin_input_q_.FreeTensor<DataTypeT>(input_vec_lt);
+    vecin_scanned_flag_q_.FreeTensor<FlagOutputT>(flag_vec_lt);
+    vecout_q_.EnQue<DataTypeT>(output_vec_lt);
   }
 
   /**
@@ -186,7 +180,6 @@ class KernelSegScanRevertSpec {
                                    int16_t segment_id) {
     const int16_t segment_start_index =
         GetStartIndexOfSegment(flag, segment_id);
-    PipeBarrier<PIPE_V>();
 
     const int16_t delta_index = segment_start_index - 1;
     const float delta = delta_index >= 0 ? input(delta_index) : 0;
@@ -292,7 +285,7 @@ class KernelSegScanRevertSpec {
       return;
     }
 
-    LocalTensor<half> half_buf = tmp1_half_buf_.Get<half>();
+    LocalTensor<half> half_buf = tmp2_half_buf_.Get<half>();
     LocalTensor<int16_t> flag_int16_lt = tmp1_int16_buf_.Get<int16_t>();
 
     Cast(flag_int16_lt, flag, RoundMode::CAST_NONE, tile_len_);
@@ -313,12 +306,12 @@ class KernelSegScanRevertSpec {
   TQue<QuePosition::VECOUT, BUFFER_NUM> vecout_q_;
 
   TBuf<QuePosition::VECCALC> tmp1_int16_buf_;
-  TBuf<QuePosition::VECCALC> dst2_int16_buf_;
   TBuf<QuePosition::VECCALC> tmp1_half_buf_;
+  TBuf<QuePosition::VECCALC> tmp2_half_buf_;
   TBuf<QuePosition::VECCALC> tmp_get_start_float_buf_;
   TBuf<QuePosition::VECCALC> tmp_get_start_half_buf_;
-  TBuf<QuePosition::VECCALC> tmp_popzero_half_buf_;
   TBuf<QuePosition::VECCALC> tmp_float_buf_;
+  TBuf<QuePosition::VECCALC> vec_calc_buf_;
 
   GlobalTensor<DataTypeT> global_input_;
   GlobalTensor<FlagOutputT> global_scanned_flag_;

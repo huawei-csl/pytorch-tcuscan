@@ -38,7 +38,8 @@ class KernelScan2PSingleCore {
       : vec_len_(vec_len),
         M_(matmul_m_size),
         K_(matmul_k_size),
-        N_(matmul_k_size) {
+        N_(matmul_k_size),
+        num_matrix_tiles_(vec_len_ / (M_ * K_)) {
     static_assert(kernel_utils::cube_unit::IsCubeSupported<T1>,
                   "Unsupported input Cube dtype in first parameter. Please "
                   "use half or int8_t.");
@@ -149,11 +150,11 @@ class KernelScan2PSingleCore {
   GlobalTensor<OutputT1> global_out_;
   GlobalTensor<OutputT2> global_f_out_;
 
-  const uint16_t vec_len_;
+  const uint32_t vec_len_;
   const uint16_t M_;
   const uint16_t K_;
   const uint16_t N_;
-  const uint32_t num_matrix_tiles_ = vec_len_ / (M_ * K_);
+  const uint32_t num_matrix_tiles_;
 
   const uint16_t m_half_blocks_ = M_ / kernel_utils::GetFractalMN<half>();
   const uint16_t m_int8_blocks_ = M_ / kernel_utils::GetFractalMN<int8_t>();
