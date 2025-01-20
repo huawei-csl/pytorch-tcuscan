@@ -32,3 +32,9 @@ profile_fp16_%:
 
 profile_int16_%:
 	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:$(shell pwd)/build/lib/ DEVICE_TYPE=npu python3 profile_tcuscan_ops.py --bench $* --dtype int16
+
+
+profile_mcscan:
+	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:$(shell pwd)/build/lib/ DEVICE_TYPE=npu python3 profile_tcuscan_ops.py --bench mcscan --s 32 --dtype fp16
+	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:$(shell pwd)/build/lib/ DEVICE_TYPE=npu python3 profile_tcuscan_ops.py --bench mcscan --s 64 --dtype fp16
+	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:$(shell pwd)/build/lib/ DEVICE_TYPE=npu python3 profile_tcuscan_ops.py --bench mcscan --s 128 --dtype fp16

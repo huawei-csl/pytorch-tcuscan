@@ -103,6 +103,7 @@ def _run_benchmark(
 
     for i in range(benchmark_iters):
         cache.zero_()
+        device.sync()
         start_events[i].record()
         fn()
         end_events[i].record()
@@ -178,6 +179,25 @@ def diff_benchmark(device: Device, vec_len: int) -> float:
     return _run_benchmark(device, run_diff)
 
 
+def baseline_diff_benchmark(device: Device, vec_len: int) -> float:
+    """
+    Benchmark baseline `torch.diff(x, prepend=)` kernel.
+
+    Args:
+        device: Device to run benchmark on.
+        vec_len: Input vector length.
+
+    Returns:
+        Average time in microseconds.
+    """
+    x = torch.rand(vec_len, device=device.str, dtype=torch.float16)
+
+    def run_diff() -> None:
+        z = torch.diff(x, prepend=torch.zeros(1, device=device.str))
+
+    return _run_benchmark(device, run_diff)
+
+
 def csr_gather_benchmark(device: Device, vec_len: int) -> float:
     """
     Benchmark CSR gather kernel.
@@ -204,6 +224,34 @@ def csr_gather_benchmark(device: Device, vec_len: int) -> float:
         z = tcuscan_ops.run_csr_gather(input_values, input_cols, input_x)
 
     return _run_benchmark(device, run_csr_gather)
+
+
+def mcscan_benchmark(device: Device, size: int, dtype: torch.dtype, s: int) -> float:
+    """
+    Benchmark TCUSCAN multi-core scan kernel.
+
+    Args:
+        device: Device to run benchmark on.
+        size: Size of the arrays to use.
+        dtype: Data type of the input/output arrays.
+        s: Matrix size tiling parameter.
+
+    Returns:
+        Average time in microseconds.
+    """
+    if dtype == torch.float16:
+        x = torch.rand(size, device=device.str, dtype=dtype)
+    elif dtype == torch.int8:
+        x = torch.randint(
+            0, torch.iinfo(dtype).max, (size,), device=device.str, dtype=dtype
+        )
+    else:
+        raise RuntimeError(f"dtype {dtype} is not supported in TCUSCAN scan operator")
+
+    def run_scan() -> None:
+        out = tcuscan_ops.run_scan_multi_core(x, s)
+
+    return _run_benchmark(device, run_scan)
 
 
 def benchmark(
@@ -245,6 +293,7 @@ if __name__ == "__main__":
             "copy",
             "diff",
             "csr_gather",
+            "mcscan",
         ],
     )
     parser.add_argument("--dtype", choices=["int8", "fp16", "int16"])
@@ -287,6 +336,16 @@ if __name__ == "__main__":
         benchmark(device, "diff", "fp16", diff_benchmark, sizes)
     elif bench == "csr_gather":
         benchmark(device, "csr_gather", "fp16", csr_gather_benchmark, sizes)
+    elif bench == "mcscan" and dtype in ["fp16"]:
+        tdtype = STR_TO_DTYPE[dtype]
+        benchmark(
+            device,
+            f"mcscan_{s}",
+            dtype,
+            partial(mcscan_benchmark, dtype=tdtype, s=s),
+            sizes,
+        )
+
     else:
         raise RuntimeError(
             f"Unsupported benchmark setup: bench:{bench}, dtype:{dtype}, s:{s}"
