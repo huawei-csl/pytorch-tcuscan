@@ -25,7 +25,7 @@ build: build.sh src/vadd.cpp src/diff.cpp src/seg_scan_single_core.cpp src/pybin
 test:
 	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:$(shell pwd)/build/lib/  python3 -m pytest tests/
 
-profile_%: profile_$*_fp116 profile_$*_int16
+profile_%: profile_fp32_$* profile_fp16_$* profile_int16_$*
 
 profile_fp16_%:
 	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:$(shell pwd)/build/lib/ DEVICE_TYPE=npu python3 profile_tcuscan_ops.py --bench $* --dtype fp16
