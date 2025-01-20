@@ -52,7 +52,12 @@ if DEVICE == "npu":
 WARMUP_ITERS = 10
 BENCH_ITERS = 100
 
-STR_TO_DTYPE = {"fp16": torch.float16, "int16": torch.int16, "int8": torch.int8}
+STR_TO_DTYPE = {
+    "fp16": torch.float16,
+    "int16": torch.int16,
+    "int8": torch.int8,
+    "fp32": torch.float32,
+}
 
 
 @dataclass
@@ -226,6 +231,21 @@ def csr_gather_benchmark(device: Device, vec_len: int) -> float:
     return _run_benchmark(device, run_csr_gather)
 
 
+def compress_benchmark(device: Device, size: int, dtype: torch.dtype, s: int):
+
+    x = torch.randn(size).half().npu()
+    mask = (torch.randn(size) > 0).to(torch.int8).npu()
+    if (dtype == torch.float16) or (dtype == torch.float32):
+        x = torch.rand(size, device=device.str, dtype=dtype)
+    else:
+        raise RuntimeError(f"dtype {dtype} is not supported in TCUSCAN scan operator")
+
+    def run_compress() -> None:
+        z = tcuscan_ops.run_compress(x, mask, s)
+
+    return _run_benchmark(device, run_compress)
+
+
 def mcscan_benchmark(device: Device, size: int, dtype: torch.dtype, s: int) -> float:
     """
     Benchmark TCUSCAN multi-core scan kernel.
@@ -294,9 +314,10 @@ if __name__ == "__main__":
             "diff",
             "csr_gather",
             "mcscan",
+            "compress",
         ],
     )
-    parser.add_argument("--dtype", choices=["int8", "fp16", "int16"])
+    parser.add_argument("--dtype", choices=["int8", "fp16", "int16", "fp32"])
     parser.add_argument("--s", type=int, default=64, required=False)
     parser.add_argument("--max_size", type=int, default=1e8, required=False)
     parser.add_argument("--num_cores", type=int, default=20, required=False)
@@ -334,6 +355,16 @@ if __name__ == "__main__":
         )
     elif bench == "diff" and dtype in ["fp16"]:
         benchmark(device, "diff", "fp16", diff_benchmark, sizes)
+    elif bench == "compress" and dtype in ["fp16", "fp32"]:
+        tdtype = STR_TO_DTYPE[dtype]
+        benchmark(
+            device,
+            f"compress_{s}",
+            dtype,
+            partial(compress_benchmark, dtype=tdtype, s=s),
+            sizes,
+        )
+
     elif bench == "csr_gather":
         benchmark(device, "csr_gather", "fp16", csr_gather_benchmark, sizes)
     elif bench == "mcscan" and dtype in ["fp16"]:
