@@ -37,53 +37,46 @@ extern "C" __global__ __aicore__ void scan_multi_core(GM_ADDR input_vec,
   MultiCoreScanTiling tiling;
   CopyTiling(&tiling, tilingGm);
 
-  // https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/80RC2alpha003/quickstart/quickstart/quickstart_18_0001.html?sub_id=%2Fzh%2FCANNCommunityEdition%2F80RC2alpha003%2Fdevguide%2Fopdevg%2Fascendcopdevg%2Fatlas_ascendc_10_0083.html
+  const uint32_t vec_len = tiling.num_elems;
+  const uint32_t matmul_size = tiling.matmul_size;
+  constexpr bool IsInclusive = true;
+
   GM_ADDR usrWorkspace = AscendC::GetUserWorkspace(workspace);
+  GM_ADDR const lower = load_tril_matrix<half>(matmul_size);
 
-  // Select lower-triangular all-ones matrix staticly initialized on device
-  // See `constants.h`
-  GM_ADDR lower = load_tril_matrix<half>(tiling.matmul_size);
+  // We consider the L2 cache maxed when the scan takes up around 50% of the
+  // L2 total cache size -> maybe available L2 size can be a tiling parameter
+  constexpr uint32_t available_l2_size = L2_SIZE / 2;
+  const uint32_t fitting_len = scalar::AlignUp(
+      available_l2_size / (sizeof(half) + sizeof(float)), GM_ALIGNMENT);
 
-  run_scan_multi_core_kernel<half>(input_vec, lower, output_vec, usrWorkspace,
-                                   tiling.num_elems, tiling.matmul_size, 0);
+  uint32_t remaining_len = vec_len;
+  uint32_t offset = 0;
+  uint32_t used_size = mc_scan::get_workspace_size<half, float, IsInclusive>(
+                           remaining_len, matmul_size) +
+                       vec_len * sizeof(half) + vec_len * sizeof(float);
 
-  /*
+  float starting_value = 0;
 
-// We consider the L2 cache maxed when the scan takes up around 50% of the
-// L2 total cache size -> maybe available L2 size can be a tiling parameter
-constexpr uint32_t available_l2_size = L2_SIZE / 2;
-const uint32_t fitting_len = scalar::AlignUp(
-  available_l2_size / (sizeof(half) + sizeof(float)), GM_ALIGNMENT);
+  while (used_size > available_l2_size && fitting_len < remaining_len) {
+    run_scan_multi_core_kernel<half, IsInclusive>(
+        input_vec + offset * sizeof(half), lower,
+        output_vec + offset * sizeof(float), workspace, fitting_len,
+        matmul_size, starting_value);
+    SyncAll<false>();
 
-uint32_t remaining_len = vec_len;
-uint32_t offset = 0;
-uint32_t used_size = mc_scan::get_workspace_size<half, float, IsInclusive>(
-                       remaining_len, matmul_size) +
-                   vec_len * sizeof(half) + vec_len * sizeof(float);
-
-float starting_value = 0;
-
-while (used_size > available_l2_size && fitting_len < remaining_len) {
-run_scan_multi_core_kernel<half, IsInclusive>(
-    input_vec + offset * sizeof(half), upper_triangular,
-    output_vec + offset * sizeof(float), workspace, fitting_len,
-    matmul_size, starting_value);
-SyncAll<false
-      > ();
-
-  remaining_len -= fitting_len;
-  used_size = mc_scan::get_workspace_size<half, float, IsInclusive>(
-                  remaining_len, matmul_size) +
-              vec_len * sizeof(half) + vec_len * sizeof(float);
-  starting_value = scalar::GetGMValue<float>(
-      output_vec + offset * sizeof(float), fitting_len - 1, fitting_len);
-  offset += fitting_len;
-}
-if (remaining_len) {
-  run_scan_multi_core_kernel<half, IsInclusive>(
-      input_vec + offset * sizeof(half), upper_triangular,
-      output_vec + offset * sizeof(float), workspace, remaining_len,
-      matmul_size, starting_value);
-}
-*/
+    remaining_len -= fitting_len;
+    used_size = mc_scan::get_workspace_size<half, float, IsInclusive>(
+                    remaining_len, matmul_size) +
+                vec_len * sizeof(half) + vec_len * sizeof(float);
+    starting_value = scalar::GetGMValue<float>(
+        output_vec + offset * sizeof(float), fitting_len - 1, fitting_len);
+    offset += fitting_len;
+  }
+  if (remaining_len) {
+    run_scan_multi_core_kernel<half, IsInclusive>(
+        input_vec + offset * sizeof(half), lower,
+        output_vec + offset * sizeof(float), workspace, remaining_len,
+        matmul_size, starting_value);
+  }
 }
