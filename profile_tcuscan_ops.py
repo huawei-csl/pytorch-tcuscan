@@ -11,6 +11,7 @@ import os
 import sys
 import types
 import typing
+import numpy as np
 from dataclasses import dataclass
 from functools import partial
 from math import ceil
@@ -20,6 +21,40 @@ import torch
 file_handler = logging.FileHandler(filename="torch_profiler.log")
 stdout_handler = logging.StreamHandler(stream=sys.stdout)
 handlers = [file_handler, stdout_handler]
+
+# _MULTIPLIER = [1, 2, 3, 5, 8, 9, 12, 16, 24, 32]
+_MULTIPLIER = [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    24,
+    32,
+    44,
+    56,
+    68,
+    80,
+    100,
+    120,
+    140,
+    160,
+    180,
+    200,
+    500,
+    1000,
+]
 
 
 logging.basicConfig(
@@ -165,7 +200,7 @@ def clone_benchmark(device: Device, size: int, dtype: torch.dtype) -> float:
     return _run_benchmark(device, run_clone)
 
 
-def diff_benchmark(device: Device, vec_len: int) -> float:
+def diff_benchmark(device: Device, vec_len: int, dtype=torch.dtype) -> float:
     """
     Benchmark vector diff kernel.
 
@@ -176,7 +211,7 @@ def diff_benchmark(device: Device, vec_len: int) -> float:
     Returns:
         Average time in microseconds.
     """
-    x = torch.rand(vec_len, device=device.str, dtype=torch.float16)
+    x = torch.rand(vec_len, device=device.str, dtype=dtype)
 
     def run_diff() -> None:
         z = tcuscan_ops.run_diff(x)
@@ -229,6 +264,28 @@ def csr_gather_benchmark(device: Device, vec_len: int) -> float:
         z = tcuscan_ops.run_csr_gather(input_values, input_cols, input_x)
 
     return _run_benchmark(device, run_csr_gather)
+
+
+def segmented_scan_single_core_benchmark(
+    device: Device, s: int, vec_len: int, segm_density: float
+) -> float:
+    """
+    Benchmark Segmented Scan Single Core kernel.
+
+    Args:
+        device: Device to run benchmark on.
+        s: block size [32,64,128]
+        vec_len: Input vector length.
+        segm_density: Float value corresponding to the density"""
+
+    x = torch.randn(vec_len).half().npu()
+    f = torch.empty(vec_len).uniform_(0, 1) < segm_density
+    f = f.to(torch.int8).npu()
+
+    def run_seg_scan_single_core() -> None:
+        result = tcuscan_ops.run_seg_scan(x, f, s)
+
+    return _run_benchmark(device, run_seg_scan_single_core)
 
 
 def compress_benchmark(device: Device, size: int, dtype: torch.dtype, s: int):
@@ -292,13 +349,30 @@ def benchmark(
         sizes: Sizes of the arrays to use.
     """
     with open(f"bench_results_{op_name}_{dtype}.csv", "w") as fd:
-        fd.write("operator,dtype,size,time_us\n")
+
+        once = True
         for size in sizes:
-            logger.info(
-                f"OP:{op_name}, dtype: {dtype}, size: {size:,}, device: {device.str}"
-            )
-            time = fn(device, size)
-            fd.write(f"{op_name},{dtype},{size},{time:.2f}\n")
+            if "seg_scan_sc" in op_name:
+                names = op_name.split("_")
+                sparsity = names[-1]
+                op = "_".join(names[:-1])
+                if once:
+                    fd.write("operator,dtype,size,s,density,time_us\n")
+                    once = False
+                logger.info(
+                    f"OP:{op}, dtype: {dtype}, size: {size[0]:,}, device: {device.str}"
+                )
+                time = fn(device, size[1], size[0], float(sparsity))
+                fd.write(f"{op},{dtype},{size[0]},{size[1]},{sparsity},{time:.2f}\n")
+            else:
+                if once:
+                    fd.write("operator,dtype,size,time_us\n")
+                    once = False
+                logger.info(
+                    f"OP:{op_name}, dtype: {dtype}, size: {size:,}, device: {device.str}"
+                )
+                time = fn(device, size)
+                fd.write(f"{op_name},{dtype},{size},{time:.2f}\n")
 
 
 if __name__ == "__main__":
@@ -313,14 +387,14 @@ if __name__ == "__main__":
             "copy",
             "diff",
             "csr_gather",
-            "mcscan",
-            "compress",
+            "seg_scan_sc",
         ],
     )
     parser.add_argument("--dtype", choices=["int8", "fp16", "int16", "fp32"])
     parser.add_argument("--s", type=int, default=64, required=False)
     parser.add_argument("--max_size", type=int, default=1e8, required=False)
     parser.add_argument("--num_cores", type=int, default=20, required=False)
+    parser.add_argument("--density", type=float, default=0.1, required=False)
     args = parser.parse_args()
 
     bench = args.bench
@@ -328,6 +402,7 @@ if __name__ == "__main__":
     max_size = args.max_size
     num_cores = args.num_cores
     s = args.s
+    sp_density = args.density
 
     if DEVICE == "npu":
         device = Device(torch.npu, NPU_DEVICE)
@@ -353,30 +428,32 @@ if __name__ == "__main__":
             partial(clone_benchmark, dtype=tdtype),
             sizes,
         )
-    elif bench == "diff" and dtype in ["fp16"]:
-        benchmark(device, "diff", "fp16", diff_benchmark, sizes)
-    elif bench == "compress" and dtype in ["fp16", "fp32"]:
+    elif bench == "diff" and dtype in ["fp16", "fp32"]:
         tdtype = STR_TO_DTYPE[dtype]
         benchmark(
             device,
-            f"compress_{s}",
+            "diff",
             dtype,
-            partial(compress_benchmark, dtype=tdtype, s=s),
+            partial(diff_benchmark, dtype=tdtype),
             sizes,
         )
-
     elif bench == "csr_gather":
         benchmark(device, "csr_gather", "fp16", csr_gather_benchmark, sizes)
-    elif bench == "mcscan" and dtype in ["fp16"]:
-        tdtype = STR_TO_DTYPE[dtype]
+    elif bench == "seg_scan_sc" and dtype in ["fp16"]:
+        sizes = []
+        possible_sizes = [32, 64, 128]
+        for mul in _MULTIPLIER:
+            for s in possible_sizes:
+                val = mul * s * s
+                touple = (val, s)
+                sizes.append(touple)
         benchmark(
             device,
-            f"mcscan_{s}",
-            dtype,
-            partial(mcscan_benchmark, dtype=tdtype, s=s),
+            f"seg_scan_sc_{sp_density}",
+            "fp16",
+            segmented_scan_single_core_benchmark,
             sizes,
         )
-
     else:
         raise RuntimeError(
             f"Unsupported benchmark setup: bench:{bench}, dtype:{dtype}, s:{s}"
