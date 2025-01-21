@@ -291,7 +291,7 @@ def segmented_scan_single_core_benchmark(
 def compress_benchmark(device: Device, size: int, dtype: torch.dtype, s: int):
 
     x = torch.randn(size).half().npu()
-    mask = (torch.randn(size) > 0).to(torch.int8).npu()
+    mask = (torch.rand(size=(size,)) < 0.05).to(torch.int8).npu()
     if (dtype == torch.float16) or (dtype == torch.float32):
         x = torch.rand(size, device=device.str, dtype=dtype)
     else:

@@ -56,7 +56,7 @@ class KernelCompress {
         packed_mask_tile_size_(mask_required_elems_ < SMALLEST_MASK
                                    ? SMALLEST_MASK
                                    : mask_required_elems_),
-        num_tiles_(vec_len_ / tile_size_ / block_num_),
+        num_tiles_(scalar::CeilDiv(vec_len_, tile_size_ * block_num_)),
         num_elems_per_block_(tile_size_ * num_tiles_),
         num_elems_before_block_(GetBlockIdx() * num_elems_per_block_) {
     // GatherMask requires either 2- or 4-byte elements

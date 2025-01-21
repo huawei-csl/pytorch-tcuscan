@@ -79,16 +79,24 @@ at::Tensor run_add_custom(const at::Tensor &x, const at::Tensor &y) {
   return z;
 }
 
-at::Tensor run_diff(const at::Tensor &x) {
+at::Tensor run_diff(const at::Tensor &x, int64_t max_size) {
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
-  const at::Tensor z = at::empty_like(x);
   const auto dtype = x.options().dtype();
   const at::Device device = x.options().device();
   const uint32_t tileLen = 5 * 1024;
-  uint32_t totalLength = 1;
-  for (uint32_t size : x.sizes()) {
-    totalLength *= size;
+
+  uint32_t totalLength;
+  if (max_size > 0) {
+    totalLength = max_size;
+  } else {
+    totalLength = 1;
+    for (uint32_t size : x.sizes()) {
+      totalLength *= size;
+    }
   }
+
+  const at::Tensor z =
+      at::empty({totalLength}, at::TensorOptions().dtype(dtype).device(device));
 
   const at::Tensor workspace_tensor = alloc_workspace(0, device);
 
@@ -103,6 +111,10 @@ at::Tensor run_diff(const at::Tensor &x) {
 
   uint32_t blockDim = static_cast<uint32_t>(totalLength / 5 * tileLen);
   blockDim = blockDim > 40 ? 40 : blockDim;
+
+  if (blockDim < 1) {
+    blockDim = 1;
+  }
 
   if (dtype == torch::kHalf) {
     ACLRT_LAUNCH_KERNEL(diff_fp16)
@@ -238,7 +250,7 @@ at::Tensor run_compress(const at::Tensor &x, const at::Tensor &mask, int S) {
     blockDim--;
   }
   if (blockDim <= 1) {
-    blockDim = 8;
+    blockDim = 1;
   }
 
   const CompressTiling tiling{totalLength, matmul_size, vec_tile_size};
@@ -306,6 +318,11 @@ at::Tensor run_csr_gather(const at::Tensor &values, const at::Tensor &cols,
 
   uint32_t blockDim = static_cast<uint32_t>(values_len / (4 * tileLen));
   blockDim = blockDim > 60 ? 40 : blockDim;
+
+  if (blockDim <= 1) {
+    blockDim = 1;
+  }
+
   ACLRT_LAUNCH_KERNEL(csr_gather)
   (blockDim, acl_stream, const_cast<void *>(values.storage().data()),
    const_cast<void *>(cols.storage().data()),
@@ -318,14 +335,32 @@ at::Tensor run_csr_gather(const at::Tensor &values, const at::Tensor &cols,
   return z;
 }
 
+at::Tensor run_seg_sum(const at::Tensor &x, const at::Tensor &f, int S) {
+  auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
+  const auto ascendc_platform =
+      platform_ascendc::PlatformAscendCManager::GetInstance(SOC_VERSION);
+  const uint32_t matmul_size = static_cast<uint32_t>(S);
+
+  const at::Tensor scan_x = run_scan_multi_core(x, matmul_size);
+  aclrtSynchronizeStream(acl_stream);
+  const at::Tensor compress_scan_x = run_compress(scan_x, f, matmul_size);
+  aclrtSynchronizeStream(acl_stream);
+  const at::Tensor num_ones = at::sum(f);
+  const at::Tensor z = run_diff(compress_scan_x, num_ones.item<int64_t>());
+
+  return z;
+}
+
 }  // namespace asc
 
 PYBIND11_MODULE(tcuscan_ops, m) {
   m.doc() = "TCUSCAN pybind11 interfaces";
   m.def("run_add_custom", &asc::run_add_custom, "AscendC Vector add");
-  m.def("run_diff", &asc::run_diff, "AscendC Vector diff");
+  m.def("run_diff", &asc::run_diff, pybind11::arg(),
+        pybind11::arg("max_size") = 0, "AscendC Vector diff");
   m.def("run_seg_scan", &asc::run_seg_scan, "AscendC Segmented Scan");
   m.def("run_scan_multi_core", &asc::run_scan_multi_core, "AscendC MCSCAN");
   m.def("run_csr_gather", &asc::run_csr_gather, "AscendC CSR gather");
-  m.def("run_compress", &asc::run_compress, "AscendC MCSCAN");
+  m.def("run_compress", &asc::run_compress, "AscendC compress");
+  m.def("run_seg_sum", &asc::run_seg_sum, "AscendC Segmented Sum");
 }

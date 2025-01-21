@@ -1806,7 +1806,6 @@ __aicore__ inline GM_ADDR load_tril_int8_matrix(uint32_t matmul_size) {
 
 template <typename InputT>
 __aicore__ inline GM_ADDR load_tril_matrix(uint32_t matmul_size) {
-  GM_ADDR lower;
   if constexpr (std::is_same_v<InputT, half>) {
     return load_tril_fp16_matrix(matmul_size);
   }
