@@ -60,3 +60,7 @@ profile_fp32_compress:
 
 profile_fp16_seg_scan_sc:
 	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:$(shell pwd)/build/lib/ DEVICE_TYPE=npu python3 profile_tcuscan_ops.py --bench seg_scan_sc --dtype fp16 --density ${DENSITY} --num_cores 1
+
+
+
+profile_diffs: profile_fp16_diff profile_fp16_diff_cann profile_fp16_diffp_cann

@@ -45,6 +45,18 @@ at::Tensor alloc_workspace(uint32_t user_workspace_size, at::Device device) {
   return workspace_tensor;
 }
 
+size_t byte_size(const at::Tensor &x) {
+  const auto dtype = x.options().dtype();
+
+  if (dtype == torch::kHalf or dtype == torch::kInt16) {
+    return 2;
+  } else if (dtype == torch::kInt8) {
+    return 1;
+  } else {
+    return 4;
+  }
+}
+
 at::Tensor run_add_custom(const at::Tensor &x, const at::Tensor &y) {
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Tensor z = at::empty_like(x);
@@ -83,7 +95,8 @@ at::Tensor run_diff(const at::Tensor &x, int64_t max_size) {
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const auto dtype = x.options().dtype();
   const at::Device device = x.options().device();
-  const uint32_t tileLen = 5 * 1024;
+  // Tiling length must be around 10,000
+  const uint32_t tileLen = 20 * 1024 / byte_size(x);
 
   uint32_t totalLength;
   if (max_size > 0) {
@@ -109,7 +122,7 @@ at::Tensor run_diff(const at::Tensor &x, int64_t max_size) {
   aclrtMemcpy(tilingDevice, tilingSize, tilingHost, tilingSize,
               ACL_MEMCPY_HOST_TO_DEVICE);
 
-  uint32_t blockDim = static_cast<uint32_t>(totalLength / 5 * tileLen);
+  uint32_t blockDim = static_cast<uint32_t>(totalLength / tileLen);
   blockDim = blockDim > 40 ? 40 : blockDim;
 
   if (blockDim < 1) {

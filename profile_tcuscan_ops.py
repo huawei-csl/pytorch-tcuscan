@@ -219,7 +219,30 @@ def diff_benchmark(device: Device, vec_len: int, dtype=torch.dtype) -> float:
     return _run_benchmark(device, run_diff)
 
 
-def baseline_diff_benchmark(device: Device, vec_len: int) -> float:
+def baseline_diff_benchmark(device: Device, vec_len: int, dtype=torch.dtype) -> float:
+    """
+    Benchmark baseline `torch.diff(x)` kernel.
+
+    Args:
+        device: Device to run benchmark on.
+        vec_len: Input vector length.
+
+    Returns:
+        Average time in microseconds.
+    """
+    x = torch.rand(vec_len, device=device.str, dtype=torch.float16)
+    if dtype in [torch.float16, torch.float32]:
+        x = torch.rand(vec_len, device=device.str, dtype=dtype)
+    else:
+        raise ValueError("Invalid diff_cann input data type")
+
+    def run_diff() -> None:
+        z = torch.diff(x)
+
+    return _run_benchmark(device, run_diff)
+
+
+def baseline_diffp_benchmark(device: Device, vec_len: int, dtype=torch.dtype) -> float:
     """
     Benchmark baseline `torch.diff(x, prepend=)` kernel.
 
@@ -231,6 +254,10 @@ def baseline_diff_benchmark(device: Device, vec_len: int) -> float:
         Average time in microseconds.
     """
     x = torch.rand(vec_len, device=device.str, dtype=torch.float16)
+    if dtype in [torch.float16, torch.float32]:
+        x = torch.rand(vec_len, device=device.str, dtype=dtype)
+    else:
+        raise ValueError("Invalid diff_cann input data type")
 
     def run_diff() -> None:
         z = torch.diff(x, prepend=torch.zeros(1, device=device.str))
@@ -386,6 +413,8 @@ if __name__ == "__main__":
             "vadd",
             "copy",
             "diff",
+            "diff_cann",
+            "diffp_cann",
             "csr_gather",
             "seg_scan_sc",
         ],
@@ -426,6 +455,24 @@ if __name__ == "__main__":
             "copy",
             dtype,
             partial(clone_benchmark, dtype=tdtype),
+            sizes,
+        )
+    elif bench == "diff_cann" and dtype in ["fp16", "fp32"]:
+        tdtype = STR_TO_DTYPE[dtype]
+        benchmark(
+            device,
+            "diff_cann",
+            dtype,
+            partial(baseline_diff_benchmark, dtype=tdtype),
+            sizes,
+        )
+    elif bench == "diffp_cann" and dtype in ["fp16", "fp32"]:
+        tdtype = STR_TO_DTYPE[dtype]
+        benchmark(
+            device,
+            "diffp_cann",
+            dtype,
+            partial(baseline_diffp_benchmark, dtype=tdtype),
             sizes,
         )
     elif bench == "diff" and dtype in ["fp16", "fp32"]:
