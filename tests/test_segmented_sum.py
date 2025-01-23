@@ -17,7 +17,7 @@ import pytest
 
 torch.npu.config.allow_internal_format = False
 
-_MULTIPLIER = [1, 2, 3, 5, 6]
+_MULTIPLIER = [1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12]
 
 
 def ref_segsum(x: torch.Tensor, f: torch.Tensor) -> torch.Tensor:
@@ -61,7 +61,6 @@ def _test_tcuscan_seg_sum(n: int, s: int, segm_density: float):
     actual = tcuscan_ops.run_seg_sum(x_npu, f_npu, s).cpu()
     expected = ref_segsum(x, f)
     torch.npu.synchronize()
-
     assert (
         actual.shape == expected.shape
     ), "Output shape mismatch. Got {actual.shape}. Expected {expected.shape}"

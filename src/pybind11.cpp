@@ -353,13 +353,18 @@ at::Tensor run_seg_sum(const at::Tensor &x, const at::Tensor &f, int S) {
   const auto ascendc_platform =
       platform_ascendc::PlatformAscendCManager::GetInstance(SOC_VERSION);
   const uint32_t matmul_size = static_cast<uint32_t>(S);
+  const auto dtype = x.options().dtype();
+  const at::Device device = x.options().device();
+  const at::Tensor prepend =
+      at::empty({1}, at::TensorOptions().dtype(dtype).device(device)).zero_();
 
   const at::Tensor scan_x = run_scan_multi_core(x, matmul_size);
   aclrtSynchronizeStream(acl_stream);
   const at::Tensor compress_scan_x = run_compress(scan_x, f, matmul_size);
-  aclrtSynchronizeStream(acl_stream);
   const at::Tensor num_ones = at::sum(f);
-  const at::Tensor z = run_diff(compress_scan_x, num_ones.item<int64_t>());
+  const at::Tensor prep_compress_scan_x = torch::cat(
+      {prepend, compress_scan_x.slice(0, 0, num_ones.item<int64_t>())});
+  const at::Tensor z = torch::diff(prep_compress_scan_x);
 
   return z;
 }

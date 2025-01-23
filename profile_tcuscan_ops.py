@@ -15,6 +15,8 @@ import numpy as np
 from dataclasses import dataclass
 from functools import partial
 from math import ceil
+from typing import Optional
+
 
 import torch
 
@@ -315,10 +317,12 @@ def segmented_scan_single_core_benchmark(
     return _run_benchmark(device, run_seg_scan_single_core)
 
 
-def compress_benchmark(device: Device, size: int, dtype: torch.dtype, s: int):
+def compress_benchmark(
+    device: Device, size: int, dtype: torch.dtype, s: int, segm_density: float
+):
 
     x = torch.randn(size).half().npu()
-    mask = (torch.rand(size=(size,)) < 0.05).to(torch.int8).npu()
+    mask = (torch.rand(size=(size,)) < segm_density).to(torch.int8).npu()
     if (dtype == torch.float16) or (dtype == torch.float32):
         x = torch.rand(size, device=device.str, dtype=dtype)
     else:
@@ -328,6 +332,22 @@ def compress_benchmark(device: Device, size: int, dtype: torch.dtype, s: int):
         z = tcuscan_ops.run_compress(x, mask, s)
 
     return _run_benchmark(device, run_compress)
+
+
+def segmented_sum_benchmark(
+    device: Device, size: int, segm_density: float, dtype: torch.dtype, s: int
+):
+
+    x = torch.randn(size, dtype=dtype)
+    f = (torch.randn(size) < segm_density).to(torch.int8)
+    f[0] = 0
+    x_npu = x.npu()
+    f_npu = torch.concat([f[1:], torch.ones(1, dtype=torch.int8)]).contiguous().npu()
+
+    def run_seg_sum() -> None:
+        actual = tcuscan_ops.run_seg_sum(x_npu, f_npu, s)
+
+    return _run_benchmark(device, run_seg_sum)
 
 
 def mcscan_benchmark(device: Device, size: int, dtype: torch.dtype, s: int) -> float:
@@ -364,6 +384,7 @@ def benchmark(
     dtype: str,
     fn: typing.Callable,
     sizes: typing.List[int],
+    density: Optional[float],
 ) -> None:
     """
     Benchmark a given function.
@@ -374,32 +395,32 @@ def benchmark(
         dtype: Input data type.
         fn: Function to benchmark.
         sizes: Sizes of the arrays to use.
+        density: percentage of non-zero elements in a sparse matrix
     """
-    with open(f"bench_results_{op_name}_{dtype}.csv", "w") as fd:
+    if density is not None:
+        density_str = "density,"
+    else:
+        density_str = ""
 
-        once = True
+    with open(f"bench_results_{op_name}_{dtype}_{density_str}.csv", "w") as fd:
+        fd.write(f"operator,dtype,size,density,time_us\n")
+
         for size in sizes:
-            if "seg_scan_sc" in op_name:
-                names = op_name.split("_")
-                sparsity = names[-1]
-                op = "_".join(names[:-1])
-                if once:
-                    fd.write("operator,dtype,size,s,density,time_us\n")
-                    once = False
+            if isinstance(size, tuple):
                 logger.info(
-                    f"OP:{op}, dtype: {dtype}, size: {size[0]:,}, device: {device.str}"
+                    f"OP:{op_name}, dtype: {dtype}, size: {size[0]:}, { None if (density_str is None) else density }, device: {device.str}"
                 )
-                time = fn(device, size[1], size[0], float(sparsity))
-                fd.write(f"{op},{dtype},{size[0]},{size[1]},{sparsity},{time:.2f}\n")
+                if "seg_scan_sc" in op_name:
+                    time = fn(device, s=size[1], vec_len=size[0])
+                    fd.write(
+                        f"{op_name},{dtype},{size[0]},{size[1]},{density},{time:.2f}\n"
+                    )
             else:
-                if once:
-                    fd.write("operator,dtype,size,time_us\n")
-                    once = False
                 logger.info(
-                    f"OP:{op_name}, dtype: {dtype}, size: {size:,}, device: {device.str}"
+                    f"OP:{op_name}, dtype: {dtype}, size: {size:}, density: {None if (density_str is None) else density }, device: {device.str}"
                 )
                 time = fn(device, size)
-                fd.write(f"{op_name},{dtype},{size},{time:.2f}\n")
+                fd.write(f"{op_name},{dtype},{size},{density},{time:.2f}\n")
 
 
 if __name__ == "__main__":
@@ -417,13 +438,16 @@ if __name__ == "__main__":
             "diffp_cann",
             "csr_gather",
             "seg_scan_sc",
+            "mcscan",
+            "compress",
+            "segmented_sum",
         ],
     )
     parser.add_argument("--dtype", choices=["int8", "fp16", "int16", "fp32"])
     parser.add_argument("--s", type=int, default=64, required=False)
     parser.add_argument("--max_size", type=int, default=1e8, required=False)
     parser.add_argument("--num_cores", type=int, default=20, required=False)
-    parser.add_argument("--density", type=float, default=0.1, required=False)
+    parser.add_argument("--density", type=float, default=None, required=False)
     args = parser.parse_args()
 
     bench = args.bench
@@ -456,6 +480,7 @@ if __name__ == "__main__":
             dtype,
             partial(clone_benchmark, dtype=tdtype),
             sizes,
+            sp_density,
         )
     elif bench == "diff_cann" and dtype in ["fp16", "fp32"]:
         tdtype = STR_TO_DTYPE[dtype]
@@ -465,6 +490,7 @@ if __name__ == "__main__":
             dtype,
             partial(baseline_diff_benchmark, dtype=tdtype),
             sizes,
+            sp_density,
         )
     elif bench == "diffp_cann" and dtype in ["fp16", "fp32"]:
         tdtype = STR_TO_DTYPE[dtype]
@@ -474,6 +500,7 @@ if __name__ == "__main__":
             dtype,
             partial(baseline_diffp_benchmark, dtype=tdtype),
             sizes,
+            sp_density,
         )
     elif bench == "diff" and dtype in ["fp16", "fp32"]:
         tdtype = STR_TO_DTYPE[dtype]
@@ -483,10 +510,34 @@ if __name__ == "__main__":
             dtype,
             partial(diff_benchmark, dtype=tdtype),
             sizes,
+            sp_density,
+        )
+    elif bench == "compress" and dtype in ["fp16", "fp32"]:
+        tdtype = STR_TO_DTYPE[dtype]
+        benchmark(
+            device,
+            f"compress_{s}",
+            dtype,
+            partial(compress_benchmark, dtype=tdtype, s=s, segm_density=sp_density),
+            sizes,
+            sp_density,
+        )
+    elif bench == "segmented_sum" and dtype in ["fp16"]:
+        tdtype = STR_TO_DTYPE[dtype]
+        benchmark(
+            device,
+            f"segmented_sum_{s}",
+            dtype,
+            partial(
+                segmented_sum_benchmark, dtype=tdtype, s=s, segm_density=sp_density
+            ),
+            sizes,
+            sp_density,
         )
     elif bench == "csr_gather":
         benchmark(device, "csr_gather", "fp16", csr_gather_benchmark, sizes)
     elif bench == "seg_scan_sc" and dtype in ["fp16"]:
+        tdtype = STR_TO_DTYPE[dtype]
         sizes = []
         possible_sizes = [32, 64, 128]
         for mul in _MULTIPLIER:
@@ -498,8 +549,19 @@ if __name__ == "__main__":
             device,
             f"seg_scan_sc_{sp_density}",
             "fp16",
-            segmented_scan_single_core_benchmark,
+            partial(segmented_scan_single_core_benchmark, segm_density=sp_density),
             sizes,
+            sp_density,
+        )
+    elif bench == "mcscan" and dtype in ["fp16"]:
+        tdtype = STR_TO_DTYPE[dtype]
+        benchmark(
+            device,
+            f"mcscan_{s}",
+            dtype,
+            partial(mcscan_benchmark, dtype=tdtype, s=s),
+            sizes,
+            sp_density,
         )
     else:
         raise RuntimeError(
