@@ -33,7 +33,9 @@ extern "C" __global__ __aicore__ void add_custom(GM_ADDR x, GM_ADDR y,
   VaddTiling tiling;
   CopyTiling(&tiling, tilingGm);
 
-  KernelAdd op(tiling.vec_len, tiling.tile_len);
-  op.Init(x, y, z);
-  op.Process();
+  if ASCEND_IS_AIV {
+    KernelAdd op(tiling.vec_len, tiling.tile_len);
+    op.Init(x, y, z);
+    op.Process();
+  }
 }

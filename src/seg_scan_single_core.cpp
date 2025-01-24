@@ -108,13 +108,10 @@ extern "C" __global__ __aicore__ void seg_scan_single_core(GM_ADDR input_vec,
   SegScanSingleCoreTiling tiling;
   CopyTiling(&tiling, tilingGm);
 
-  // Select lower-triangular all-ones matrix staticly initialized on device
-  // See `constants.h`
-  GM_ADDR lower_half = load_tril_matrix<half>(tiling.matmul_size);
-  GM_ADDR lower_int8 = load_tril_matrix<int8_t>(tiling.matmul_size);
+  GM_ADDR const lower_half = load_tril_matrix<half>(tiling.matmul_size);
+  GM_ADDR const lower_int8 = load_tril_matrix<int8_t>(tiling.matmul_size);
 
-  // https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/80RC2alpha003/quickstart/quickstart/quickstart_18_0001.html?sub_id=%2Fzh%2FCANNCommunityEdition%2F80RC2alpha003%2Fdevguide%2Fopdevg%2Fascendcopdevg%2Fatlas_ascendc_10_0083.html
-  GM_ADDR usrWorkspace = AscendC::GetUserWorkspace(workspace);
+  GM_ADDR const usrWorkspace = AscendC::GetUserWorkspace(workspace);
 
   _run_kernel(input_vec, input_flag, lower_half, lower_int8, output_vec,
               tiling.vec_len, tiling.matmul_size, usrWorkspace);

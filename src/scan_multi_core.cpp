@@ -41,7 +41,7 @@ extern "C" __global__ __aicore__ void scan_multi_core(GM_ADDR input_vec,
   const uint32_t matmul_size = tiling.matmul_size;
   constexpr bool IsInclusive = true;
 
-  GM_ADDR usrWorkspace = AscendC::GetUserWorkspace(workspace);
+  GM_ADDR const usrWorkspace = AscendC::GetUserWorkspace(workspace);
   GM_ADDR const lower = load_tril_matrix<half>(matmul_size);
 
   // We consider the L2 cache maxed when the scan takes up around 50% of the
