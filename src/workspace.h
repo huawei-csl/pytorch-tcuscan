@@ -10,6 +10,7 @@
 
 #include "host_utils.h"
 #include "tiling/tiling_scan_multi_core.h"
+#include "tiling/tiling_scan_single_core.h"
 
 namespace workspace {
 
@@ -94,4 +95,27 @@ constexpr uint32_t GetWorkspaceSize(size_t input_elems, size_t scan_tile_size,
 };
 
 }  // namespace compress
+
+namespace sc_scan {
+
+/**
+ * @brief Calculate the workspace size for single core scan.
+ *
+ * @tparam InputT Input data type.
+ *
+ * @param [in] tiling Tiling parameters used in the kernel.
+ * @return Size of the workspace in bytes.
+ */
+template <typename InputT>
+constexpr uint32_t GetWorkspaceSize(const SingleCoreScanTiling &tiling) {
+  const uint32_t padded_input_len = host_utils::AlignUp(
+      tiling.num_elems, tiling.matmul_size * tiling.matmul_size);
+  const uint32_t padded_input_size = padded_input_len * sizeof(InputT);
+  const uint32_t padded_rowwise_size = padded_input_len * sizeof(int32_t);
+
+  const uint32_t total_size = padded_input_size + padded_rowwise_size;
+  return total_size;
+}
+}  // namespace sc_scan
+
 }  // namespace workspace

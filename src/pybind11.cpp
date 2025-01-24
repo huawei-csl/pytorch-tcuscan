@@ -17,12 +17,15 @@
 #include "aclrtlaunch_diff_fp16.h"
 #include "aclrtlaunch_diff_fp32.h"
 #include "aclrtlaunch_scan_multi_core.h"
+#include "aclrtlaunch_scan_single_core_fp16.h"
+#include "aclrtlaunch_scan_single_core_int8.h"
 #include "aclrtlaunch_seg_scan_single_core.h"
 #include "tiling/platform/platform_ascendc.h"
 #include "tiling/tiling_compress.h"
 #include "tiling/tiling_csr_gather.h"
 #include "tiling/tiling_diff.h"
 #include "tiling/tiling_scan_multi_core.h"
+#include "tiling/tiling_scan_single_core.h"
 #include "tiling/tiling_seg_scan_single_core.h"
 #include "tiling/tiling_vadd.h"
 #include "torch_npu/csrc/core/npu/NPUStream.h"
@@ -369,6 +372,58 @@ at::Tensor run_seg_sum(const at::Tensor &x, const at::Tensor &f, int S) {
   return z;
 }
 
+at::Tensor run_scan_single_core(const at::Tensor &x, int S) {
+  auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
+  const at::Device device = x.options().device();
+  const auto dtype = x.options().dtype();
+  const auto ascendc_platform =
+      platform_ascendc::PlatformAscendCManager::GetInstance(SOC_VERSION);
+
+  const uint32_t matmul_size = static_cast<uint32_t>(S);
+  uint32_t totalLength = 1;
+  for (uint32_t size : x.sizes()) {
+    totalLength *= size;
+  }
+
+  // Outuput is always 32-bits (float or int32_t)
+  const at::Tensor z = at::empty(
+      {totalLength}, at::TensorOptions().dtype(at::kFloat).device(device));
+
+  const SingleCoreScanTiling tiling{totalLength, matmul_size};
+
+  constexpr size_t tilingSize = sizeof(SingleCoreScanTiling);
+  const uint8_t *tilingHost = reinterpret_cast<const uint8_t *>(&tiling);
+
+  uint8_t *tilingDevice;
+  aclrtMalloc((void **)&tilingDevice, tilingSize, ACL_MEM_MALLOC_HUGE_FIRST);
+  aclrtMemcpy(tilingDevice, tilingSize, tilingHost, tilingSize,
+              ACL_MEMCPY_HOST_TO_DEVICE);
+
+  if (dtype == torch::kInt8) {
+    const uint32_t user_workspace_size =
+        workspace::sc_scan::GetWorkspaceSize<int8_t>(tiling);
+    const at::Tensor workspace_tensor =
+        alloc_workspace(user_workspace_size, device);
+    ACLRT_LAUNCH_KERNEL(scan_single_core_int8)
+    (1 /* single core*/, acl_stream, const_cast<void *>(x.storage().data()),
+     const_cast<void *>(z.storage().data()),
+     const_cast<void *>(workspace_tensor.storage().data()), tilingDevice);
+  } else {
+    const uint32_t user_workspace_size =
+        workspace::sc_scan::GetWorkspaceSize<int16_t>(tiling);
+    const at::Tensor workspace_tensor =
+        alloc_workspace(user_workspace_size, device);
+    ACLRT_LAUNCH_KERNEL(scan_single_core_fp16)
+    (1 /* single core*/, acl_stream, const_cast<void *>(x.storage().data()),
+     const_cast<void *>(z.storage().data()),
+     const_cast<void *>(workspace_tensor.storage().data()), tilingDevice);
+  }
+
+  aclrtFree(tilingDevice);
+
+  return z;
+}
+
 }  // namespace asc
 
 PYBIND11_MODULE(tcuscan_ops, m) {
@@ -381,4 +436,6 @@ PYBIND11_MODULE(tcuscan_ops, m) {
   m.def("run_csr_gather", &asc::run_csr_gather, "AscendC CSR gather");
   m.def("run_compress", &asc::run_compress, "AscendC compress");
   m.def("run_seg_sum", &asc::run_seg_sum, "AscendC Segmented Sum");
+  m.def("run_scan_single_core", &asc::run_scan_single_core,
+        "AscendC Scan Single Core");
 }

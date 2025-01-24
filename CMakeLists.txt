@@ -33,6 +33,7 @@ ascendc_library(kernels SHARED
     src/scan_multi_core.cpp
     src/csr_gather.cpp
     src/compress.cpp
+    src/scan_single_core.cpp
 )
 
 ascendc_compile_definitions(kernels PRIVATE
@@ -43,16 +44,6 @@ ascendc_compile_definitions(kernels PRIVATE
 ascendc_include_directories(kernels PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
-
-
-# TODO(anastasios) : double-check if needed
-#target_include_directories(kernels PRIVATE
-#    ${ASCEND_CANN_PACKAGE_PATH}/x86_64-linux/include
-#    ${ASCEND_CANN_PACKAGE_PATH}/runtime/include
-#    ${ASCEND_CANN_PACKAGE_PATH}/x86_64-linux/tikcpp/tikcfw
-#    ${ASCEND_CANN_PACKAGE_PATH}/x86_64-linux/tikcpp/tikcfw/interface
-#    ${ASCEND_CANN_PACKAGE_PATH}/x86_64-linux/tikcpp/tikcfw/impl
-#)
 
 target_link_libraries(kernels PRIVATE
     ascendcl
