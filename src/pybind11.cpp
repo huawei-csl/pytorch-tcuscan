@@ -13,6 +13,8 @@
 #include "aclrtlaunch_add_custom.h"
 #include "aclrtlaunch_compress_fp16.h"
 #include "aclrtlaunch_compress_fp32.h"
+#include "aclrtlaunch_copy_fp16.h"
+#include "aclrtlaunch_copy_fp32.h"
 #include "aclrtlaunch_csr_gather.h"
 #include "aclrtlaunch_diff_fp16.h"
 #include "aclrtlaunch_diff_fp32.h"
@@ -24,6 +26,7 @@
 #include "aclrtlaunch_seg_scan_vec_single_core.h"
 #include "tiling/platform/platform_ascendc.h"
 #include "tiling/tiling_compress.h"
+#include "tiling/tiling_copy.h"
 #include "tiling/tiling_csr_gather.h"
 #include "tiling/tiling_diff.h"
 #include "tiling/tiling_scan_multi_core.h"
@@ -391,6 +394,52 @@ at::Tensor run_seg_sum(const at::Tensor &x, const at::Tensor &f, int S) {
   return z;
 }
 
+at::Tensor run_copy(const at::Tensor &x, int s) {
+  auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
+  const at::Device device = x.options().device();
+  const auto dtype = x.options().dtype();
+  const auto ascendc_platform =
+      platform_ascendc::PlatformAscendCManager::GetInstance(SOC_VERSION);
+
+  // get total length
+  uint32_t totalLength = 1;
+  for (uint32_t size : x.sizes()) {
+    totalLength *= size;
+  }
+  const at::Tensor z =
+      at::empty({totalLength}, at::TensorOptions().dtype(dtype).device(device));
+
+  const at::Tensor workspace_tensor = alloc_workspace(0, device);
+
+  const uint32_t num_block = 1;  // required for 1 core
+  const uint32_t tile_size = static_cast<uint32_t>(s);
+  const CopyTiling tiling{num_block, totalLength, tile_size};
+
+  constexpr size_t tilingSize = sizeof(CopyTiling);
+  const uint8_t *tilingHost = reinterpret_cast<const uint8_t *>(&tiling);
+
+  uint8_t *tilingDevice;
+  aclrtMalloc((void **)&tilingDevice, tilingSize, ACL_MEM_MALLOC_HUGE_FIRST);
+  aclrtMemcpy(tilingDevice, tilingSize, tilingHost, tilingSize,
+              ACL_MEMCPY_HOST_TO_DEVICE);
+
+  if (dtype == at::kFloat) {
+    ACLRT_LAUNCH_KERNEL(copy_fp32)
+    (1 /* single core*/, acl_stream, const_cast<void *>(x.storage().data()),
+     const_cast<void *>(z.storage().data()),
+     const_cast<void *>(workspace_tensor.storage().data()), tilingDevice);
+  } else {
+    ACLRT_LAUNCH_KERNEL(copy_fp16)
+    (1 /* single core*/, acl_stream, const_cast<void *>(x.storage().data()),
+     const_cast<void *>(z.storage().data()),
+     const_cast<void *>(workspace_tensor.storage().data()), tilingDevice);
+  }
+
+  aclrtFree(tilingDevice);
+
+  return z;
+}
+
 at::Tensor run_scan_single_core(const at::Tensor &x, int S) {
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();
@@ -398,12 +447,12 @@ at::Tensor run_scan_single_core(const at::Tensor &x, int S) {
   const auto ascendc_platform =
       platform_ascendc::PlatformAscendCManager::GetInstance(SOC_VERSION);
 
+  // get total length
   const uint32_t matmul_size = static_cast<uint32_t>(S);
   uint32_t totalLength = 1;
   for (uint32_t size : x.sizes()) {
     totalLength *= size;
   }
-
   // Outuput is always 32-bits (float or int32_t)
   const at::Tensor z = at::empty(
       {totalLength}, at::TensorOptions().dtype(at::kFloat).device(device));
@@ -493,6 +542,7 @@ PYBIND11_MODULE(tcuscan_ops, m) {
   m.def("run_csr_gather", &asc::run_csr_gather, "AscendC CSR gather");
   m.def("run_compress", &asc::run_compress, "AscendC compress");
   m.def("run_seg_sum", &asc::run_seg_sum, "AscendC Segmented Sum");
+  m.def("run_copy", &asc::run_copy, "AscendC Copy single core");
   m.def("run_scan_single_core", &asc::run_scan_single_core,
         "AscendC Scan Single Core");
   m.def("run_seg_scan_vec", &asc::run_seg_scan_vec,

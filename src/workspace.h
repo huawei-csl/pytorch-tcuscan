@@ -9,6 +9,7 @@
 #include <cstdint>
 
 #include "host_utils.h"
+#include "tiling/tiling_copy.h"
 #include "tiling/tiling_scan_multi_core.h"
 #include "tiling/tiling_scan_single_core.h"
 

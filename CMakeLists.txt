@@ -33,6 +33,7 @@ ascendc_library(kernels SHARED
     src/scan_multi_core.cpp
     src/csr_gather.cpp
     src/compress.cpp
+    src/copy.cpp
     src/scan_single_core.cpp
     src/seg_scan_vec_single_core.cpp
 )

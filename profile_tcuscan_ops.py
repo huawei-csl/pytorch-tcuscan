@@ -177,6 +177,26 @@ def vadd_benchmark(device: Device, vec_len: int) -> float:
     return _run_benchmark(device, run_vadd)
 
 
+def copy_benchmark(device: Device, size: int, s: int, dtype: torch.dtype) -> float:
+    """
+    Benchmark torch.clone kernel.
+
+    Args:
+        device: Device to run benchmark on.
+        size: Size of the arrays to use.
+        dtype: Data type of the input array.
+
+    Returns:
+        Average time in microseconds.
+    """
+    x = torch.rand(size, device=device.str, dtype=dtype)
+
+    def run_copy() -> None:
+        z = tcuscan_ops.run_copy(x, s)
+
+    return _run_benchmark(device, run_copy)
+
+
 def clone_benchmark(device: Device, size: int, dtype: torch.dtype) -> float:
     """
     Benchmark torch.clone kernel.
@@ -372,6 +392,15 @@ def segmented_sum_benchmark(
     return _run_benchmark(device, run_seg_sum)
 
 
+def scscan_benchmark(device: Device, size: int, dtype: torch.dtype, s: int) -> float:
+    x = torch.rand(size, device=device.str, dtype=dtype)
+
+    def run_scan() -> None:
+        out = tcuscan_ops.run_scan_single_core(x, s)
+
+    return _run_benchmark(device, run_scan)
+
+
 def mcscan_benchmark(device: Device, size: int, dtype: torch.dtype, s: int) -> float:
     """
     Benchmark TCUSCAN multi-core scan kernel.
@@ -456,7 +485,9 @@ if __name__ == "__main__":
             "mcscan",
             "compress",
             "segmented_sum",
+            "custom_copy",
             "vec_seg_scan_sc",
+            "scscan",
         ],
     )
     parser.add_argument("--dtype", choices=["int8", "fp16", "int16", "fp32"])
@@ -495,6 +526,16 @@ if __name__ == "__main__":
             "copy",
             dtype,
             partial(clone_benchmark, dtype=tdtype),
+            sizes,
+            sp_density,
+        )
+    elif bench == "custom_copy" and dtype in ["fp32", "fp16"]:
+        tdtype = STR_TO_DTYPE[dtype]
+        benchmark(
+            device,
+            f"custom_copy_{s}",
+            dtype,
+            partial(copy_benchmark, s=s, dtype=tdtype),
             sizes,
             sp_density,
         )
@@ -580,6 +621,16 @@ if __name__ == "__main__":
             partial(
                 vec_segmented_scan_single_core_benchmark, s=s, segm_density=sp_density
             ),
+            sizes,
+            sp_density,
+        )
+    elif bench == "scscan" and dtype in ["fp16"]:
+        tdtype = STR_TO_DTYPE[dtype]
+        benchmark(
+            device,
+            f"scscan_{s}",
+            dtype,
+            partial(scscan_benchmark, dtype=tdtype, s=s),
             sizes,
             sp_density,
         )
