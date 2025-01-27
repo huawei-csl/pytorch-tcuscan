@@ -296,7 +296,7 @@ def csr_gather_benchmark(device: Device, vec_len: int) -> float:
 
 
 def segmented_scan_single_core_benchmark(
-    device: Device, s: int, vec_len: int, segm_density: float
+    device: Device, vec_len: int, s: int, segm_density: float
 ) -> float:
     """
     Benchmark Segmented Scan Single Core kernel.
@@ -315,6 +315,28 @@ def segmented_scan_single_core_benchmark(
         result = tcuscan_ops.run_seg_scan(x, f, s)
 
     return _run_benchmark(device, run_seg_scan_single_core)
+
+
+def vec_segmented_scan_single_core_benchmark(
+    device: Device, vec_len: int, s: int, segm_density: float
+) -> float:
+    """
+    Benchmark Vectorized Segmented Scan Single Core kernel.
+
+    Args:
+        device: Device to run benchmark on.
+        s: block size [32,64,128]
+        vec_len: Input vector length.
+        segm_density: Float value corresponding to the density"""
+
+    x = torch.randn(vec_len).half().npu()
+    f = torch.empty(vec_len).uniform_(0, 1) < segm_density
+    f = f.to(torch.int8).npu()
+
+    def run_vec_seg_scan_single_core() -> None:
+        result = tcuscan_ops.run_seg_scan_vec(x, f, s)
+
+    return _run_benchmark(device, run_vec_seg_scan_single_core)
 
 
 def compress_benchmark(
@@ -402,25 +424,18 @@ def benchmark(
     else:
         density_str = ""
 
-    with open(f"bench_results_{op_name}_{dtype}_{density_str}.csv", "w") as fd:
+    with open(
+        f"bench_results_{op_name}_{dtype}_{ None if (density_str is None) else density}.csv",
+        "w",
+    ) as fd:
         fd.write(f"operator,dtype,size,density,time_us\n")
 
         for size in sizes:
-            if isinstance(size, tuple):
-                logger.info(
-                    f"OP:{op_name}, dtype: {dtype}, size: {size[0]:}, { None if (density_str is None) else density }, device: {device.str}"
-                )
-                if "seg_scan_sc" in op_name:
-                    time = fn(device, s=size[1], vec_len=size[0])
-                    fd.write(
-                        f"{op_name},{dtype},{size[0]},{size[1]},{density},{time:.2f}\n"
-                    )
-            else:
-                logger.info(
-                    f"OP:{op_name}, dtype: {dtype}, size: {size:}, density: {None if (density_str is None) else density }, device: {device.str}"
-                )
-                time = fn(device, size)
-                fd.write(f"{op_name},{dtype},{size},{density},{time:.2f}\n")
+            logger.info(
+                f"OP:{op_name}, dtype: {dtype}, size: {size:}, density: {None if (density_str is None) else density }, device: {device.str}"
+            )
+            time = fn(device, size)
+            fd.write(f"{op_name},{dtype},{size},{density},{time:.2f}\n")
 
 
 if __name__ == "__main__":
@@ -441,6 +456,7 @@ if __name__ == "__main__":
             "mcscan",
             "compress",
             "segmented_sum",
+            "vec_seg_scan_sc",
         ],
     )
     parser.add_argument("--dtype", choices=["int8", "fp16", "int16", "fp32"])
@@ -538,18 +554,11 @@ if __name__ == "__main__":
         benchmark(device, "csr_gather", "fp16", csr_gather_benchmark, sizes)
     elif bench == "seg_scan_sc" and dtype in ["fp16"]:
         tdtype = STR_TO_DTYPE[dtype]
-        sizes = []
-        possible_sizes = [32, 64, 128]
-        for mul in _MULTIPLIER:
-            for s in possible_sizes:
-                val = mul * s * s
-                touple = (val, s)
-                sizes.append(touple)
         benchmark(
             device,
-            f"seg_scan_sc_{sp_density}",
+            f"seg_scan_sc_{s}",
             "fp16",
-            partial(segmented_scan_single_core_benchmark, segm_density=sp_density),
+            partial(segmented_scan_single_core_benchmark, s=s, segm_density=sp_density),
             sizes,
             sp_density,
         )
@@ -560,6 +569,17 @@ if __name__ == "__main__":
             f"mcscan_{s}",
             dtype,
             partial(mcscan_benchmark, dtype=tdtype, s=s),
+            sizes,
+            sp_density,
+        )
+    elif bench == "vec_seg_scan_sc":
+        benchmark(
+            device,
+            f"vec_seg_scan_sc_{s}",
+            "fp16",
+            partial(
+                vec_segmented_scan_single_core_benchmark, s=s, segm_density=sp_density
+            ),
             sizes,
             sp_density,
         )

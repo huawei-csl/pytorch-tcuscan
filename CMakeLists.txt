@@ -34,6 +34,7 @@ ascendc_library(kernels SHARED
     src/csr_gather.cpp
     src/compress.cpp
     src/scan_single_core.cpp
+    src/seg_scan_vec_single_core.cpp
 )
 
 ascendc_compile_definitions(kernels PRIVATE
