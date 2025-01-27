@@ -16,7 +16,8 @@
 #include "aclrtlaunch_csr_gather.h"
 #include "aclrtlaunch_diff_fp16.h"
 #include "aclrtlaunch_diff_fp32.h"
-#include "aclrtlaunch_scan_multi_core.h"
+#include "aclrtlaunch_scan_multi_core_fp16.h"
+#include "aclrtlaunch_scan_multi_core_int8.h"
 #include "aclrtlaunch_scan_single_core_fp16.h"
 #include "aclrtlaunch_scan_single_core_int8.h"
 #include "aclrtlaunch_seg_scan_single_core.h"
@@ -194,6 +195,9 @@ at::Tensor run_seg_scan(const at::Tensor &x, const at::Tensor &f, int S) {
 at::Tensor run_scan_multi_core(const at::Tensor &x, int S) {
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();
+  const auto dtype = x.options().dtype();
+  const auto dtype_out =
+      dtype == torch::kHalf ? torch::kFloat32 : torch::kInt32;
   const auto ascendc_platform =
       platform_ascendc::PlatformAscendCManager::GetInstance(SOC_VERSION);
 
@@ -203,8 +207,9 @@ at::Tensor run_scan_multi_core(const at::Tensor &x, int S) {
     totalLength *= size;
   }
 
+  // Outuput is always 32-bits (float or int32_t)
   const at::Tensor z = at::empty(
-      {totalLength}, at::TensorOptions().dtype(at::kFloat).device(device));
+      {totalLength}, at::TensorOptions().dtype(dtype_out).device(device));
 
   const uint32_t tile_elems = matmul_size * matmul_size;
   const size_t num_tiles = totalLength / tile_elems;
@@ -227,16 +232,28 @@ at::Tensor run_scan_multi_core(const at::Tensor &x, int S) {
   aclrtMemcpy(tilingDevice, tilingSize, tilingHost, tilingSize,
               ACL_MEMCPY_HOST_TO_DEVICE);
 
-  const uint32_t user_workspace_size =
-      workspace::mc_scan::GetWorkspaceSize<int16_t, float>(
-          tiling.num_elems, tiling.matmul_size, tiling.num_blocks);
-  const at::Tensor workspace_tensor =
-      alloc_workspace(user_workspace_size, device);
+  if (dtype == torch::kHalf) {
+    const uint32_t user_workspace_size =
+        workspace::mc_scan::GetWorkspaceSize<int16_t, float>(
+            tiling.num_elems, tiling.matmul_size, tiling.num_blocks);
+    const at::Tensor workspace_tensor =
+        alloc_workspace(user_workspace_size, device);
+    ACLRT_LAUNCH_KERNEL(scan_multi_core_fp16)
+    (blockDim, acl_stream, const_cast<void *>(x.storage().data()),
+     const_cast<void *>(z.storage().data()),
+     const_cast<void *>(workspace_tensor.storage().data()), tilingDevice);
+  } else {
+    const uint32_t user_workspace_size =
+        workspace::mc_scan::GetWorkspaceSize<int8_t, int32_t>(
+            tiling.num_elems, tiling.matmul_size, tiling.num_blocks);
+    const at::Tensor workspace_tensor =
+        alloc_workspace(user_workspace_size, device);
 
-  ACLRT_LAUNCH_KERNEL(scan_multi_core)
-  (blockDim, acl_stream, const_cast<void *>(x.storage().data()),
-   const_cast<void *>(z.storage().data()),
-   const_cast<void *>(workspace_tensor.storage().data()), tilingDevice);
+    ACLRT_LAUNCH_KERNEL(scan_multi_core_int8)
+    (blockDim, acl_stream, const_cast<void *>(x.storage().data()),
+     const_cast<void *>(z.storage().data()),
+     const_cast<void *>(workspace_tensor.storage().data()), tilingDevice);
+  }
 
   aclrtFree(tilingDevice);
 
