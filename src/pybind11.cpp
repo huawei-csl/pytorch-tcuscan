@@ -10,7 +10,6 @@
 #include <pybind11/pybind11.h>
 #include <torch/extension.h>
 
-#include "aclrtlaunch_add_custom.h"
 #include "aclrtlaunch_compress_fp16.h"
 #include "aclrtlaunch_compress_fp32.h"
 #include "aclrtlaunch_compress_pos_fp16.h"
@@ -26,6 +25,7 @@
 #include "aclrtlaunch_scan_single_core_int8.h"
 #include "aclrtlaunch_seg_scan_single_core.h"
 #include "aclrtlaunch_seg_scan_vec_single_core.h"
+#include "aclrtlaunch_vadd_custom.h"
 #include "tiling/platform/platform_ascendc.h"
 #include "tiling/tiling_compress.h"
 #include "tiling/tiling_copy.h"
@@ -68,7 +68,7 @@ size_t byte_size(const at::Tensor &x) {
   }
 }
 
-at::Tensor run_add_custom(const at::Tensor &x, const at::Tensor &y) {
+at::Tensor run_add(const at::Tensor &x, const at::Tensor &y) {
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Tensor z = at::empty_like(x);
   const at::Device device = x.options().device();
@@ -91,7 +91,7 @@ at::Tensor run_add_custom(const at::Tensor &x, const at::Tensor &y) {
   aclrtMemcpy(tilingDevice, tilingSize, tilingHost, tilingSize,
               ACL_MEMCPY_HOST_TO_DEVICE);
 
-  ACLRT_LAUNCH_KERNEL(add_custom)
+  ACLRT_LAUNCH_KERNEL(vadd_custom)
   (blockDim, acl_stream, const_cast<void *>(x.storage().data()),
    const_cast<void *>(y.storage().data()),
    const_cast<void *>(z.storage().data()),
@@ -608,7 +608,7 @@ at::Tensor run_seg_scan_vec(const at::Tensor &x, const at::Tensor &f, int S) {
 
 PYBIND11_MODULE(tcuscan_ops, m) {
   m.doc() = "TCUSCAN pybind11 interfaces";
-  m.def("run_add_custom", &asc::run_add_custom, "AscendC Vector add");
+  m.def("run_add", &asc::run_add, "AscendC Vector add");
   m.def("run_diff", &asc::run_diff, pybind11::arg(),
         pybind11::arg("max_size") = 0, "AscendC Vector diff");
   m.def("run_seg_scan", &asc::run_seg_scan, "AscendC Segmented Scan");

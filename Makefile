@@ -30,6 +30,9 @@ build: build.sh src/vadd.cpp src/diff.cpp src/seg_scan_single_core.cpp src/pybin
 test:
 	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:$(shell pwd)/build/lib/  python3 -m pytest tests/
 
+test_%:
+	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:$(shell pwd)/build/lib/  python3 -m pytest tests/test_$*.py
+
 profile_%: profile_fp32_$* profile_fp16_$* profile_int16_$*
 
 profile_fp16_%:

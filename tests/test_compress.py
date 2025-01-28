@@ -6,8 +6,6 @@ import pytest
 
 torch.npu.config.allow_internal_format = False
 
-NUM_CORES = 20
-
 
 def get_lengths(s: int, max_iters: int):
     NUM_AI_CORES = 20

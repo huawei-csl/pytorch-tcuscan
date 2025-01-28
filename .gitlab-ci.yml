@@ -10,6 +10,7 @@ stages:
    - linter
    - build
    - tests
+   - test_all
 
 # Define the workflow rules manually to make sure only a single pipeline
 # is created for each MR update. Without that, GitLab creates one pipeline
@@ -71,13 +72,80 @@ build:
     - make setup_ci
     - make build
 
-unit_test:
+.test_config: &test_config
   tags:
     - baremetal
   stage: tests
   needs: []
   dependencies: []
+
+test_compress:
+  <<: *test_config
   script:
     - make setup_ci
-    - export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:$(pwd)/build/lib
+    - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make build && make test_compress
+
+test_copy:
+  <<: *test_config
+  script:
+    - make setup_ci
+    - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make build && make test_copy
+
+test_csr_gather:
+  <<: *test_config
+  script:
+    - make setup_ci
+    - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make build && make test_csr_gather
+
+test_diff:
+  <<: *test_config
+  script:
+    - make setup_ci
+    - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make build && make test_diff
+
+test_mcscan:
+  <<: *test_config
+  script:
+    - make setup_ci
+    - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make build && make test_scan_multi_core
+
+test_scan_single_core:
+  <<: *test_config
+  script:
+    - make setup_ci
+    - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make build && make test_scan_single_core
+
+test_seg_scan_single_core:
+  <<: *test_config
+  script:
+    - make setup_ci
+    - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make build && make test_seg_scan_single_core
+
+test_seg_scan_vec_single_core:
+  <<: *test_config
+  script:
+    - make setup_ci
+    - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make build && make test_seg_scan_vec_single_core
+
+test_segmented_sum:
+  <<: *test_config
+  script:
+    - make setup_ci
+    - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make build && make test_segmented_sum
+
+test_vadd:
+  <<: *test_config
+  script:
+    - make setup_ci
+    - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make build && make test_vadd
+
+# Uncomment to run all tests in a single run
+.unit_test:
+  tags:
+    - baremetal
+  stage: test_all
+  needs: ["test_vadd", "test_compress", "test_csr_gather", "test_diff", "test_mcscan", "test_seg_scan_single_core", "test_segmented_sum"]
+  dependencies: []
+  script:
+    - make setup_ci
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make build test

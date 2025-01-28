@@ -27,9 +27,9 @@ __aicore__ inline void CopyTiling(VaddTiling *tiling, GM_ADDR tilingGM) {
  * @param [in] tilingGm Pointer to the tiling buffer.
  */
 
-extern "C" __global__ __aicore__ void add_custom(GM_ADDR x, GM_ADDR y,
-                                                 GM_ADDR z, GM_ADDR workspace,
-                                                 GM_ADDR tilingGm) {
+extern "C" __global__ __aicore__ void vadd_custom(GM_ADDR x, GM_ADDR y,
+                                                  GM_ADDR z, GM_ADDR workspace,
+                                                  GM_ADDR tilingGm) {
   VaddTiling tiling;
   CopyTiling(&tiling, tilingGm);
 

@@ -36,7 +36,7 @@ def get_profiling_lengths():
     max_size = 1e8
     max_iters = ceil(max_size / (num_cores * s * s))
 
-    return [i * num_cores * s * s for i in range(1, max_iters, 16 * 128 // s)]
+    return [i * num_cores * s * s for i in range(1, max_iters, s * s)]
 
 
 def _test_tcuscan_copy(length: int, dtype: torch.dtype, s: int):
