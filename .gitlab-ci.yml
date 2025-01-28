@@ -71,73 +71,79 @@ build:
   script:
     - make setup_ci
     - make build
+  artifacts:
+    expire_in: 2 hours
+    paths:
+      - tcuscan_ops.*.so
+      - build/
+
 
 .test_config: &test_config
   tags:
     - baremetal
   stage: tests
-  needs: []
-  dependencies: []
+  needs: [build]
+  dependencies: [build]
 
 test_compress:
   <<: *test_config
   script:
     - make setup_ci
-    - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make build && make test_compress
+    - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_compress
 
 test_copy:
   <<: *test_config
   script:
     - make setup_ci
-    - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make build && make test_copy
+    - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_copy
 
 test_csr_gather:
   <<: *test_config
   script:
     - make setup_ci
-    - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make build && make test_csr_gather
+    - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_csr_gather
 
 test_diff:
   <<: *test_config
   script:
     - make setup_ci
-    - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make build && make test_diff
+    - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_diff
 
 test_mcscan:
   <<: *test_config
   script:
     - make setup_ci
-    - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make build && make test_scan_multi_core
+    - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_scan_multi_core
 
 test_scan_single_core:
   <<: *test_config
   script:
     - make setup_ci
-    - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make build && make test_scan_single_core
+    - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_scan_single_core
 
 test_seg_scan_single_core:
   <<: *test_config
   script:
     - make setup_ci
-    - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make build && make test_seg_scan_single_core
+    - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_seg_scan_single_core
 
 test_seg_scan_vec_single_core:
   <<: *test_config
   script:
     - make setup_ci
-    - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make build && make test_seg_scan_vec_single_core
+    - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_seg_scan_vec_single_core
 
 test_segmented_sum:
   <<: *test_config
   script:
     - make setup_ci
-    - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make build && make test_segmented_sum
+    - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_segmented_sum
 
 test_vadd:
   <<: *test_config
   script:
     - make setup_ci
-    - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make build && make test_vadd
+    - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_vadd
 
 # Uncomment to run all tests in a single run
 .unit_test:
