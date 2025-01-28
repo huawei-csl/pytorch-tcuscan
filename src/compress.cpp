@@ -36,8 +36,27 @@ extern "C" __global__ __aicore__ void compress_fp16(GM_ADDR x, GM_ADDR mask,
   const uint32_t scan_tile_size = tiling.scan_tile_size;
   const uint32_t compress_tile_size = tiling.compress_tile_size;
 
-  run_compress_uint16(x, mask, z, lower, usrWorkspace, in_size, scan_tile_size,
+  _run_compress<half>(x, mask, z, lower, usrWorkspace, in_size, scan_tile_size,
                       compress_tile_size);
+}
+
+extern "C" __global__ __aicore__ void compress_pos_fp16(
+    GM_ADDR vec_in, GM_ADDR mask, GM_ADDR pos, GM_ADDR vec_out,
+    GM_ADDR workspace, GM_ADDR tilingGm) {
+  CompressTiling tiling;
+  CopyTiling(&tiling, tilingGm);
+
+  const uint32_t in_size = tiling.size;
+  const uint32_t scan_tile_size = tiling.scan_tile_size;
+  const uint32_t compress_tile_size = tiling.compress_tile_size;
+
+  if ASCEND_IS_AIV {
+    SyncAll<true /*isAIVOnly*/>();
+
+    KernelCompress<half> op(in_size, compress_tile_size);
+    op.Init(vec_in, mask, pos, vec_out);
+    op.Process();
+  }
 }
 
 extern "C" __global__ __aicore__ void compress_fp32(GM_ADDR x, GM_ADDR mask,
@@ -54,6 +73,25 @@ extern "C" __global__ __aicore__ void compress_fp32(GM_ADDR x, GM_ADDR mask,
   const uint32_t scan_tile_size = tiling.scan_tile_size;
   const uint32_t compress_tile_size = tiling.compress_tile_size;
 
-  run_compress_fp32(x, mask, z, lower, usrWorkspace, in_size, scan_tile_size,
-                    compress_tile_size);
+  _run_compress<float>(x, mask, z, lower, usrWorkspace, in_size, scan_tile_size,
+                       compress_tile_size);
+}
+
+extern "C" __global__ __aicore__ void compress_pos_fp32(
+    GM_ADDR vec_in, GM_ADDR mask, GM_ADDR pos, GM_ADDR vec_out,
+    GM_ADDR workspace, GM_ADDR tilingGm) {
+  CompressTiling tiling;
+  CopyTiling(&tiling, tilingGm);
+
+  const uint32_t in_size = tiling.size;
+  const uint32_t scan_tile_size = tiling.scan_tile_size;
+  const uint32_t compress_tile_size = tiling.compress_tile_size;
+
+  if ASCEND_IS_AIV {
+    SyncAll<true /*isAIVOnly*/>();
+
+    KernelCompress<float> op(in_size, compress_tile_size);
+    op.Init(vec_in, mask, pos, vec_out);
+    op.Process();
+  }
 }

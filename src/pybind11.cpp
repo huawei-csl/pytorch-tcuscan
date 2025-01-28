@@ -13,6 +13,8 @@
 #include "aclrtlaunch_add_custom.h"
 #include "aclrtlaunch_compress_fp16.h"
 #include "aclrtlaunch_compress_fp32.h"
+#include "aclrtlaunch_compress_pos_fp16.h"
+#include "aclrtlaunch_compress_pos_fp32.h"
 #include "aclrtlaunch_copy_fp16.h"
 #include "aclrtlaunch_copy_fp32.h"
 #include "aclrtlaunch_csr_gather.h"
@@ -267,7 +269,6 @@ at::Tensor run_compress(const at::Tensor &x, const at::Tensor &mask, int S) {
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();
   const auto dtype = x.options().dtype();
-  const at::Tensor z = at::empty_like(x);
 
   const auto ascendc_platform =
       platform_ascendc::PlatformAscendCManager::GetInstance(SOC_VERSION);
@@ -281,7 +282,7 @@ at::Tensor run_compress(const at::Tensor &x, const at::Tensor &mask, int S) {
   const uint32_t tile_elems = matmul_size * matmul_size;
   const uint32_t vec_tile_size = tile_elems / 2;
 
-  const size_t num_tiles = totalLength / tile_elems;
+  const uint32_t num_tiles = totalLength / tile_elems;
 
   uint32_t blockDim = ascendc_platform->GetCoreNum() / 2;
   while (num_tiles % blockDim != 0) {
@@ -290,6 +291,9 @@ at::Tensor run_compress(const at::Tensor &x, const at::Tensor &mask, int S) {
   if (blockDim <= 1) {
     blockDim = 1;
   }
+
+  const at::Tensor z =
+      at::empty({totalLength}, at::TensorOptions().dtype(dtype).device(device));
 
   const CompressTiling tiling{totalLength, matmul_size, vec_tile_size};
 
@@ -301,8 +305,8 @@ at::Tensor run_compress(const at::Tensor &x, const at::Tensor &mask, int S) {
   aclrtMemcpy(tilingDevice, tilingSize, tilingHost, tilingSize,
               ACL_MEMCPY_HOST_TO_DEVICE);
 
-  const uint32_t user_workspace_size = workspace::compress::GetWorkspaceSize(
-      tiling.size, tiling.scan_tile_size, tiling.compress_tile_size);
+  const uint32_t user_workspace_size =
+      workspace::compress::GetWorkspaceSize(tiling, blockDim);
   const at::Tensor workspace_tensor =
       alloc_workspace(user_workspace_size, device);
 
@@ -373,22 +377,92 @@ at::Tensor run_csr_gather(const at::Tensor &values, const at::Tensor &cols,
   return z;
 }
 
+at::Tensor run_compress_pos(const at::Tensor &x, const at::Tensor &mask,
+                            const at::Tensor &pos, int s) {
+  auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
+  const at::Device device = x.options().device();
+  const auto dtype = x.options().dtype();
+
+  const auto ascendc_platform =
+      platform_ascendc::PlatformAscendCManager::GetInstance(SOC_VERSION);
+
+  const uint32_t matmul_size = static_cast<uint32_t>(s);
+  uint32_t totalLength = 1;
+  for (uint32_t size : x.sizes()) {
+    totalLength *= size;
+  }
+
+  const uint32_t tile_elems = matmul_size * matmul_size;
+  const uint32_t vec_tile_size = tile_elems / 2;
+
+  const uint32_t num_tiles = totalLength / tile_elems;
+
+  uint32_t blockDim = ascendc_platform->GetCoreNum() / 2;
+  while (num_tiles % blockDim != 0) {
+    blockDim--;
+  }
+  if (blockDim <= 1) {
+    blockDim = 1;
+  }
+
+  // Last entry of pos tensor contains number of output elements.
+  const at::Tensor z =
+      at::empty({pos[totalLength - 1].item<int32_t>()},
+                at::TensorOptions().dtype(dtype).device(device));
+
+  const CompressTiling tiling{totalLength, matmul_size, vec_tile_size};
+
+  constexpr size_t tilingSize = sizeof(CompressTiling);
+  const uint8_t *tilingHost = reinterpret_cast<const uint8_t *>(&tiling);
+
+  uint8_t *tilingDevice;
+  aclrtMalloc((void **)&tilingDevice, tilingSize, ACL_MEM_MALLOC_HUGE_FIRST);
+  aclrtMemcpy(tilingDevice, tilingSize, tilingHost, tilingSize,
+              ACL_MEMCPY_HOST_TO_DEVICE);
+
+  const uint32_t user_workspace_size =
+      workspace::compress::GetWorkspaceSize(tiling, blockDim);
+  const at::Tensor workspace_tensor =
+      alloc_workspace(user_workspace_size, device);
+
+  if (dtype == torch::kHalf or dtype == torch::kInt16) {
+    ACLRT_LAUNCH_KERNEL(compress_pos_fp16)
+    (blockDim, acl_stream, const_cast<void *>(x.storage().data()),
+     const_cast<void *>(mask.storage().data()),
+     const_cast<void *>(pos.storage().data()),
+     const_cast<void *>(z.storage().data()),
+     const_cast<void *>(workspace_tensor.storage().data()), tilingDevice);
+  } else {
+    ACLRT_LAUNCH_KERNEL(compress_pos_fp32)
+    (blockDim, acl_stream, const_cast<void *>(x.storage().data()),
+     const_cast<void *>(mask.storage().data()),
+     const_cast<void *>(pos.storage().data()),
+     const_cast<void *>(z.storage().data()),
+     const_cast<void *>(workspace_tensor.storage().data()), tilingDevice);
+  }
+
+  aclrtFree(tilingDevice);
+
+  return z;
+}
+
 at::Tensor run_seg_sum(const at::Tensor &x, const at::Tensor &f, int S) {
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const auto ascendc_platform =
       platform_ascendc::PlatformAscendCManager::GetInstance(SOC_VERSION);
   const uint32_t matmul_size = static_cast<uint32_t>(S);
-  const auto dtype = x.options().dtype();
   const at::Device device = x.options().device();
-  const at::Tensor prepend =
-      at::empty({1}, at::TensorOptions().dtype(dtype).device(device)).zero_();
 
   const at::Tensor scan_x = run_scan_multi_core(x, matmul_size);
-  aclrtSynchronizeStream(acl_stream);
-  const at::Tensor compress_scan_x = run_compress(scan_x, f, matmul_size);
-  const at::Tensor num_ones = at::sum(f);
-  const at::Tensor prep_compress_scan_x = torch::cat(
-      {prepend, compress_scan_x.slice(0, 0, num_ones.item<int64_t>())});
+  const at::Tensor out_positions = run_scan_multi_core(f, matmul_size);
+  const at::Tensor compress_scan_x =
+      run_compress_pos(scan_x, f, out_positions, matmul_size);
+
+  const at::Tensor prepend =
+      at::empty({1}, at::TensorOptions().dtype(at::kFloat).device(device))
+          .zero_();
+  const at::Tensor prep_compress_scan_x =
+      torch::cat({prepend, compress_scan_x});
   const at::Tensor z = torch::diff(prep_compress_scan_x);
 
   return z;
@@ -541,6 +615,8 @@ PYBIND11_MODULE(tcuscan_ops, m) {
   m.def("run_scan_multi_core", &asc::run_scan_multi_core, "AscendC MCSCAN");
   m.def("run_csr_gather", &asc::run_csr_gather, "AscendC CSR gather");
   m.def("run_compress", &asc::run_compress, "AscendC compress");
+  m.def("run_compress_pos", &asc::run_compress_pos,
+        "AscendC compress with pre-computed output positions");
   m.def("run_seg_sum", &asc::run_seg_sum, "AscendC Segmented Sum");
   m.def("run_copy", &asc::run_copy, "AscendC Copy single core");
   m.def("run_scan_single_core", &asc::run_scan_single_core,

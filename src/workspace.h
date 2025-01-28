@@ -9,6 +9,7 @@
 #include <cstdint>
 
 #include "host_utils.h"
+#include "tiling/tiling_compress.h"
 #include "tiling/tiling_copy.h"
 #include "tiling/tiling_scan_multi_core.h"
 #include "tiling/tiling_scan_single_core.h"
@@ -81,17 +82,16 @@ namespace compress {
  *
  * @tparam InputT Input data type.
  *
- * @param [in] input_elems Number of elements in the input vector.
- * @param [in] scan_tile_size Size of the matmul used in scan.
+ * @param [in] tiling Tiling parameters used in the kernel.
  * @param [in] num_blocks Number of blocks.
  * @return Size of the workspace in bytes.
  */
-constexpr uint32_t GetWorkspaceSize(size_t input_elems, size_t scan_tile_size,
-                                    size_t num_blocks) {
+constexpr uint32_t GetWorkspaceSize(const CompressTiling& tiling,
+                                    uint32_t num_blocks) {
   const uint32_t scan_res_size = host_utils::AlignUp(
-      input_elems * sizeof(int32_t), host_utils::GM_ALIGNMENT);
+      tiling.size * sizeof(int32_t), host_utils::GM_ALIGNMENT);
   const uint32_t scan_ws_size = mc_scan::GetWorkspaceSize<int8_t, int32_t>(
-      input_elems, scan_tile_size, num_blocks);
+      tiling.size, tiling.scan_tile_size, num_blocks);
   return scan_res_size + scan_ws_size;
 };
 
@@ -108,7 +108,7 @@ namespace sc_scan {
  * @return Size of the workspace in bytes.
  */
 template <typename InputT>
-constexpr uint32_t GetWorkspaceSize(const SingleCoreScanTiling &tiling) {
+constexpr uint32_t GetWorkspaceSize(const SingleCoreScanTiling& tiling) {
   const uint32_t padded_input_len = host_utils::AlignUp(
       tiling.num_elems, tiling.matmul_size * tiling.matmul_size);
   const uint32_t padded_input_size = padded_input_len * sizeof(InputT);
