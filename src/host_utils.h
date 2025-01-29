@@ -81,6 +81,27 @@ double GetMedian(const std::vector<T> &v) {
   return (v_sorted[n / 2 - 1] + v_sorted[n / 2]) / 2.;
 }
 
+/**
+ * @brief A type metafunction for Cube's input / output types. For input type
+ * half returns float, otherwise int32_t.
+ *
+ * @tparam InputT Input cube type. Must be half or int8_t.
+ */
+template <typename InputT>
+struct CubeOutType {
+  using type = typename std::conditional<
+      sizeof(InputT) == 2, float,
+      typename std::conditional<std::is_same_v<InputT, int8_t>, int32_t,
+                                uint32_t>::type>::type;
+};
+
+/**
+ * @brief Syntactic sugar for `CubeOutType`
+ * @tparam T Input type
+ */
+template <typename T>
+using CubeOutType_t = typename CubeOutType<T>::type;
+
 /// Maximum size of the L2 cache.
 constexpr int32_t L2_SIZE = 192 * 1024 * 1024;
 /// Global memory allocation alignment, added only for performance.

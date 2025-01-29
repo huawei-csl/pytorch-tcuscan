@@ -17,9 +17,11 @@
 namespace workspace {
 
 namespace seg_scan {
-template <typename InputVecT, typename OutputVecT, typename FlagVecT,
-          typename FlagOutputVecT>
+template <typename InputVecT, typename FlagVecT>
 constexpr uint32_t GetWorkspaceSize(uint32_t vec_len, uint32_t matmul_size) {
+  using OutputVecT = host_utils::CubeOutType_t<InputVecT>;
+  using FlagOutputVecT = host_utils::CubeOutType_t<FlagVecT>;
+
   const uint32_t padded_vec_len =
       host_utils::AlignUp(vec_len, matmul_size * matmul_size);
   const uint32_t padded_input_size = padded_vec_len * sizeof(InputVecT);
@@ -43,16 +45,17 @@ namespace mc_scan {
  * @brief Calculate the workspace size for multi core scan.
  *
  * @tparam InputT Input data type.
- * @tparam OutputT Output data type.
  *
  * @param [in] input_elems Number of elements in the input vector.
  * @param [in] matmul_size Size of the matmul used in scan.
  * @param [in] num_blocks Number of blocks.
  * @return Size of the workspace in bytes.
  */
-template <typename InputT, typename OutputT, bool IsInclusive = true>
+template <typename InputT, bool IsInclusive = true>
 constexpr uint32_t GetWorkspaceSize(uint32_t input_elems, uint32_t matmul_size,
                                     uint32_t num_blocks) {
+  using OutputT = host_utils::CubeOutType_t<InputT>;
+
   const uint32_t align_size = matmul_size * matmul_size;
   const uint32_t padded_input_len =
       host_utils::AlignUp(input_elems, align_size);
@@ -86,11 +89,12 @@ namespace compress {
  * @param [in] num_blocks Number of blocks.
  * @return Size of the workspace in bytes.
  */
+template <typename InputT>
 constexpr uint32_t GetWorkspaceSize(const CompressTiling& tiling,
                                     uint32_t num_blocks) {
   const uint32_t scan_res_size = host_utils::AlignUp(
       tiling.size * sizeof(int32_t), host_utils::GM_ALIGNMENT);
-  const uint32_t scan_ws_size = mc_scan::GetWorkspaceSize<int8_t, int32_t>(
+  const uint32_t scan_ws_size = mc_scan::GetWorkspaceSize<int8_t>(
       tiling.size, tiling.scan_tile_size, num_blocks);
   return scan_res_size + scan_ws_size;
 };
@@ -109,10 +113,12 @@ namespace sc_scan {
  */
 template <typename InputT>
 constexpr uint32_t GetWorkspaceSize(const SingleCoreScanTiling& tiling) {
+  using OutputT = host_utils::CubeOutType_t<InputT>;
+
   const uint32_t padded_input_len = host_utils::AlignUp(
       tiling.num_elems, tiling.matmul_size * tiling.matmul_size);
   const uint32_t padded_input_size = padded_input_len * sizeof(InputT);
-  const uint32_t padded_rowwise_size = padded_input_len * sizeof(int32_t);
+  const uint32_t padded_rowwise_size = padded_input_len * sizeof(OutputT);
 
   const uint32_t total_size = padded_input_size + padded_rowwise_size;
   return total_size;

@@ -226,7 +226,7 @@ class KernelCompress {
 template <typename InputT>
 __aicore__ inline void _run_compress(GM_ADDR in, GM_ADDR mask, GM_ADDR out,
                                      GM_ADDR upper, GM_ADDR workspace,
-                                     uint32_t in_size, uint16_t scan_tile_size,
+                                     uint32_t in_size, uint32_t scan_tile_size,
                                      uint32_t compress_tile_size) {
   using OutputT = kernel_utils::cube_unit::CubeOutType_t<InputT>;
 
@@ -236,12 +236,12 @@ __aicore__ inline void _run_compress(GM_ADDR in, GM_ADDR mask, GM_ADDR out,
   GM_ADDR const scan_res = workspace;
   GM_ADDR const scan_workspace = scan_res + scan_res_size;
 
-  run_scan_multi_core_kernel<int8_t, true>(
-      mask, upper, scan_res, scan_workspace, in_size, scan_tile_size);
+  run_scan_multi_core_kernel<int8_t>(mask, upper, scan_res, scan_workspace,
+                                     in_size, scan_tile_size);
+
+  SyncAll<true /*isAIVOnly*/>();
 
   if ASCEND_IS_AIV {
-    SyncAll<true /*isAIVOnly*/>();
-
     KernelCompress<InputT> op(in_size, compress_tile_size);
     op.Init(in, mask, scan_res, out);
     op.Process();

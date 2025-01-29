@@ -25,6 +25,7 @@
 #include "aclrtlaunch_scan_single_core_int8.h"
 #include "aclrtlaunch_seg_scan_single_core.h"
 #include "aclrtlaunch_seg_scan_vec_single_core.h"
+// #include "aclrtlaunch_segmented_sum_fp16.h"
 #include "aclrtlaunch_vadd_custom.h"
 #include "tiling/platform/platform_ascendc.h"
 #include "tiling/tiling_compress.h"
@@ -98,6 +99,7 @@ at::Tensor run_add(const at::Tensor &x, const at::Tensor &y) {
    const_cast<void *>(workspace_tensor.storage().data()), tilingDevice);
 
   aclrtFree(tilingDevice);
+  aclrtSynchronizeStream(acl_stream);
 
   return z;
 }
@@ -133,8 +135,8 @@ at::Tensor run_diff(const at::Tensor &x, int64_t max_size) {
   aclrtMemcpy(tilingDevice, tilingSize, tilingHost, tilingSize,
               ACL_MEMCPY_HOST_TO_DEVICE);
 
-  uint32_t blockDim = static_cast<uint32_t>(totalLength / tileLen);
-  blockDim = blockDim > 40 ? 40 : blockDim;
+  uint32_t blockDim =
+      static_cast<uint32_t>((totalLength + tileLen - 1) / tileLen);
 
   if (blockDim < 1) {
     blockDim = 1;
@@ -153,6 +155,7 @@ at::Tensor run_diff(const at::Tensor &x, int64_t max_size) {
   }
 
   aclrtFree(tilingDevice);
+  aclrtSynchronizeStream(acl_stream);
 
   return z;
 }
@@ -181,7 +184,7 @@ at::Tensor run_seg_scan(const at::Tensor &x, const at::Tensor &f, int S) {
               ACL_MEMCPY_HOST_TO_DEVICE);
 
   const uint32_t user_workspace_size =
-      workspace::seg_scan::GetWorkspaceSize<int16_t, float, int8_t, int32_t>(
+      workspace::seg_scan::GetWorkspaceSize<int16_t /* half */, int8_t>(
           totalLength, matmul_size);
   const at::Tensor workspace_tensor =
       alloc_workspace(user_workspace_size, device);
@@ -193,6 +196,7 @@ at::Tensor run_seg_scan(const at::Tensor &x, const at::Tensor &f, int S) {
    const_cast<void *>(workspace_tensor.storage().data()), tilingDevice);
 
   aclrtFree(tilingDevice);
+  aclrtSynchronizeStream(acl_stream);
 
   return z;
 }
@@ -239,7 +243,7 @@ at::Tensor run_scan_multi_core(const at::Tensor &x, int S) {
 
   if (dtype == torch::kHalf) {
     const uint32_t user_workspace_size =
-        workspace::mc_scan::GetWorkspaceSize<int16_t, float>(
+        workspace::mc_scan::GetWorkspaceSize<int16_t>(
             tiling.num_elems, tiling.matmul_size, tiling.num_blocks);
     const at::Tensor workspace_tensor =
         alloc_workspace(user_workspace_size, device);
@@ -249,7 +253,7 @@ at::Tensor run_scan_multi_core(const at::Tensor &x, int S) {
      const_cast<void *>(workspace_tensor.storage().data()), tilingDevice);
   } else {
     const uint32_t user_workspace_size =
-        workspace::mc_scan::GetWorkspaceSize<int8_t, int32_t>(
+        workspace::mc_scan::GetWorkspaceSize<int8_t>(
             tiling.num_elems, tiling.matmul_size, tiling.num_blocks);
     const at::Tensor workspace_tensor =
         alloc_workspace(user_workspace_size, device);
@@ -261,6 +265,7 @@ at::Tensor run_scan_multi_core(const at::Tensor &x, int S) {
   }
 
   aclrtFree(tilingDevice);
+  aclrtSynchronizeStream(acl_stream);
 
   return z;
 }
@@ -306,7 +311,7 @@ at::Tensor run_compress(const at::Tensor &x, const at::Tensor &mask, int S) {
               ACL_MEMCPY_HOST_TO_DEVICE);
 
   const uint32_t user_workspace_size =
-      workspace::compress::GetWorkspaceSize(tiling, blockDim);
+      workspace::compress::GetWorkspaceSize<int8_t>(tiling, blockDim);
   const at::Tensor workspace_tensor =
       alloc_workspace(user_workspace_size, device);
 
@@ -325,6 +330,7 @@ at::Tensor run_compress(const at::Tensor &x, const at::Tensor &mask, int S) {
   }
 
   aclrtFree(tilingDevice);
+  aclrtSynchronizeStream(acl_stream);
 
   return z;
 }
@@ -373,6 +379,7 @@ at::Tensor run_csr_gather(const at::Tensor &values, const at::Tensor &cols,
    const_cast<void *>(workspace_tensor.storage().data()), tilingDevice);
 
   aclrtFree(tilingDevice);
+  aclrtSynchronizeStream(acl_stream);
 
   return z;
 }
@@ -421,7 +428,7 @@ at::Tensor run_compress_pos(const at::Tensor &x, const at::Tensor &mask,
               ACL_MEMCPY_HOST_TO_DEVICE);
 
   const uint32_t user_workspace_size =
-      workspace::compress::GetWorkspaceSize(tiling, blockDim);
+      workspace::compress::GetWorkspaceSize<int8_t>(tiling, blockDim);
   const at::Tensor workspace_tensor =
       alloc_workspace(user_workspace_size, device);
 
@@ -442,6 +449,7 @@ at::Tensor run_compress_pos(const at::Tensor &x, const at::Tensor &mask,
   }
 
   aclrtFree(tilingDevice);
+  aclrtSynchronizeStream(acl_stream);
 
   return z;
 }
@@ -450,13 +458,12 @@ at::Tensor run_seg_sum(const at::Tensor &x, const at::Tensor &f, int S) {
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const auto ascendc_platform =
       platform_ascendc::PlatformAscendCManager::GetInstance(SOC_VERSION);
-  const uint32_t matmul_size = static_cast<uint32_t>(S);
   const at::Device device = x.options().device();
 
-  const at::Tensor scan_x = run_scan_multi_core(x, matmul_size);
-  const at::Tensor out_positions = run_scan_multi_core(f, matmul_size);
+  const at::Tensor scan_x = run_scan_multi_core(x, S);
+  const at::Tensor out_positions = run_scan_multi_core(f, S);
   const at::Tensor compress_scan_x =
-      run_compress_pos(scan_x, f, out_positions, matmul_size);
+      run_compress_pos(scan_x, f, out_positions, S);
 
   const at::Tensor prepend =
       at::empty({1}, at::TensorOptions().dtype(at::kFloat).device(device))
@@ -465,6 +472,7 @@ at::Tensor run_seg_sum(const at::Tensor &x, const at::Tensor &f, int S) {
       torch::cat({prepend, compress_scan_x});
   const at::Tensor z = torch::diff(prep_compress_scan_x);
 
+  aclrtSynchronizeStream(acl_stream);
   return z;
 }
 
@@ -510,6 +518,7 @@ at::Tensor run_copy(const at::Tensor &x, int s) {
   }
 
   aclrtFree(tilingDevice);
+  aclrtSynchronizeStream(acl_stream);
 
   return z;
 }
@@ -562,6 +571,7 @@ at::Tensor run_scan_single_core(const at::Tensor &x, int S) {
   }
 
   aclrtFree(tilingDevice);
+  aclrtSynchronizeStream(acl_stream);
 
   return z;
 }
@@ -600,6 +610,7 @@ at::Tensor run_seg_scan_vec(const at::Tensor &x, const at::Tensor &f, int S) {
    const_cast<void *>(workspace_tensor.storage().data()), tilingDevice);
 
   aclrtFree(tilingDevice);
+  aclrtSynchronizeStream(acl_stream);
 
   return z;
 }

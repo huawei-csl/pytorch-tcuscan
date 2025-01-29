@@ -51,8 +51,8 @@ class KernelRowScan {
    * @param [in] matmul_m_size Size of the M dimension of A matrix.
    * @param [in] vec_len Number of elements in an input vector.
    */
-  __aicore__ inline KernelRowScan(uint16_t matmul_k_size,
-                                  uint16_t matmul_m_size, uint32_t vec_len)
+  __aicore__ inline KernelRowScan(uint32_t matmul_k_size,
+                                  uint32_t matmul_m_size, uint32_t vec_len)
       : block_num_(GetBlockNum()),
         matmul_k_size_(matmul_k_size),
         matmul_m_size_(matmul_m_size),
@@ -144,28 +144,28 @@ class KernelRowScan {
   GlobalTensor<InputT> global_A_, global_B_;
   GlobalTensor<OutputT> global_C_;
 
-  const uint16_t block_num_;
-  const uint16_t matmul_k_size_;
-  const uint16_t matmul_m_size_;
+  const uint32_t block_num_;
+  const uint32_t matmul_k_size_;
+  const uint32_t matmul_m_size_;
   const uint32_t tile_size_;
   const uint32_t vec_len_;
   const uint32_t num_tiles_;
   const uint32_t max_num_tiles_per_block_;
 
-  constexpr static uint16_t M_CUBE_BLOCK_SIZE =
+  constexpr static uint32_t M_CUBE_BLOCK_SIZE =
       kernel_utils::GetFractalMN<InputT>();
-  constexpr static uint16_t N_CUBE_BLOCK_SIZE =
+  constexpr static uint32_t N_CUBE_BLOCK_SIZE =
       kernel_utils::GetFractalMN<InputT>();
   // Fractal size is 16x32 for 8-bit input data types instead of the standard
   // 16x16 one
-  constexpr static uint16_t K_CUBE_BLOCK_SIZE =
+  constexpr static uint32_t K_CUBE_BLOCK_SIZE =
       kernel_utils::GetFractalK<InputT>();
-  const uint16_t K_ = matmul_k_size_;
-  const uint16_t N_ = matmul_k_size_;
+  const uint32_t K_ = matmul_k_size_;
+  const uint32_t N_ = matmul_k_size_;
 
-  const uint16_t n_blocks_ = N_ / N_CUBE_BLOCK_SIZE;
-  const uint16_t k_blocks_ = K_ / K_CUBE_BLOCK_SIZE;
-  const uint16_t m_blocks_ = matmul_m_size_ / M_CUBE_BLOCK_SIZE;
+  const uint32_t n_blocks_ = N_ / N_CUBE_BLOCK_SIZE;
+  const uint32_t k_blocks_ = K_ / K_CUBE_BLOCK_SIZE;
+  const uint32_t m_blocks_ = matmul_m_size_ / M_CUBE_BLOCK_SIZE;
 
   const uint32_t a_cube_tile_size_ = matmul_m_size_ * K_;
   const uint32_t b_cube_tile_size_ = K_ * N_;
@@ -346,8 +346,8 @@ class KernelCompleteRows {
    * @param [in] tile_height Number of rows processed in a single iteration.
    * @param [in] vec_len Number of elements in an input vector.
    */
-  __aicore__ inline KernelCompleteRows(uint16_t tile_width,
-                                       uint16_t tile_height, uint32_t vec_len)
+  __aicore__ inline KernelCompleteRows(uint32_t tile_width,
+                                       uint32_t tile_height, uint32_t vec_len)
       : block_num_(GetBlockNum() * GetTaskRation()),
         tile_width_(tile_width),
         tile_height_(tile_height),
@@ -491,8 +491,8 @@ class KernelCompleteRows {
   constexpr static uint32_t global_shift_ = IsInclusive ? 0 : 1;
 
   const uint32_t block_num_;
-  const uint16_t tile_width_;
-  const uint16_t tile_height_;
+  const uint32_t tile_width_;
+  const uint32_t tile_height_;
   const uint32_t tile_size_;
   const uint32_t sums_len_;
 
@@ -556,7 +556,7 @@ __aicore__ inline uint32_t get_workspace_size(uint32_t input_elems,
 template <typename InputT, bool IsInclusive = true>
 __aicore__ inline void run_scan_multi_core_kernel(
     GM_ADDR input_vec, GM_ADDR upper_triangular, GM_ADDR output_vec,
-    GM_ADDR workspace, uint32_t vec_len, uint16_t matmul_size,
+    GM_ADDR workspace, uint32_t vec_len, uint32_t matmul_size,
     kernel_utils::cube_unit::CubeOutType_t<InputT> starting_value = 0) {
   using OutputT = kernel_utils::cube_unit::CubeOutType_t<InputT>;
 
