@@ -1,6 +1,5 @@
 import torch
 import torch_npu  # noqa
-import numpy as np
 import tcuscan_ops
 import pytest
 

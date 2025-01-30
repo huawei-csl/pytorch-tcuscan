@@ -11,20 +11,28 @@ import os
 import sys
 import types
 import typing
-import numpy as np
 from dataclasses import dataclass
 from functools import partial
 from math import ceil
 from typing import Optional
 
-
 import torch
+
+DEVICE = os.environ.get("DEVICE_TYPE", "npu")
+if DEVICE == "npu":
+    import torch_npu  # noqa
+
+    NPU_DEVICE = "npu:1"
+    torch.npu.config.allow_internal_format = False
+    torch.npu.set_device(NPU_DEVICE)
+    assert torch.npu.is_available()
+
+import tcuscan_ops  # noqa
 
 file_handler = logging.FileHandler(filename="torch_profiler.log")
 stdout_handler = logging.StreamHandler(stream=sys.stdout)
 handlers = [file_handler, stdout_handler]
 
-# _MULTIPLIER = [1, 2, 3, 5, 8, 9, 12, 16, 24, 32]
 _MULTIPLIER = [
     1,
     2,
@@ -68,23 +76,6 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 STR_TO_DTYPE = {"fp16": torch.float16, "int16": torch.int16, "int8": torch.int8}
-
-
-DEVICE = os.environ.get("DEVICE_TYPE", "npu")
-if DEVICE == "npu":
-    import torch_npu
-
-    try:
-        import tcuscan_ops
-    except:
-        RuntimeError("Please run 'make build' first.")
-        exit(-1)
-    torch.npu.config.allow_internal_format = False
-
-    NPU_DEVICE = "npu:1"
-    torch.npu.config.allow_internal_format = False
-    torch.npu.set_device(NPU_DEVICE)
-    assert torch.npu.is_available()
 
 WARMUP_ITERS = 10
 BENCH_ITERS = 100
@@ -172,7 +163,7 @@ def vadd_benchmark(device: Device, vec_len: int) -> float:
     y = torch.rand(vec_len, device=device.str, dtype=torch.float16)
 
     def run_vadd() -> None:
-        z = tcuscan_ops.run_add_custom(x, y)
+        _ = tcuscan_ops.run_add_custom(x, y)
 
     return _run_benchmark(device, run_vadd)
 
@@ -192,7 +183,7 @@ def copy_benchmark(device: Device, size: int, s: int, dtype: torch.dtype) -> flo
     x = torch.rand(size, device=device.str, dtype=dtype)
 
     def run_copy() -> None:
-        z = tcuscan_ops.run_copy(x, s)
+        _ = tcuscan_ops.run_copy(x, s)
 
     return _run_benchmark(device, run_copy)
 
@@ -217,7 +208,7 @@ def clone_benchmark(device: Device, size: int, dtype: torch.dtype) -> float:
         raise ValueError("Incorrect copy data type")
 
     def run_clone() -> None:
-        z = torch.clone(x)
+        _ = torch.clone(x)
 
     return _run_benchmark(device, run_clone)
 
@@ -236,7 +227,7 @@ def diff_benchmark(device: Device, vec_len: int, dtype=torch.dtype) -> float:
     x = torch.rand(vec_len, device=device.str, dtype=dtype)
 
     def run_diff() -> None:
-        z = tcuscan_ops.run_diff(x)
+        _ = tcuscan_ops.run_diff(x)
 
     return _run_benchmark(device, run_diff)
 
@@ -259,7 +250,7 @@ def baseline_diff_benchmark(device: Device, vec_len: int, dtype=torch.dtype) -> 
         raise ValueError("Invalid diff_cann input data type")
 
     def run_diff() -> None:
-        z = torch.diff(x)
+        _ = torch.diff(x)
 
     return _run_benchmark(device, run_diff)
 
@@ -282,7 +273,7 @@ def baseline_diffp_benchmark(device: Device, vec_len: int, dtype=torch.dtype) ->
         raise ValueError("Invalid diff_cann input data type")
 
     def run_diff() -> None:
-        z = torch.diff(x, prepend=torch.zeros(1, device=device.str))
+        _ = torch.diff(x, prepend=torch.zeros(1, device=device.str))
 
     return _run_benchmark(device, run_diff)
 
@@ -310,7 +301,7 @@ def csr_gather_benchmark(device: Device, vec_len: int) -> float:
     ).npu()
 
     def run_csr_gather() -> None:
-        z = tcuscan_ops.run_csr_gather(input_values, input_cols, input_x)
+        _ = tcuscan_ops.run_csr_gather(input_values, input_cols, input_x)
 
     return _run_benchmark(device, run_csr_gather)
 
@@ -332,7 +323,7 @@ def segmented_scan_single_core_benchmark(
     f = f.to(torch.int8).npu()
 
     def run_seg_scan_single_core() -> None:
-        result = tcuscan_ops.run_seg_scan(x, f, s)
+        _ = tcuscan_ops.run_seg_scan(x, f, s)
 
     return _run_benchmark(device, run_seg_scan_single_core)
 
@@ -354,7 +345,7 @@ def vec_segmented_scan_single_core_benchmark(
     f = f.to(torch.int8).npu()
 
     def run_vec_seg_scan_single_core() -> None:
-        result = tcuscan_ops.run_seg_scan_vec(x, f, s)
+        _ = tcuscan_ops.run_seg_scan_vec(x, f, s)
 
     return _run_benchmark(device, run_vec_seg_scan_single_core)
 
@@ -365,13 +356,13 @@ def compress_benchmark(
 
     x = torch.randn(size).half().npu()
     mask = (torch.rand(size=(size,)) < segm_density).to(torch.int8).npu()
-    if (dtype == torch.float16) or (dtype == torch.float32):
+    if dtype in {torch.float16, torch.float32}:
         x = torch.rand(size, device=device.str, dtype=dtype)
     else:
         raise RuntimeError(f"dtype {dtype} is not supported in TCUSCAN scan operator")
 
     def run_compress() -> None:
-        z = tcuscan_ops.run_compress(x, mask, s)
+        _ = tcuscan_ops.run_compress(x, mask, s)
 
     return _run_benchmark(device, run_compress)
 
@@ -387,7 +378,7 @@ def segmented_sum_benchmark(
     f_npu = torch.concat([f[1:], torch.ones(1, dtype=torch.int8)]).contiguous().npu()
 
     def run_seg_sum() -> None:
-        actual = tcuscan_ops.run_seg_sum(x_npu, f_npu, s)
+        _ = tcuscan_ops.run_seg_sum(x_npu, f_npu, s)
 
     return _run_benchmark(device, run_seg_sum)
 
@@ -396,7 +387,7 @@ def scscan_benchmark(device: Device, size: int, dtype: torch.dtype, s: int) -> f
     x = torch.rand(size, device=device.str, dtype=dtype)
 
     def run_scan() -> None:
-        out = tcuscan_ops.run_scan_single_core(x, s)
+        _ = tcuscan_ops.run_scan_single_core(x, s)
 
     return _run_benchmark(device, run_scan)
 
@@ -424,7 +415,7 @@ def mcscan_benchmark(device: Device, size: int, dtype: torch.dtype, s: int) -> f
         raise RuntimeError(f"dtype {dtype} is not supported in TCUSCAN scan operator")
 
     def run_scan() -> None:
-        out = tcuscan_ops.run_scan_multi_core(x, s)
+        _ = tcuscan_ops.run_scan_multi_core(x, s)
 
     return _run_benchmark(device, run_scan)
 
@@ -435,8 +426,8 @@ def benchmark(
     dtype: str,
     fn: typing.Callable,
     sizes: typing.List[int],
-    density: Optional[float],
-) -> None:
+    density: Optional[float] = None,
+):
     """
     Benchmark a given function.
 
@@ -448,16 +439,17 @@ def benchmark(
         sizes: Sizes of the arrays to use.
         density: percentage of non-zero elements in a sparse matrix
     """
+
+    density_str = ""
     if density is not None:
         density_str = "density,"
-    else:
-        density_str = ""
 
     with open(
         f"bench_results_{op_name}_{dtype}_{ None if (density_str is None) else density}.csv",
         "w",
+        encoding="UTF-8",
     ) as fd:
-        fd.write(f"operator,dtype,size,density,time_us\n")
+        fd.write("operator,dtype,size,density,time_us\n")
 
         for size in sizes:
             logger.info(
@@ -467,7 +459,7 @@ def benchmark(
             fd.write(f"{op_name},{dtype},{size},{density},{time:.2f}\n")
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # noqa
     parser = argparse.ArgumentParser(
         prog="torch_profile", description="Profiler for torch_npu operators"
     )

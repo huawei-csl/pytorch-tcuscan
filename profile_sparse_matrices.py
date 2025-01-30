@@ -11,16 +11,16 @@ import os
 import sys
 import types
 import typing
-from typing import Optional
 import numpy as np
 import torch
 from dataclasses import dataclass
 from functools import partial
-from math import ceil
 from scipy.io import mmread
 from scipy.sparse import csr_matrix
-import numpy as np
 import torch.nn.functional as F
+import torch_npu  # noqa
+
+import tcuscan_ops
 
 
 def pad_to_multiple(x: torch.Tensor, s: int):
@@ -99,20 +99,11 @@ STR_TO_DTYPE = {"fp16": torch.float16, "int16": torch.int16, "int8": torch.int8}
 
 
 DEVICE = os.environ.get("DEVICE_TYPE", "npu")
-if DEVICE == "npu":
-    import torch_npu
 
-    try:
-        import tcuscan_ops
-    except:
-        RuntimeError("Please run 'make build' first.")
-        exit(-1)
-    torch.npu.config.allow_internal_format = False
-
-    NPU_DEVICE = "npu:1"
-    torch.npu.config.allow_internal_format = False
-    torch.npu.set_device(NPU_DEVICE)
-    assert torch.npu.is_available()
+NPU_DEVICE = "npu:0"
+torch.npu.config.allow_internal_format = False
+torch.npu.set_device(NPU_DEVICE)
+assert torch.npu.is_available()
 
 WARMUP_ITERS = 10
 BENCH_ITERS = 100
@@ -202,7 +193,7 @@ def segmented_scan_single_core_benchmark(
     f_npu = f.npu()
 
     def run_seg_scan_single_core() -> None:
-        result = tcuscan_ops.run_seg_scan(x_npu, f_npu, s)
+        _ = tcuscan_ops.run_seg_scan(x_npu, f_npu, s)
 
     return _run_benchmark(device, run_seg_scan_single_core)
 
@@ -223,7 +214,7 @@ def vec_segmented_scan_single_core_benchmark(
     f_npu = f.npu()
 
     def run_vec_seg_scan_single_core() -> None:
-        result = tcuscan_ops.run_seg_scan_vec(x_npu, f_npu, s)
+        _ = tcuscan_ops.run_seg_scan_vec(x_npu, f_npu, s)
 
     return _run_benchmark(device, run_vec_seg_scan_single_core)
 
@@ -245,7 +236,7 @@ def compress_benchmark(device: Device, x: torch.Tensor, f: torch.Tensor, s: int)
     f_npu = f.npu()
 
     def run_compress() -> None:
-        z = tcuscan_ops.run_compress(x_npu, f_npu, s)
+        _ = tcuscan_ops.run_compress(x_npu, f_npu, s)
 
     return _run_benchmark(device, run_compress)
 
@@ -265,7 +256,7 @@ def mcscan_benchmark(device: Device, x: torch.Tensor, s: int) -> float:
     x_npu = x.npu()
 
     def run_scan() -> None:
-        out = tcuscan_ops.run_scan_multi_core(x_npu, s)
+        _ = tcuscan_ops.run_scan_multi_core(x_npu, s)
 
     return _run_benchmark(device, run_scan)
 
@@ -281,10 +272,9 @@ def baseline_diff_benchmark(device: Device, x: torch.Tensor) -> float:
     Returns:
         Average time in microseconds.
     """
-    x_npu = x.npu()
 
     def run_diff() -> None:
-        z = torch.diff(x)
+        _ = torch.diff(x)
 
     return _run_benchmark(device, run_diff)
 
@@ -307,8 +297,8 @@ def benchmark(
         benchname: name of the benchmark used
     """
     filename = f"bench_results_{op_name}_{dtype}_{benchname}.csv"
-    with open(filename, "w") as fd:
-        fd.write(f"benchname,operator,time_us\n")
+    with open(filename, "w", encoding="UTF-8") as fd:
+        fd.write("benchname,operator,time_us\n")
 
         logger.info(
             f"Benchmark: {benchname}, OP:{op_name}, dtype: {dtype}, device: {device.str}"
