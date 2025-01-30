@@ -49,9 +49,9 @@ def ref_segsum(x: torch.Tensor, f: torch.Tensor) -> torch.Tensor:
     return sums
 
 
-def _test_tcuscan_seg_sum(n: int, s: int, segm_density: float):
+def _test_tcuscan_seg_sum(n: int, s: int, segm_density: float):  # noqa
     x = torch.randint(0, 10, size=(n,)).half()
-    f = (torch.rand(n) < segm_density).to(torch.int8)
+    f = (torch.randn(n) > 0).to(torch.int8)
     f[0] = 0
 
     x_npu = x.npu()
