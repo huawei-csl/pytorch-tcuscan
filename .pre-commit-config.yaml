@@ -13,6 +13,7 @@ repos:
     rev: v19.1.7
     hooks:
     -   id: clang-format
+        types_or: [c++, c]
 -   repo: https://github.com/pycqa/isort
     rev: 6.0.0
     hooks:
