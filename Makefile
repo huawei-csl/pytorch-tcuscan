@@ -86,7 +86,10 @@ profile_fp16_vec_seg_scan:
 	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:$(shell pwd)/build/lib/ DEVICE_TYPE=npu python3 profile_tcuscan_ops.py --bench vec_seg_scan_sc --dtype fp16 --density ${DENSITY}  --s 64  --num_cores 1
 	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:$(shell pwd)/build/lib/ DEVICE_TYPE=npu python3 profile_tcuscan_ops.py --bench vec_seg_scan_sc --dtype fp16 --density ${DENSITY}  --s 128 --num_cores 1
 
-profile_diffs: profile_fp16_diff profile_fp16_diff_cann profile_fp16_diffp_cann
+profile_diffs: profile_fp16_diff profile_fp16_diff_cann profile_fp16_diffp_cann profile_fp32_diff_cann
+
+custom_test:
+	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:$(shell pwd)/build/lib/  python3 -m pytest tests/test_diff_cann.py -v
 
 profile_fp16_segmented_scan_real:
 	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:$(shell pwd)/build/lib/ DEVICE_TYPE=npu python3 profile_sparse_matrices.py --bench seg_scan_sc --dtype fp16 --matrixpath ${FULL_SPARSE_MATRIX_PATH} --s 32 --num_cores 1
@@ -118,3 +121,9 @@ profile_fp16_diff_real:
 
 profile_fp32_diff_real:
 	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:$(shell pwd)/build/lib/ DEVICE_TYPE=npu python3 profile_sparse_matrices.py --bench diff --matrixpath ${FULL_SPARSE_MATRIX_PATH} --dtype fp16
+
+paper_fig_6:
+	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:$(shell pwd)/build/lib/ DEVICE_TYPE=npu python3 profile_tcuscan_ops.py --bench mcscan --s 128 --dtype fp16
+	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:$(shell pwd)/build/lib/ DEVICE_TYPE=npu python3 profile_tcuscan_ops.py --bench compress --s 128 --density 0.05 --dtype fp32
+	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:$(shell pwd)/build/lib/ DEVICE_TYPE=npu python3 profile_tcuscan_ops.py --bench diff_cann --s 128 --dtype fp32
+	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:$(shell pwd)/build/lib/ DEVICE_TYPE=npu python3 profile_tcuscan_ops.py --bench copy --dtype fp16

@@ -468,11 +468,13 @@ at::Tensor run_seg_sum(const at::Tensor &x, const at::Tensor &f, int S) {
   const at::Tensor prepend =
       at::empty({1}, at::TensorOptions().dtype(at::kFloat).device(device))
           .zero_();
+  aclrtSynchronizeStream(acl_stream);
+
   const at::Tensor prep_compress_scan_x =
       torch::cat({prepend, compress_scan_x});
+
   const at::Tensor z = torch::diff(prep_compress_scan_x);
 
-  aclrtSynchronizeStream(acl_stream);
   return z;
 }
 

@@ -14,9 +14,19 @@ import typing
 from dataclasses import dataclass
 from functools import partial
 from math import ceil
-from typing import Optional
+from typing import Optional, Tuple
 
 import torch
+import torch.nn.functional as F
+
+
+def pad_to_multiple(x: torch.Tensor, s: int):
+    N = x.shape[-1]
+    target_size = ((N + s * s - 1) // (s * s)) * (s * s)
+    pad_amount = target_size - N
+    padded_x = F.pad(x, (0, pad_amount), mode="constant", value=0)
+    return padded_x
+
 
 DEVICE = os.environ.get("DEVICE_TYPE", "npu")
 if DEVICE == "npu":
@@ -148,58 +158,28 @@ def _run_benchmark(
     return avg_time_us
 
 
-def vadd_benchmark(device: Device, vec_len: int) -> float:
-    """
-    Benchmark vector addition kernel.
-
-    Args:
-        device: Device to run benchmark on.
-        vec_len: Input vector length.
-
-    Returns:
-        Average time in microseconds.
-    """
-    x = torch.rand(vec_len, device=device.str, dtype=torch.float16)
-    y = torch.rand(vec_len, device=device.str, dtype=torch.float16)
+def vadd_benchmark(device: Device, size: int) -> Tuple[float, int]:
+    x = torch.rand(size, device=device.str, dtype=torch.float16)
+    y = torch.rand(size, device=device.str, dtype=torch.float16)
 
     def run_vadd() -> None:
         _ = tcuscan_ops.run_add_custom(x, y)
 
-    return _run_benchmark(device, run_vadd)
+    return _run_benchmark(device, run_vadd), size
 
 
-def copy_benchmark(device: Device, size: int, s: int, dtype: torch.dtype) -> float:
-    """
-    Benchmark torch.clone kernel.
-
-    Args:
-        device: Device to run benchmark on.
-        size: Size of the arrays to use.
-        dtype: Data type of the input array.
-
-    Returns:
-        Average time in microseconds.
-    """
+def copy_benchmark(
+    device: Device, size: int, s: int, dtype: torch.dtype
+) -> Tuple[float, int]:
     x = torch.rand(size, device=device.str, dtype=dtype)
 
     def run_copy() -> None:
         _ = tcuscan_ops.run_copy(x, s)
 
-    return _run_benchmark(device, run_copy)
+    return _run_benchmark(device, run_copy), size
 
 
-def clone_benchmark(device: Device, size: int, dtype: torch.dtype) -> float:
-    """
-    Benchmark torch.clone kernel.
-
-    Args:
-        device: Device to run benchmark on.
-        size: Size of the arrays to use.
-        dtype: Data type of the input array.
-
-    Returns:
-        Average time in microseconds.
-    """
+def clone_benchmark(device: Device, size: int, dtype: torch.dtype) -> Tuple[float, int]:
     if dtype == torch.float16:
         x = torch.rand(size, device=device.str, dtype=dtype)
     elif dtype == torch.int16:
@@ -210,86 +190,48 @@ def clone_benchmark(device: Device, size: int, dtype: torch.dtype) -> float:
     def run_clone() -> None:
         _ = torch.clone(x)
 
-    return _run_benchmark(device, run_clone)
+    return _run_benchmark(device, run_clone), size
 
 
-def diff_benchmark(device: Device, vec_len: int, dtype=torch.dtype) -> float:
-    """
-    Benchmark vector diff kernel.
-
-    Args:
-        device: Device to run benchmark on.
-        vec_len: Input vector length.
-
-    Returns:
-        Average time in microseconds.
-    """
-    x = torch.rand(vec_len, device=device.str, dtype=dtype)
+def diff_benchmark(device: Device, size: int, dtype=torch.dtype) -> Tuple[float, int]:
+    x = torch.rand(size, device=device.str, dtype=dtype)
 
     def run_diff() -> None:
         _ = tcuscan_ops.run_diff(x)
 
-    return _run_benchmark(device, run_diff)
+    return _run_benchmark(device, run_diff), size
 
 
-def baseline_diff_benchmark(device: Device, vec_len: int, dtype=torch.dtype) -> float:
-    """
-    Benchmark baseline `torch.diff(x)` kernel.
-
-    Args:
-        device: Device to run benchmark on.
-        vec_len: Input vector length.
-
-    Returns:
-        Average time in microseconds.
-    """
-    x = torch.rand(vec_len, device=device.str, dtype=torch.float16)
+def baseline_diff_benchmark(
+    device: Device, size: int, dtype=torch.dtype
+) -> Tuple[float, int]:
     if dtype in [torch.float16, torch.float32]:
-        x = torch.rand(vec_len, device=device.str, dtype=dtype)
+        x = torch.rand(size, device=device.str, dtype=dtype)
     else:
         raise ValueError("Invalid diff_cann input data type")
 
     def run_diff() -> None:
         _ = torch.diff(x)
 
-    return _run_benchmark(device, run_diff)
+    return _run_benchmark(device, run_diff), size
 
 
-def baseline_diffp_benchmark(device: Device, vec_len: int, dtype=torch.dtype) -> float:
-    """
-    Benchmark baseline `torch.diff(x, prepend=)` kernel.
-
-    Args:
-        device: Device to run benchmark on.
-        vec_len: Input vector length.
-
-    Returns:
-        Average time in microseconds.
-    """
-    x = torch.rand(vec_len, device=device.str, dtype=torch.float16)
+def baseline_diffp_benchmark(
+    device: Device, size: int, dtype=torch.dtype
+) -> Tuple[float, int]:
+    x = torch.rand(size, device=device.str, dtype=torch.float16)
     if dtype in [torch.float16, torch.float32]:
-        x = torch.rand(vec_len, device=device.str, dtype=dtype)
+        x = torch.rand(size, device=device.str, dtype=dtype)
     else:
         raise ValueError("Invalid diff_cann input data type")
 
     def run_diff() -> None:
         _ = torch.diff(x, prepend=torch.zeros(1, device=device.str))
 
-    return _run_benchmark(device, run_diff)
+    return _run_benchmark(device, run_diff), size
 
 
-def csr_gather_benchmark(device: Device, vec_len: int) -> float:
-    """
-    Benchmark CSR gather kernel.
-
-    Args:
-        device: Device to run benchmark on.
-        vec_len: Input vector length.
-
-    Returns:
-        Average time in microseconds.
-    """
-
+def csr_gather_benchmark(device: Device, vec_len: int) -> Tuple[float, int]:
     # Maximum value of x cannot exceed 20K (UB shared memory size)
     max_x_len = 2 * 1024
 
@@ -299,112 +241,92 @@ def csr_gather_benchmark(device: Device, vec_len: int) -> float:
     input_cols = torch.randint(
         low=0, high=max_x_len, size=(vec_len,), dtype=torch.int32
     ).npu()
+    outputsize = vec_len
 
     def run_csr_gather() -> None:
         _ = tcuscan_ops.run_csr_gather(input_values, input_cols, input_x)
 
-    return _run_benchmark(device, run_csr_gather)
+    return _run_benchmark(device, run_csr_gather), outputsize
 
 
 def segmented_scan_single_core_benchmark(
     device: Device, vec_len: int, s: int, segm_density: float
-) -> float:
-    """
-    Benchmark Segmented Scan Single Core kernel.
-
-    Args:
-        device: Device to run benchmark on.
-        s: block size [32,64,128]
-        vec_len: Input vector length.
-        segm_density: Float value corresponding to the density"""
-
+) -> Tuple[float, int]:
     x = torch.randn(vec_len).half().npu()
     f = torch.empty(vec_len).uniform_(0, 1) < segm_density
     f = f.to(torch.int8).npu()
+    outputsize = vec_len
 
     def run_seg_scan_single_core() -> None:
         _ = tcuscan_ops.run_seg_scan(x, f, s)
 
-    return _run_benchmark(device, run_seg_scan_single_core)
+    return _run_benchmark(device, run_seg_scan_single_core), outputsize
 
 
 def vec_segmented_scan_single_core_benchmark(
     device: Device, vec_len: int, s: int, segm_density: float
-) -> float:
-    """
-    Benchmark Vectorized Segmented Scan Single Core kernel.
-
-    Args:
-        device: Device to run benchmark on.
-        s: block size [32,64,128]
-        vec_len: Input vector length.
-        segm_density: Float value corresponding to the density"""
-
+) -> Tuple[float, int]:
     x = torch.randn(vec_len).half().npu()
     f = torch.empty(vec_len).uniform_(0, 1) < segm_density
     f = f.to(torch.int8).npu()
+    outputsize = vec_len
 
     def run_vec_seg_scan_single_core() -> None:
         _ = tcuscan_ops.run_seg_scan_vec(x, f, s)
 
-    return _run_benchmark(device, run_vec_seg_scan_single_core)
+    return _run_benchmark(device, run_vec_seg_scan_single_core), outputsize
 
 
 def compress_benchmark(
     device: Device, size: int, dtype: torch.dtype, s: int, segm_density: float
-):
+) -> Tuple[float, int]:
 
-    x = torch.randn(size).half().npu()
     mask = (torch.rand(size=(size,)) < segm_density).to(torch.int8).npu()
     if dtype in {torch.float16, torch.float32}:
         x = torch.rand(size, device=device.str, dtype=dtype)
     else:
         raise RuntimeError(f"dtype {dtype} is not supported in TCUSCAN scan operator")
+    outputsize = torch.sum(mask)
 
     def run_compress() -> None:
         _ = tcuscan_ops.run_compress(x, mask, s)
 
-    return _run_benchmark(device, run_compress)
+    return _run_benchmark(device, run_compress), outputsize
 
 
 def segmented_sum_benchmark(
-    device: Device, size: int, segm_density: float, dtype: torch.dtype, s: int
-):
+    device: Device, vec_len: int, dtype: torch.dtype, segm_density: float, s: int
+) -> Tuple[float, int]:
 
-    x = torch.randn(size, dtype=dtype)
-    f = (torch.randn(size) < segm_density).to(torch.int8)
-    f[0] = 0
+    x = torch.randint(-100, 100, size=(vec_len,), dtype=dtype)
+    x = pad_to_multiple(x, s)
+    f = torch.empty(vec_len).uniform_(0, 1) < segm_density
+    f = f.to(torch.int8)
+    f = pad_to_multiple(f, s)
     x_npu = x.npu()
-    f_npu = torch.concat([f[1:], torch.ones(1, dtype=torch.int8)]).contiguous().npu()
+    f_npu = f.npu()
+    outputsize = torch.sum(f)
 
     def run_seg_sum() -> None:
         _ = tcuscan_ops.run_seg_sum(x_npu, f_npu, s)
 
-    return _run_benchmark(device, run_seg_sum)
+    return _run_benchmark(device, run_seg_sum), outputsize
 
 
-def scscan_benchmark(device: Device, size: int, dtype: torch.dtype, s: int) -> float:
+def scscan_benchmark(
+    device: Device, size: int, dtype: torch.dtype, s: int
+) -> Tuple[float, int]:
     x = torch.rand(size, device=device.str, dtype=dtype)
 
     def run_scan() -> None:
         _ = tcuscan_ops.run_scan_single_core(x, s)
 
-    return _run_benchmark(device, run_scan)
+    return _run_benchmark(device, run_scan), size
 
 
-def mcscan_benchmark(device: Device, size: int, dtype: torch.dtype, s: int) -> float:
-    """
-    Benchmark TCUSCAN multi-core scan kernel.
-
-    Args:
-        device: Device to run benchmark on.
-        size: Size of the arrays to use.
-        dtype: Data type of the input/output arrays.
-        s: Matrix size tiling parameter.
-
-    Returns:
-        Average time in microseconds.
-    """
+def mcscan_benchmark(
+    device: Device, size: int, dtype: torch.dtype, s: int
+) -> Tuple[float, int]:
     if dtype == torch.float16:
         x = torch.rand(size, device=device.str, dtype=dtype)
     elif dtype == torch.int8:
@@ -417,7 +339,7 @@ def mcscan_benchmark(device: Device, size: int, dtype: torch.dtype, s: int) -> f
     def run_scan() -> None:
         _ = tcuscan_ops.run_scan_multi_core(x, s)
 
-    return _run_benchmark(device, run_scan)
+    return _run_benchmark(device, run_scan), size
 
 
 def benchmark(
@@ -439,24 +361,20 @@ def benchmark(
         sizes: Sizes of the arrays to use.
         density: percentage of non-zero elements in a sparse matrix
     """
-
-    density_str = ""
-    if density is not None:
-        density_str = "density,"
-
     with open(
-        f"bench_results_{op_name}_{dtype}_{ None if (density_str is None) else density}.csv",
+        f"bench_results_{op_name}_{dtype}.csv",
         "w",
         encoding="UTF-8",
     ) as fd:
-        fd.write("operator,dtype,size,density,time_us\n")
+
+        fd.write("operator,dtype,size,density,outputsize,time_us\n")
 
         for size in sizes:
+            time, outputsize = fn(device, size)
+            fd.write(f"{op_name},{dtype},{size},{density},{outputsize},{time:.2f}\n")
             logger.info(
-                f"OP:{op_name}, dtype: {dtype}, size: {size:}, density: {None if (density_str is None) else density }, device: {device.str}"
+                f"OP:{op_name}, dtype: {dtype}, size: {size:},outputsize: {outputsize}, density: {density}, device: {device.str}"
             )
-            time = fn(device, size)
-            fd.write(f"{op_name},{dtype},{size},{density},{time:.2f}\n")
 
 
 if __name__ == "__main__":  # noqa
@@ -505,6 +423,18 @@ if __name__ == "__main__":  # noqa
 
     # Maximum number of iterations
     max_iters = ceil(max_size / (num_cores * s * s))
+
+    logger.info("*******************************")
+    logger.info(f"* bench          : {bench}")
+    logger.info(f"* dtype          : {dtype}")
+    logger.info(f"* max_size       : {max_size}")
+    logger.info(f"* Max iterations : {max_iters}")
+    logger.info(f"* num_cores      : {num_cores}")
+    logger.info(f"* s              : {s}")
+    logger.info(f"* sp_density     : {sp_density}")
+    logger.info(f"* device         : {device.str}")
+    logger.info("*******************************")
+    logger.info("*******************************")
 
     # Input sizes to benchmark
     sizes = [i * num_cores * s * s for i in range(1, max_iters, 16 * 128 // s)]
@@ -565,7 +495,7 @@ if __name__ == "__main__":  # noqa
         tdtype = STR_TO_DTYPE[dtype]
         benchmark(
             device,
-            f"compress_{s}",
+            f"compress_{s}_{sp_density}",
             dtype,
             partial(compress_benchmark, dtype=tdtype, s=s, segm_density=sp_density),
             sizes,
@@ -575,7 +505,7 @@ if __name__ == "__main__":  # noqa
         tdtype = STR_TO_DTYPE[dtype]
         benchmark(
             device,
-            f"segmented_sum_{s}",
+            f"segmented_sum_{s}_{sp_density}",
             dtype,
             partial(
                 segmented_sum_benchmark, dtype=tdtype, s=s, segm_density=sp_density
@@ -589,7 +519,7 @@ if __name__ == "__main__":  # noqa
         tdtype = STR_TO_DTYPE[dtype]
         benchmark(
             device,
-            f"seg_scan_sc_{s}",
+            f"seg_scan_sc_{s}_{sp_density}",
             "fp16",
             partial(segmented_scan_single_core_benchmark, s=s, segm_density=sp_density),
             sizes,
@@ -608,7 +538,7 @@ if __name__ == "__main__":  # noqa
     elif bench == "vec_seg_scan_sc":
         benchmark(
             device,
-            f"vec_seg_scan_sc_{s}",
+            f"vec_seg_scan_sc_{s}_{sp_density}",
             "fp16",
             partial(
                 vec_segmented_scan_single_core_benchmark, s=s, segm_density=sp_density

@@ -1,7 +1,8 @@
+import pytest
 import torch
 import torch_npu  # noqa
+
 import tcuscan_ops
-import pytest
 
 torch.npu.config.allow_internal_format = False
 
