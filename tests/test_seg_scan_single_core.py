@@ -8,13 +8,13 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # ===============================================================================
 
-import torch
-import torch_npu  # noqa
 import numpy as np
 import numpy.typing as npt
+import pytest
+import torch
+import torch_npu  # noqa
 
 import tcuscan_ops
-import pytest
 
 torch.npu.config.allow_internal_format = False
 
@@ -54,8 +54,6 @@ def _test_tcuscan_segscan_single_core(n: int, s: int, segm_density: float):
     f = torch.empty(n).uniform_(0, 1) < segm_density
     f = f.to(torch.int8)
 
-    print(f)
-    print(f" # of segments: {torch.sum(f)}")
     x_npu = x.npu()
     f_npu = f.npu()
     actual = tcuscan_ops.run_seg_scan(x_npu, f_npu, s).cpu()
@@ -71,6 +69,15 @@ def _test_tcuscan_segscan_single_core(n: int, s: int, segm_density: float):
 def test_tcuscan_segscan_single_score_s_32_density_0_01(multiplier: int):
     s = 32
     segm_density = 0.01
+    n = multiplier * s * s
+
+    _test_tcuscan_segscan_single_core(n, s, segm_density)
+
+
+@pytest.mark.parametrize("multiplier", _MULTIPLIER)
+def test_tcuscan_segscan_single_score_s_32_density_0(multiplier: int):
+    s = 32
+    segm_density = 0.0
     n = multiplier * s * s
 
     _test_tcuscan_segscan_single_core(n, s, segm_density)
