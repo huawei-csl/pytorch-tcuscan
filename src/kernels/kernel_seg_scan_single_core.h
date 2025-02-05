@@ -159,9 +159,7 @@ class KernelSegScanRevertSpec {
              num_elems_to_process);
       }
 
-      PipeBarrier<PIPE_ALL>();
       for (int16_t seg_idx = 1; seg_idx <= num_segments; seg_idx++) {
-        sync::ScalarWaitForVec();
         const float delta = GetDelta(
             inplace_calc_vec, flag_vec_lt[tile_idx * tile_len_], seg_idx);
         FixSpecInPlace(inplace_calc_vec, flag_vec_lt[tile_idx * tile_len_],
@@ -170,11 +168,8 @@ class KernelSegScanRevertSpec {
 
       DataCopy(output_vec_lt[tile_idx * tile_len_], inplace_calc_vec,
                num_elems_to_process);
-      PipeBarrier<PIPE_ALL>();
 
-      sync::ScalarWaitForVec();
       running_sum = inplace_calc_vec(tile_len_ - 1);
-      PipeBarrier<PIPE_ALL>();
     }
 
     vecin_input_q_.FreeTensor<DataTypeT>(input_vec_lt);
@@ -319,7 +314,7 @@ class KernelSegScanRevertSpec {
 
   TQue<QuePosition::VECIN, BUFFER_NUM> vecin_input_q_;
   TQue<QuePosition::VECIN, BUFFER_NUM> vecin_scanned_flag_q_;
-  TQue<QuePosition::VECOUT, BUFFER_NUM> vecout_q_;
+  TQue<QuePosition::VECOUT, 2> vecout_q_;
 
   TBuf<QuePosition::VECCALC> tmp1_int16_buf_;
   TBuf<QuePosition::VECCALC> tmp1_half_buf_;
