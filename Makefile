@@ -106,7 +106,7 @@ profile_fp16_compress_real:
 	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:$(shell pwd)/build/lib/ DEVICE_TYPE=npu python3 profile_sparse_matrices.py --bench compress --s 64  --matrixpath ${FULL_SPARSE_MATRIX_PATH} --dtype fp16
 	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:$(shell pwd)/build/lib/ DEVICE_TYPE=npu python3 profile_sparse_matrices.py --bench compress --s 128 --matrixpath ${FULL_SPARSE_MATRIX_PATH} --dtype fp16
 
-profile_fp16_compress_real:
+profile_fp32_compress_real:
 	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:$(shell pwd)/build/lib/ DEVICE_TYPE=npu python3 profile_sparse_matrices.py --bench compress --s 32  --matrixpath ${FULL_SPARSE_MATRIX_PATH} --dtype fp32
 	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:$(shell pwd)/build/lib/ DEVICE_TYPE=npu python3 profile_sparse_matrices.py --bench compress --s 64  --matrixpath ${FULL_SPARSE_MATRIX_PATH} --dtype fp32
 	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:$(shell pwd)/build/lib/ DEVICE_TYPE=npu python3 profile_sparse_matrices.py --bench compress --s 128 --matrixpath ${FULL_SPARSE_MATRIX_PATH} --dtype fp32
@@ -127,3 +127,23 @@ paper_fig_6:
 	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:$(shell pwd)/build/lib/ DEVICE_TYPE=npu python3 profile_tcuscan_ops.py --bench compress --s 128 --density 0.05 --dtype fp32
 	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:$(shell pwd)/build/lib/ DEVICE_TYPE=npu python3 profile_tcuscan_ops.py --bench diff_cann --s 128 --dtype fp32
 	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:$(shell pwd)/build/lib/ DEVICE_TYPE=npu python3 profile_tcuscan_ops.py --bench copy --dtype fp16
+
+paper_fig_5:
+	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:$(shell pwd)/build/lib/ DEVICE_TYPE=npu python3 profile_random_matrices.py --bench custom_copy --dtype fp16 --distr Uniform --num_cores 1 --s 4096
+	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:$(shell pwd)/build/lib/ DEVICE_TYPE=npu python3 profile_random_matrices.py --bench seg_scan_sc --dtype fp16 --distr Uniform --s 128 --density 0.01 --num_cores 1
+	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:$(shell pwd)/build/lib/ DEVICE_TYPE=npu python3 profile_random_matrices.py --bench seg_scan_sc --dtype fp16 --distr Uniform --s 128 --density 0.001 --num_cores 1
+	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:$(shell pwd)/build/lib/ DEVICE_TYPE=npu python3 profile_random_matrices.py --bench seg_scan_sc --dtype fp16 --distr Uniform --s 128 --density 0.0001 --num_cores 1
+	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:$(shell pwd)/build/lib/ DEVICE_TYPE=npu python3 profile_random_matrices.py --bench custom_copy --dtype fp16 --distr Uniform --num_cores 1 --s 128
+	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:$(shell pwd)/build/lib/ DEVICE_TYPE=npu python3 profile_random_matrices.py --bench seg_scan_sc --dtype fp16 --distr PowerLaw --s 128 --density 0.01 --num_cores 1
+	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:$(shell pwd)/build/lib/ DEVICE_TYPE=npu python3 profile_random_matrices.py --bench seg_scan_sc --dtype fp16 --distr PowerLaw --s 128 --density 0.001 --num_cores 1
+	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:$(shell pwd)/build/lib/ DEVICE_TYPE=npu python3 profile_random_matrices.py --bench seg_scan_sc --dtype fp16 --distr PowerLaw --s 128 --density 0.0001 --num_cores 1
+
+powerlaw_fig_5:
+	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:$(shell pwd)/build/lib/ DEVICE_TYPE=npu python3 profile_random_matrices.py --bench seg_scan_sc --dtype fp16 --distr PowerLaw --s 128 --density 0.01 --num_cores 1
+	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:$(shell pwd)/build/lib/ DEVICE_TYPE=npu python3 profile_random_matrices.py --bench seg_scan_sc --dtype fp16 --distr PowerLaw --s 128 --density 0.001 --num_cores 1
+	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:$(shell pwd)/build/lib/ DEVICE_TYPE=npu python3 profile_random_matrices.py --bench seg_scan_sc --dtype fp16 --distr PowerLaw --s 128 --density 0.0001 --num_cores 1
+
+uniform_fig_5:
+	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:$(shell pwd)/build/lib/ DEVICE_TYPE=npu python3 profile_random_matrices.py --bench seg_scan_sc --dtype fp16 --distr Uniform --s 128 --density 0.01 --num_cores 1
+	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:$(shell pwd)/build/lib/ DEVICE_TYPE=npu python3 profile_random_matrices.py --bench seg_scan_sc --dtype fp16 --distr Uniform --s 128 --density 0.001 --num_cores 1
+	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:$(shell pwd)/build/lib/ DEVICE_TYPE=npu python3 profile_random_matrices.py --bench seg_scan_sc --dtype fp16 --distr Uniform --s 128 --density 0.0001 --num_cores 1
