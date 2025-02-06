@@ -84,17 +84,50 @@ class KernelSegScanRevertSpec {
    */
   __aicore__ inline void Process() {
     DataTypeT running_sum = 0;
+    const uint32_t localVecCoreId = GetSubBlockIdx();
     for (uint32_t mat_tile_idx = 0; mat_tile_idx < num_matrix_tiles_;
-         mat_tile_idx++) {
-      // Sync with Cube core on every second tile
-      if (mat_tile_idx % 2 == 0) {
-        sync::SyncGroup<sync::GroupSyncDirection::FULL>();
-      }
-      // FIXME: uses only one vector core
-      if (GetBlockIdx() == 0 and GetSubBlockIdx() == 0) {
+         mat_tile_idx += 2) {
+      sync::SyncGroup<sync::GroupSyncDirection::FULL>();
+
+      if (localVecCoreId == 0) {
+        // Run one iteration on first half
         VecIter(mat_tile_idx, running_sum);
+
+        // Updates the running_sum on the second half
+        VecIterUpdateRunningSum(mat_tile_idx + 1, running_sum);
+      } else if (localVecCoreId == 1) {
+        // Update the running_sum on the first half
+        VecIterUpdateRunningSum(mat_tile_idx, running_sum);
+
+        // Run one iteration on second half
+        VecIter(mat_tile_idx + 1, running_sum);
       }
     }
+  }
+
+  /**
+   * @brief Executes an iteration to update the running_sum on tile with index
+   * `tile_idx`.
+   *
+   * @param tile_idx Tile index.
+   * @param running_sum Running sum accumulation value of previous tile.
+   */
+  __aicore__ inline void VecIterUpdateRunningSum(uint32_t tile_idx,
+                                                 DataTypeT &running_sum) {
+    const bool is_full_tile = (tile_idx + 1) * matrix_tile_len_ <= vec_len_;
+    const uint32_t num_elems_to_process =
+        is_full_tile ? matrix_tile_len_
+                     : vec_len_ - tile_idx * matrix_tile_len_;
+
+    copy::CopyGmToVec<DataTypeT>(vecin_input_q_,
+                                 global_input_[tile_idx * matrix_tile_len_],
+                                 num_elems_to_process);
+    copy::CopyGmToVec<FlagOutputT>(
+        vecin_scanned_flag_q_,
+        global_scanned_flag_[tile_idx * matrix_tile_len_],
+        num_elems_to_process);
+
+    UpdatePreviousRunningSum(running_sum, num_elems_to_process);
   }
 
   /**
@@ -175,6 +208,56 @@ class KernelSegScanRevertSpec {
     vecin_input_q_.FreeTensor<DataTypeT>(input_vec_lt);
     vecin_scanned_flag_q_.FreeTensor<FlagOutputT>(flag_vec_lt);
     vecout_q_.EnQue<DataTypeT>(output_vec_lt);
+  }
+
+  /**
+   * @brief Computes the running_sum value of the previous/next half
+   * matrix-tile.
+   *
+   * @param running_sum Accumulation value of previous matrix tile.
+   * @param num_elems Number of element to process.
+   */
+  __aicore__ inline void UpdatePreviousRunningSum(DataTypeT &running_sum,
+                                                  uint32_t num_elems) {
+    LocalTensor<DataTypeT> input_vec_lt = vecin_input_q_.DeQue<DataTypeT>();
+    LocalTensor<FlagOutputT> flag_vec_lt =
+        vecin_scanned_flag_q_.DeQue<FlagOutputT>();
+
+    LocalTensor<DataTypeT> inplace_calc_vec = vec_calc_buf_.Get<DataTypeT>();
+
+    const uint32_t max_num_tiles = scalar::CeilDiv(num_elems, tile_len_);
+
+    // Go over each tile of the matrix tile
+    DataTypeT acc = 0;
+    bool isSegmentInMatTile = false;
+    for (int32_t tile_idx = max_num_tiles - 1; tile_idx >= 0; tile_idx--) {
+      DataCopy(inplace_calc_vec, input_vec_lt[tile_idx * tile_len_], tile_len_);
+
+      const int32_t num_segments =
+          flag_vec_lt(tile_idx * tile_len_ + tile_len_ - 1);
+
+      // If there is a segment, correct the last value of the tile
+      if (num_segments > 0) {
+        const float delta = GetDelta(
+            inplace_calc_vec, flag_vec_lt[tile_idx * tile_len_], num_segments);
+
+        // Substract correction delta from latest value
+        acc += inplace_calc_vec(tile_len_ - 1) - delta;
+        isSegmentInMatTile = true;
+        break;
+      } else {
+        acc += inplace_calc_vec(tile_len_ - 1);
+      }
+    }
+
+    if (!isSegmentInMatTile) {
+      running_sum += acc;
+    } else {
+      running_sum = acc;
+    }
+
+    vecin_input_q_.FreeTensor<DataTypeT>(input_vec_lt);
+    vecin_scanned_flag_q_.FreeTensor<FlagOutputT>(flag_vec_lt);
   }
 
   /**
