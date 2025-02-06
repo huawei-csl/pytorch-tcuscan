@@ -11,14 +11,15 @@ import os
 import sys
 import types
 import typing
-import numpy as np
-import torch
 from dataclasses import dataclass
 from functools import partial
-from scipy.io import mmread
-from scipy.sparse import csr_matrix
+
+import numpy as np
+import torch
 import torch.nn.functional as F
 import torch_npu  # noqa
+from scipy.io import mmread
+from scipy.sparse import csr_matrix
 
 import tcuscan_ops
 
@@ -298,7 +299,7 @@ def benchmark(
     """
     filename = f"bench_results_{op_name}_{dtype}_{benchname}.csv"
     with open(filename, "w", encoding="UTF-8") as fd:
-        fd.write("benchname,operator,time_us\n")
+        fd.write("benchname,operator,dtype,time_us\n")
 
         logger.info(
             f"Benchmark: {benchname}, OP:{op_name}, dtype: {dtype}, device: {device.str}"
@@ -334,7 +335,8 @@ if __name__ == "__main__":
     max_size = args.max_size
     num_cores = args.num_cores
     s = args.s
-
+    my_x = pad_to_multiple(my_x, s)
+    my_f = pad_to_multiple(my_f, s)
     if DEVICE == "npu":
         device = Device(torch.npu, NPU_DEVICE)
     elif DEVICE == "cpu":
