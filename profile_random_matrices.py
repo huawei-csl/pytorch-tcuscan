@@ -18,8 +18,16 @@ from typing import Optional
 import numpy as np
 import torch
 import torch.nn.functional as F
-from scipy.io import mmread
-from scipy.sparse import csr_matrix
+from scipy.sparse import random
+
+
+def power_law_rvs(shape, exponent=2.0):
+    u = np.random.uniform(0, 1, size=shape)
+    return u ** (-1.0 / (exponent - 1))
+
+
+def uniform_rvs(shape):
+    return np.random.uniform(0, 1, size=shape)
 
 
 def pad_to_multiple(x: torch.Tensor, s: int):
@@ -41,62 +49,9 @@ if DEVICE == "npu":
 
 import tcuscan_ops  # noqa
 
-
-def convert_to_segments(fullpath):
-    "Converts a sparse matrix from ssget into a segmented sum/scan input (x, f)"
-
-    filename = fullpath + ".mtx"
-    A = mmread(filename)
-
-    B = csr_matrix(A)
-
-    # Data vector
-    x = B.data
-
-    # Flags vector
-    f = np.zeros(B.nnz + 1)
-    # The last value of the row_ptr should not be in f.
-    f[B.indptr] = 1
-    return x, f[:-1]
-
-
 file_handler = logging.FileHandler(filename="torch_profiler.log")
 stdout_handler = logging.StreamHandler(stream=sys.stdout)
 handlers = [file_handler, stdout_handler]
-
-# _MULTIPLIER = [1, 2, 3, 5, 8, 9, 12, 16, 24, 32]
-_MULTIPLIER = [
-    1,
-    2,
-    3,
-    4,
-    5,
-    6,
-    7,
-    8,
-    9,
-    10,
-    11,
-    12,
-    13,
-    14,
-    15,
-    16,
-    24,
-    32,
-    44,
-    56,
-    68,
-    80,
-    100,
-    120,
-    140,
-    160,
-    180,
-    200,
-    500,
-    1000,
-]
 
 logging.basicConfig(
     level=logging.INFO,
@@ -312,7 +267,7 @@ def benchmark(  # noqa
     size: int,
     density: Optional[float],
     nnr: int,
-    prob: str,
+    distr: str,
 ) -> None:
     """
     Benchmark a given function.
@@ -326,13 +281,13 @@ def benchmark(  # noqa
         benchname: name of the benchmark used.
         density: employed density to find nnz.
         nnr: number of rows.
-        prob: employed probability distribution.
+        distr: employed probability distribution.
     """
     if density is not None:
         density_str = "density,"
     else:
         density_str = ""
-    filename = f"random_matrices_{prob}_{op_name}_{dtype}_{ '' if (density is None) else str(density)}.csv"
+    filename = f"random_matrices_{distr}_{op_name}_{dtype}_{ '' if (density is None) else str(density)}.csv"
     with open(
         filename,
         "a",
@@ -376,14 +331,14 @@ if __name__ == "__main__":
     parser.add_argument("--s", type=int, default=64, required=False)
     parser.add_argument("--max_size", type=int, default=1e8, required=False)
     parser.add_argument("--num_cores", type=int, default=20, required=False)
-    parser.add_argument("--density", type=float, default=None)
+    parser.add_argument("--density", type=float, default=1)
     parser.add_argument(
-        "--distr", type=str, choices=["PowerLaw", "Uniform"], default=""
+        "--prob", type=str, choices=["PowerLaw", "Uniform"], default="Uniform"
     )
 
     args = parser.parse_args()
 
-    prob = args.distr
+    distr = args.prob
     dtype = args.dtype
     bench = args.bench
     max_size = args.max_size
@@ -400,25 +355,33 @@ if __name__ == "__main__":
         device = Device(torch.cuda, "cuda:0")
 
     for nnr in range(10000, 50000, 1000):
-        if density is not None:
-            vec_len = int(density * nnr * nnr)
-        else:
-            vec_len = int(nnr * nnr)
-        my_x = torch.randn(vec_len, dtype=tdtype)
-        array_f = np.zeros(vec_len, dtype=np.int8)
+        vec_len = nnr * nnr * density
+        B = []
+        if "Uniform" == distr:
+            B = random(
+                nnr,
+                nnr,
+                density=density,
+                format="csr",
+                dtype=np.float32,
+                data_rvs=uniform_rvs,
+            )
 
-        if "Uniform" == prob:
-            rng = np.random.default_rng()
-            ones_indices = rng.choice(vec_len, nnr, replace=False)
-            array_f[ones_indices] = 1
-            my_f = torch.from_numpy(array_f).to(torch.int8)
-        elif "PowerLaw" == prob:
-            alpha = 2
-            rng = np.random.default_rng()
-            power_law_samples = rng.power(a=alpha, size=nnr)
-            ones_indices = np.floor(power_law_samples * vec_len).astype(int)
-            array_f[ones_indices] = 1
-            my_f = torch.from_numpy(array_f).to(torch.int8)
+        elif "PowerLaw" == distr:
+            B = random(
+                nnr,
+                nnr,
+                density=density,
+                format="csr",
+                dtype=np.float32,
+                data_rvs=lambda shape: power_law_rvs(shape, exponent=2.5),
+            )
+
+        my_x = torch.tensor(B.data).to(torch.float16)
+        f = np.zeros(B.nnz + 1)
+        f[B.indptr] = 1
+        my_f = f[:-1]
+        my_f = torch.tensor(my_f).to(torch.int8)
 
         if bench == "seg_scan_sc" and dtype in ["fp16"]:
             my_x = pad_to_multiple(my_x, s)
@@ -431,7 +394,7 @@ if __name__ == "__main__":
                 vec_len,
                 density,
                 nnr,
-                prob,
+                distr,
             )
         elif bench == "custom_copy" and dtype in ["fp32", "fp16"]:
             tdtype = STR_TO_DTYPE[dtype]
@@ -443,7 +406,7 @@ if __name__ == "__main__":
                 vec_len,
                 density,
                 nnr,
-                prob,
+                distr,
             )
         elif bench == "vec_seg_scan_sc" and dtype in ["fp16"]:
             benchmark(
@@ -454,7 +417,7 @@ if __name__ == "__main__":
                 vec_len,
                 density,
                 nnr,
-                prob,
+                distr,
             )
         elif bench == "compress" and dtype in ["fp16", "fp32"]:
             benchmark(
@@ -465,7 +428,7 @@ if __name__ == "__main__":
                 vec_len,
                 density,
                 nnr,
-                prob,
+                distr,
             )
         elif bench == "mcscan" and dtype in ["fp16"]:
             benchmark(
@@ -476,7 +439,7 @@ if __name__ == "__main__":
                 vec_len,
                 density,
                 nnr,
-                prob,
+                distr,
             )
         elif bench == "diff" and dtype in ["fp16", "fp32"]:
             my_x = pad_to_multiple(my_x, s)
@@ -489,7 +452,7 @@ if __name__ == "__main__":
                 vec_len,
                 density,
                 nnr,
-                prob,
+                distr,
             )
         else:
             raise RuntimeError(
