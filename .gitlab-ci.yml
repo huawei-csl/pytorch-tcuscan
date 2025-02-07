@@ -72,8 +72,6 @@ build:
   tags:
     - baremetal
   stage: build
-  needs: []
-  dependencies: []
   script:
     - make setup_ci
     - make build
