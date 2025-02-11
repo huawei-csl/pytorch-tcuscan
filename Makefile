@@ -132,13 +132,13 @@ paper_fig_6:
 	python3 profile_tcuscan_ops.py --bench copy --dtype fp16
 
 paper_fig_5:
-	python3 profile_random_matrices.py --bench custom_copy --dtype fp16 --distr Uniform --num_cores 1 --s 4096
-	python3 profile_random_matrices.py --bench seg_scan_sc --dtype fp16 --distr Uniform --s 128 --density 0.01 --num_cores 1
-	python3 profile_random_matrices.py --bench seg_scan_sc --dtype fp16 --distr Uniform --s 128 --density 0.001 --num_cores 1
-	python3 profile_random_matrices.py --bench seg_scan_sc --dtype fp16 --distr Uniform --s 128 --density 0.0001 --num_cores 1
-	python3 profile_random_matrices.py --bench seg_scan_sc --dtype fp16 --distr PowerLaw --s 128 --density 0.01 --num_cores 1
-	python3 profile_random_matrices.py --bench seg_scan_sc --dtype fp16 --distr PowerLaw --s 128 --density 0.001 --num_cores 1
-	python3 profile_random_matrices.py --bench seg_scan_sc --dtype fp16 --distr PowerLaw --s 128 --density 0.0001 --num_cores 1
+	python3 profile_random_matrices.py --bench custom_copy --dtype fp16 --prob Uniform --num_cores 1 --s 4096
+	python3 profile_random_matrices.py --bench seg_scan_sc --dtype fp16 --prob Uniform --s 128 --density 0.01 --num_cores 1
+	python3 profile_random_matrices.py --bench seg_scan_sc --dtype fp16 --prob Uniform --s 128 --density 0.001 --num_cores 1
+	python3 profile_random_matrices.py --bench seg_scan_sc --dtype fp16 --prob Uniform --s 128 --density 0.0001 --num_cores 1
+	python3 profile_random_matrices.py --bench seg_scan_sc --dtype fp16 --prob PowerLaw --s 128 --density 0.01 --num_cores 1
+	python3 profile_random_matrices.py --bench seg_scan_sc --dtype fp16 --prob PowerLaw --s 128 --density 0.001 --num_cores 1
+	python3 profile_random_matrices.py --bench seg_scan_sc --dtype fp16 --prob PowerLaw --s 128 --density 0.0001 --num_cores 1
 
 paper_fig_3:
 	python3 profile_sparse_matrices.py --bench vec_seg_scan_sc --dtype fp16 --matrixpath ${BASE_SPARSE_MATRIX_PATH}Sandia/ASIC_680k/ASIC_680k --s 128 --num_cores 1
@@ -167,11 +167,11 @@ fig_3_veconly:
 	python3 profile_sparse_matrices.py --bench vec_seg_scan_sc --dtype fp16 --matrixpath ${BASE_SPARSE_MATRIX_PATH}Freescale/circuit5M/circuit5M --s 128 --num_cores 1
 
 powerlaw_fig_5:
-	python3 profile_random_matrices.py --bench seg_scan_sc --dtype fp16 --distr PowerLaw --s 128 --density 0.01 --num_cores 1
-	python3 profile_random_matrices.py --bench seg_scan_sc --dtype fp16 --distr PowerLaw --s 128 --density 0.001 --num_cores 1
-	python3 profile_random_matrices.py --bench seg_scan_sc --dtype fp16 --distr PowerLaw --s 128 --density 0.0001 --num_cores 1
+	python3 profile_random_matrices.py --bench seg_scan_sc --dtype fp16 --prob PowerLaw --s 128 --density 0.01 --num_cores 1
+	python3 profile_random_matrices.py --bench seg_scan_sc --dtype fp16 --prob PowerLaw --s 128 --density 0.001 --num_cores 1
+	python3 profile_random_matrices.py --bench seg_scan_sc --dtype fp16 --prob PowerLaw --s 128 --density 0.0001 --num_cores 1
 
 uniform_fig_5:
-	python3 profile_random_matrices.py --bench seg_scan_sc --dtype fp16 --distr Uniform --s 128 --density 0.01 --num_cores 1
-	python3 profile_random_matrices.py --bench seg_scan_sc --dtype fp16 --distr Uniform --s 128 --density 0.001 --num_cores 1
-	python3 profile_random_matrices.py --bench seg_scan_sc --dtype fp16 --distr Uniform --s 128 --density 0.0001 --num_cores 1
+	python3 profile_random_matrices.py --bench seg_scan_sc --dtype fp16 --prob Uniform --s 128 --density 0.01 --num_cores 1
+	python3 profile_random_matrices.py --bench seg_scan_sc --dtype fp16 --prob Uniform --s 128 --density 0.001 --num_cores 1
+	python3 profile_random_matrices.py --bench seg_scan_sc --dtype fp16 --prob Uniform --s 128 --density 0.0001 --num_cores 1
