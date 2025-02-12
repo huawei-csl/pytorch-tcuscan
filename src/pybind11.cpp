@@ -76,11 +76,7 @@ at::Tensor run_add(const at::Tensor &x, const at::Tensor &y) {
   const at::Device device = x.options().device();
   const uint32_t blockDim = 8;
   const uint32_t tileLen = 128;
-  uint32_t totalLength = 1;
-  for (uint32_t size : x.sizes()) {
-    totalLength *= size;
-  }
-
+  uint32_t totalLength = x.numel();
   const at::Tensor workspace_tensor = alloc_workspace(0, device);
 
   const VaddTiling tiling{totalLength, tileLen};
@@ -116,10 +112,7 @@ at::Tensor run_diff(const at::Tensor &x, int64_t max_size) {
   if (max_size > 0) {
     totalLength = max_size;
   } else {
-    totalLength = 1;
-    for (uint32_t size : x.sizes()) {
-      totalLength *= size;
-    }
+    totalLength = x.numel();
   }
 
   const at::Tensor z =
@@ -168,10 +161,7 @@ at::Tensor run_seg_scan_mc_revert(const at::Tensor &x, const at::Tensor &f,
   const int32_t blockDim = 40;
   const uint32_t tileLen = 1024;
 
-  uint32_t totalLength = 1;
-  for (uint32_t size : x.sizes()) {
-    totalLength *= size;
-  }
+  uint32_t totalLength = x.numel();
 
   const at::Tensor z = at::empty(
       {totalLength}, at::TensorOptions().dtype(at::kFloat).device(device));
@@ -207,10 +197,7 @@ at::Tensor run_seg_scan(const at::Tensor &x, const at::Tensor &f, int S) {
   const at::Device device = x.options().device();
 
   const uint32_t matmul_size = static_cast<uint32_t>(S);
-  uint32_t totalLength = 1;
-  for (uint32_t size : x.sizes()) {
-    totalLength *= size;
-  }
+  uint32_t totalLength = x.numel();
 
   const at::Tensor z = at::empty(
       {totalLength}, at::TensorOptions().dtype(at::kFloat).device(device));
@@ -253,10 +240,7 @@ at::Tensor run_scan_multi_core(const at::Tensor &x, int S) {
       platform_ascendc::PlatformAscendCManager::GetInstance(SOC_VERSION);
 
   const uint32_t matmul_size = static_cast<uint32_t>(S);
-  uint32_t totalLength = 1;
-  for (uint32_t size : x.sizes()) {
-    totalLength *= size;
-  }
+  uint32_t totalLength = x.numel();
 
   // Outuput is always 32-bits (float or int32_t)
   const at::Tensor z = at::empty(
@@ -321,10 +305,7 @@ at::Tensor run_compress(const at::Tensor &x, const at::Tensor &mask, int S) {
       platform_ascendc::PlatformAscendCManager::GetInstance(SOC_VERSION);
 
   const uint32_t matmul_size = static_cast<uint32_t>(S);
-  uint32_t totalLength = 1;
-  for (uint32_t size : x.sizes()) {
-    totalLength *= size;
-  }
+  uint32_t totalLength = x.numel();
 
   const uint32_t tile_elems = matmul_size * matmul_size;
   const uint32_t vec_tile_size = tile_elems / 2;
@@ -384,15 +365,9 @@ at::Tensor run_csr_gather(const at::Tensor &values, const at::Tensor &cols,
   const at::Device device = x.options().device();
   const uint32_t tileLen = 4 * 1024;
 
-  uint32_t values_len = 1;
-  for (uint32_t size : values.sizes()) {
-    values_len *= size;
-  }
+  uint32_t values_len = values.numel();
 
-  uint32_t x_len = 1;
-  for (uint32_t size : x.sizes()) {
-    x_len *= size;
-  }
+  uint32_t x_len = x.numel();
 
   const at::Tensor workspace_tensor = alloc_workspace(0, device);
 
@@ -436,10 +411,7 @@ at::Tensor run_compress_pos(const at::Tensor &x, const at::Tensor &mask,
       platform_ascendc::PlatformAscendCManager::GetInstance(SOC_VERSION);
 
   const uint32_t matmul_size = static_cast<uint32_t>(s);
-  uint32_t totalLength = 1;
-  for (uint32_t size : x.sizes()) {
-    totalLength *= size;
-  }
+  uint32_t totalLength = x.numel();
 
   const uint32_t tile_elems = matmul_size * matmul_size;
   const uint32_t vec_tile_size = tile_elems / 2;
@@ -528,10 +500,7 @@ at::Tensor run_copy(const at::Tensor &x, int s) {
       platform_ascendc::PlatformAscendCManager::GetInstance(SOC_VERSION);
 
   // get total length
-  uint32_t totalLength = 1;
-  for (uint32_t size : x.sizes()) {
-    totalLength *= size;
-  }
+  uint32_t totalLength = x.numel();
   const at::Tensor z =
       at::empty({totalLength}, at::TensorOptions().dtype(dtype).device(device));
 
@@ -576,10 +545,7 @@ at::Tensor run_scan_single_core(const at::Tensor &x, int S) {
 
   // get total length
   const uint32_t matmul_size = static_cast<uint32_t>(S);
-  uint32_t totalLength = 1;
-  for (uint32_t size : x.sizes()) {
-    totalLength *= size;
-  }
+  uint32_t totalLength = x.numel();
   // Outuput is always 32-bits (float or int32_t)
   const at::Tensor z = at::empty(
       {totalLength}, at::TensorOptions().dtype(at::kFloat).device(device));
@@ -625,10 +591,7 @@ at::Tensor run_seg_scan_vec(const at::Tensor &x, const at::Tensor &f, int S) {
   const at::Device device = x.options().device();
 
   const uint32_t tile_len = static_cast<uint32_t>(S);
-  uint32_t totalLength = 1;
-  for (uint32_t size : x.sizes()) {
-    totalLength *= size;
-  }
+  uint32_t totalLength = x.numel();
 
   const at::Tensor z = at::empty(
       {totalLength}, at::TensorOptions().dtype(at::kFloat).device(device));
