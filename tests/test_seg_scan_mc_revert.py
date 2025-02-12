@@ -17,7 +17,7 @@ import tcuscan_ops
 
 torch.npu.config.allow_internal_format = False
 
-_MULTIPLIER = [1, 2, 3, 4, 5, 10, 15, 20, 25, 30]  # , 2, 3, 5]
+_MULTIPLIER = [1, 2, 3, 4, 5, 10, 15, 20, 25, 30]
 
 
 def ref_segscan(x, f):
@@ -35,6 +35,8 @@ def ref_segscan(x, f):
 
 def _test_tcuscan_segscan_revert(n: int, segm_density: float):
 
+    assert 0 <= segm_density <= 1.0, "Segment density must be in [0,1]"
+
     data_type = np.float32
 
     rng = np.random.default_rng(seed=42)
@@ -47,8 +49,6 @@ def _test_tcuscan_segscan_revert(n: int, segm_density: float):
     # Scan(x/f)
     scan_x = np.cumsum(input_x).astype(data_type)
     scan_f = np.cumsum(input_f).astype(np.int32)
-
-    # Collect largest value of each segment
     diff = np.compress(np.append(input_f[1:], 1), scan_x).astype(data_type)
 
     scan_x_npu = torch.Tensor(scan_x).npu()
@@ -58,8 +58,6 @@ def _test_tcuscan_segscan_revert(n: int, segm_density: float):
     assert scan_x_npu.dtype == torch.float32
     assert scan_f_npu.dtype == torch.int32
     assert diff_npu.dtype == torch.float32
-
-    torch.npu.synchronize()
 
     actual = tcuscan_ops.run_seg_scan_mc_revert(scan_x_npu, scan_f_npu, diff_npu).cpu()
     golden = ref_segscan(input_x, input_f).astype(data_type)
@@ -71,7 +69,7 @@ def _test_tcuscan_segscan_revert(n: int, segm_density: float):
 
 
 @pytest.mark.parametrize("multiplier", _MULTIPLIER)
-def test_tcuscan_segscan_single_score_s_32_density_0_01(multiplier: int):
+def test_tcuscan_segscan_mc_revert_density_0_01(multiplier: int):
     segm_density = 0.01
     num_cores = 40
     n = num_cores * 2 * 1024 * multiplier
@@ -80,27 +78,27 @@ def test_tcuscan_segscan_single_score_s_32_density_0_01(multiplier: int):
 
 
 @pytest.mark.parametrize("multiplier", _MULTIPLIER)
-def test_tcuscan_segscan_single_score_s_32_density_0_1(multiplier: int):
+def test_tcuscan_segscan_mc_revert_density_0_1(multiplier: int):
     segm_density = 0.1
     num_cores = 40
-    n = num_cores * 2 * 1024 * multiplier
+    n = num_cores * 1024 * multiplier
 
     _test_tcuscan_segscan_revert(n, segm_density)
 
 
 @pytest.mark.parametrize("multiplier", _MULTIPLIER)
-def test_tcuscan_segscan_single_score_s_32_density_0_001(multiplier: int):
+def test_tcuscan_segscan_mc_revert__density_0_001(multiplier: int):
     segm_density = 0.001
     num_cores = 40
-    n = num_cores * 2 * 1024 * multiplier
+    n = num_cores * 1024 * multiplier
 
     _test_tcuscan_segscan_revert(n, segm_density)
 
 
 @pytest.mark.parametrize("multiplier", _MULTIPLIER)
-def test_tcuscan_segscan_single_score_s_32_density_0_002(multiplier: int):
+def test_tcuscan_segscan_mc_revert_density_0_003(multiplier: int):
     segm_density = 0.003
     num_cores = 40
-    n = num_cores * 2 * 1024 * multiplier
+    n = num_cores * 1024 * multiplier
 
     _test_tcuscan_segscan_revert(n, segm_density)
