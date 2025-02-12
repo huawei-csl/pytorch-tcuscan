@@ -27,7 +27,7 @@ setup_once_aarch64:
 	wget https://gitee.com/ascend/pytorch/releases/download/v6.0.0-pytorch2.4.0/torch_npu-2.4.0.post2-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl
 	pip3 install torch_npu-2.4.0.post2-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl --index-url https://download.pytorch.org/whl/cpu
 
-build: build.sh src/vadd.cpp src/diff.cpp src/seg_scan_single_core.cpp src/pybind11.cpp
+build: build.sh src/vadd.cpp src/diff.cpp src/seg_scan_single_core.cpp src/seg_scan_mc_revert.cpp src/pybind11.cpp
 	./build.sh -v ASCEND910B4
 
 test:
@@ -90,9 +90,6 @@ profile_fp16_vec_seg_scan:
 	python3 profile_tcuscan_ops.py --bench vec_seg_scan_sc --dtype fp16 --density ${DENSITY}  --s 128 --num_cores 1
 
 profile_diffs: profile_fp16_diff profile_fp16_diff_cann profile_fp16_diffp_cann profile_fp32_diff_cann
-
-custom_test:
-	python3 -m pytest tests/test_diff_cann.py -v
 
 profile_fp16_segmented_scan_real:
 	python3 profile_sparse_matrices.py --bench seg_scan_sc --dtype fp16 --matrixpath ${FULL_SPARSE_MATRIX_PATH} --s 32 --num_cores 1
@@ -170,6 +167,7 @@ powerlaw_fig_5:
 	python3 profile_random_matrices.py --bench seg_scan_sc --dtype fp16 --prob PowerLaw --s 128 --density 0.01 --num_cores 1
 	python3 profile_random_matrices.py --bench seg_scan_sc --dtype fp16 --prob PowerLaw --s 128 --density 0.001 --num_cores 1
 	python3 profile_random_matrices.py --bench seg_scan_sc --dtype fp16 --prob PowerLaw --s 128 --density 0.0001 --num_cores 1
+
 
 uniform_fig_5:
 	python3 profile_random_matrices.py --bench seg_scan_sc --dtype fp16 --prob Uniform --s 128 --density 0.01 --num_cores 1

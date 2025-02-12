@@ -23,9 +23,9 @@
 #include "aclrtlaunch_scan_multi_core_int8.h"
 #include "aclrtlaunch_scan_single_core_fp16.h"
 #include "aclrtlaunch_scan_single_core_int8.h"
+#include "aclrtlaunch_seg_scan_mc_revert.h"
 #include "aclrtlaunch_seg_scan_single_core.h"
 #include "aclrtlaunch_seg_scan_vec_single_core.h"
-// #include "aclrtlaunch_segmented_sum_fp16.h"
 #include "aclrtlaunch_vadd_custom.h"
 #include "tiling/platform/platform_ascendc.h"
 #include "tiling/tiling_compress.h"
@@ -34,6 +34,7 @@
 #include "tiling/tiling_diff.h"
 #include "tiling/tiling_scan_multi_core.h"
 #include "tiling/tiling_scan_single_core.h"
+#include "tiling/tiling_seg_scan_mc_revert.h"
 #include "tiling/tiling_seg_scan_single_core.h"
 #include "tiling/tiling_seg_scan_vec_single_core.h"
 #include "tiling/tiling_vadd.h"
@@ -153,6 +154,47 @@ at::Tensor run_diff(const at::Tensor &x, int64_t max_size) {
      const_cast<void *>(z.storage().data()),
      const_cast<void *>(workspace_tensor.storage().data()), tilingDevice);
   }
+
+  aclrtFree(tilingDevice);
+  aclrtSynchronizeStream(acl_stream);
+
+  return z;
+}
+
+at::Tensor run_seg_scan_mc_revert(const at::Tensor &x, const at::Tensor &f,
+                                  const at::Tensor &diff) {
+  auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
+  const at::Device device = x.options().device();
+  const int32_t blockDim = 40;
+  const uint32_t tileLen = 1024;
+
+  uint32_t totalLength = 1;
+  for (uint32_t size : x.sizes()) {
+    totalLength *= size;
+  }
+
+  const at::Tensor z = at::empty(
+      {totalLength}, at::TensorOptions().dtype(at::kFloat).device(device));
+
+  const uint32_t diff_len = static_cast<uint32_t>(diff.numel());
+
+  const SegScanMcRevertTiling tiling{blockDim, totalLength, diff_len, tileLen};
+
+  constexpr size_t tilingSize = sizeof(SegScanMcRevertTiling);
+  const uint8_t *tilingHost = reinterpret_cast<const uint8_t *>(&tiling);
+
+  uint8_t *tilingDevice;
+  aclrtMalloc((void **)&tilingDevice, tilingSize, ACL_MEM_MALLOC_HUGE_FIRST);
+  aclrtMemcpy(tilingDevice, tilingSize, tilingHost, tilingSize,
+              ACL_MEMCPY_HOST_TO_DEVICE);
+  const at::Tensor workspace_tensor = alloc_workspace(0, device);
+
+  ACLRT_LAUNCH_KERNEL(seg_scan_mc_revert)
+  (blockDim, acl_stream, const_cast<void *>(x.storage().data()),
+   const_cast<void *>(f.storage().data()),
+   const_cast<void *>(diff.storage().data()),
+   const_cast<void *>(z.storage().data()),
+   const_cast<void *>(workspace_tensor.storage().data()), tilingDevice);
 
   aclrtFree(tilingDevice);
   aclrtSynchronizeStream(acl_stream);
@@ -636,4 +678,6 @@ PYBIND11_MODULE(tcuscan_ops, m) {
         "AscendC Scan Single Core");
   m.def("run_seg_scan_vec", &asc::run_seg_scan_vec,
         "AscendC Segmented Scan (vector-only)");
+  m.def("run_seg_scan_mc_revert", &asc::run_seg_scan_mc_revert,
+        "AscendC Vector Revert for MC Segmented Scan");
 }

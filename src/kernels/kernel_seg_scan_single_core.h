@@ -28,8 +28,7 @@ using namespace kernel_utils;
  * `tile_len_` and adding to them the sum of all the previous chunks.
  *
  * @tparam DataTypeT Data type of input and output vectors
- * @tparam FlagT Data type of flag vector
- */
+ * @tparam FlagOutputT Data type of flag vector */
 template <typename DataTypeT, typename FlagOutputT>
 class KernelSegScanRevertSpec {
   constexpr static uint32_t BUFFER_NUM = 1;
