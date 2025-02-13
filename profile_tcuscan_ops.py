@@ -16,6 +16,7 @@ from functools import partial
 from math import ceil
 from typing import Optional, Tuple
 
+import numpy as np
 import torch
 import torch.nn.functional as F
 
@@ -342,6 +343,31 @@ def mcscan_benchmark(
     return _run_benchmark(device, run_scan), size
 
 
+# TODO: Here we abuse of outputsize param. Outputsize = Inputsize, but len(diff) is needed
+# for bandwidth measurements
+def segscan_mc_revert_benchmark(
+    device: Device, size: int, dtype: torch.dtype, segm_density: float
+) -> Tuple[float, int]:
+
+    rng = np.random.default_rng(seed=42)
+    input_x = rng.integers(0, 10, size).astype(dtype)
+    input_f = torch.empty(size).uniform_(0, 1) < segm_density
+    input_f = input_f.numpy()
+    input_f[0] = 0
+    scan_x = np.cumsum(input_x).astype(dtype)
+    scan_f = np.cumsum(input_f).astype(np.int32)
+    diff = np.compress(np.append(input_f[1:], 1), scan_x).astype(dtype)
+
+    scan_x_npu = torch.Tensor(scan_x).npu()
+    scan_f_npu = torch.Tensor(scan_f).to(torch.int32).npu()
+    diff_npu = torch.Tensor(diff).npu()
+
+    def run_revert() -> None:
+        _ = tcuscan_ops.run_seg_scan_mc_revert(scan_x_npu, scan_f_npu, diff_npu)
+
+    return _run_benchmark(device, run_revert), len(diff)
+
+
 def benchmark(
     device: Device,
     op_name: str,
@@ -398,6 +424,7 @@ if __name__ == "__main__":  # noqa
             "custom_copy",
             "vec_seg_scan_sc",
             "scscan",
+            "segscan_mc_revert",
         ],
     )
     parser.add_argument("--dtype", choices=["int8", "fp16", "int16", "fp32"])
@@ -448,6 +475,17 @@ if __name__ == "__main__":  # noqa
             "copy",
             dtype,
             partial(clone_benchmark, dtype=tdtype),
+            sizes,
+            sp_density,
+        )
+    elif bench == "segscan_mc_revert" and dtype in ["fp32"]:
+        benchmark(
+            device,
+            "revert",
+            dtype,
+            partial(
+                segscan_mc_revert_benchmark, dtype=np.float32, segm_density=sp_density
+            ),
             sizes,
             sp_density,
         )
