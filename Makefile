@@ -47,15 +47,14 @@ profile_fp32_%:
 profile_int16_%:
 	python3 profile_tcuscan_ops.py --bench $* --dtype int16
 
-profile_mcscan:
-	python3 profile_tcuscan_ops.py --bench mcscan --s 32 --dtype fp16
-	python3 profile_tcuscan_ops.py --bench mcscan --s 64 --dtype fp16
-	python3 profile_tcuscan_ops.py --bench mcscan --s 128 --dtype fp16
+profile_all_s_fp16_%:
+	python3 profile_tcuscan_ops.py --bench $* --s 32 --dtype fp16
+	python3 profile_tcuscan_ops.py --bench $* --s 64 --dtype fp16
+	python3 profile_tcuscan_ops.py --bench $* --s 128 --dtype fp16
 
-profile_scscan:
-	python3 profile_tcuscan_ops.py --bench scscan --s 32 --dtype fp16
-	python3 profile_tcuscan_ops.py --bench scscan --s 64 --dtype fp16
-	python3 profile_tcuscan_ops.py --bench scscan --s 128 --dtype fp16
+profile_mcscan: profile_all_s_fp16_mcscan
+
+profile_scscan: profile_all_s_fp16_scscan
 
 profile_fp16_compress:
 	python3 profile_tcuscan_ops.py --bench compress --s 32  --density ${DENSITY} --dtype fp16
@@ -127,18 +126,6 @@ profile_fp32_revert_mcscan:
 profile_fp16_csr_gather:
 	python3 profile_tcuscan_ops.py --bench csr_gather --dtype fp16 --num_cores 40
 
-paper_fig_3:
-	python3 profile_sparse_matrices.py --bench vec_seg_scan_sc --dtype fp16 --matrixpath ${BASE_SPARSE_MATRIX_PATH}Sandia/ASIC_680k/ASIC_680k --s 128 --num_cores 1
-	python3 profile_sparse_matrices.py --bench vec_seg_scan_sc --dtype fp16 --matrixpath ${BASE_SPARSE_MATRIX_PATH}Williams/mc2depi/mc2depi --s 128 --num_cores 1
-	python3 profile_sparse_matrices.py --bench vec_seg_scan_sc --dtype fp16 --matrixpath ${BASE_SPARSE_MATRIX_PATH}Williams/mac_econ_fwd500/mac_econ_fwd500 --s 128 --num_cores 1
-	python3 profile_sparse_matrices.py --bench vec_seg_scan_sc --dtype fp16 --matrixpath ${BASE_SPARSE_MATRIX_PATH}Williams/pdb1HYS/pdb1HYS --s 128 --num_cores 1
-	python3 profile_sparse_matrices.py --bench vec_seg_scan_sc --dtype fp16 --matrixpath ${BASE_SPARSE_MATRIX_PATH}Freescale/circuit5M/circuit5M --s 128 --num_cores 1
-	python3 profile_sparse_matrices.py --bench seg_scan_sc --dtype fp16 --matrixpath ${BASE_SPARSE_MATRIX_PATH}Williams/pdb1HYS/pdb1HYS --s 128 --num_cores 1
-	python3 profile_sparse_matrices.py --bench seg_scan_sc --dtype fp16 --matrixpath ${BASE_SPARSE_MATRIX_PATH}Freescale/circuit5M/circuit5M --s 128 --num_cores 1
-	python3 profile_sparse_matrices.py --bench seg_scan_sc --dtype fp16 --matrixpath ${BASE_SPARSE_MATRIX_PATH}Williams/mac_econ_fwd500/mac_econ_fwd500 --s 128 --num_cores 1
-	python3 profile_sparse_matrices.py --bench seg_scan_sc --dtype fp16 --matrixpath ${BASE_SPARSE_MATRIX_PATH}Williams/mc2depi/mc2depi --s 128 --num_cores 1
-	python3 profile_sparse_matrices.py --bench seg_scan_sc --dtype fp16 --matrixpath ${BASE_SPARSE_MATRIX_PATH}Sandia/ASIC_680k/ASIC_680k --s 128 --num_cores 1
-
 fig_3_matmul:
 	python3 profile_sparse_matrices.py --bench seg_scan_sc --dtype fp16 --matrixpath ${BASE_SPARSE_MATRIX_PATH}Williams/pdb1HYS/pdb1HYS --s 128 --num_cores 1
 	python3 profile_sparse_matrices.py --bench seg_scan_sc --dtype fp16 --matrixpath ${BASE_SPARSE_MATRIX_PATH}Freescale/circuit5M/circuit5M --s 128 --num_cores 1
@@ -153,25 +140,20 @@ fig_3_veconly:
 	python3 profile_sparse_matrices.py --bench vec_seg_scan_sc --dtype fp16 --matrixpath ${BASE_SPARSE_MATRIX_PATH}Williams/pdb1HYS/pdb1HYS --s 128 --num_cores 1
 	python3 profile_sparse_matrices.py --bench vec_seg_scan_sc --dtype fp16 --matrixpath ${BASE_SPARSE_MATRIX_PATH}Freescale/circuit5M/circuit5M --s 128 --num_cores 1
 
+paper_fig_3: fig_3_matmul fig_3_veconly
+
 powerlaw_fig_5:
 	python3 profile_random_matrices.py --bench seg_scan_sc --dtype fp16 --prob PowerLaw --s 128 --density 0.01 --num_cores 1
 	python3 profile_random_matrices.py --bench seg_scan_sc --dtype fp16 --prob PowerLaw --s 128 --density 0.001 --num_cores 1
 	python3 profile_random_matrices.py --bench seg_scan_sc --dtype fp16 --prob PowerLaw --s 128 --density 0.0001 --num_cores 1
-
 
 uniform_fig_5:
 	python3 profile_random_matrices.py --bench seg_scan_sc --dtype fp16 --prob Uniform --s 128 --density 0.01 --num_cores 1
 	python3 profile_random_matrices.py --bench seg_scan_sc --dtype fp16 --prob Uniform --s 128 --density 0.001 --num_cores 1
 	python3 profile_random_matrices.py --bench seg_scan_sc --dtype fp16 --prob Uniform --s 128 --density 0.0001 --num_cores 1
 
-paper_fig_5:
+paper_fig_5: powerlaw_fig_5 uniform_fig_5
 	python3 profile_random_matrices.py --bench custom_copy --dtype fp16 --prob Uniform --num_cores 1 --s 4096
-	python3 profile_random_matrices.py --bench seg_scan_sc --dtype fp16 --prob Uniform --s 128 --density 0.01 --num_cores 1
-	python3 profile_random_matrices.py --bench seg_scan_sc --dtype fp16 --prob Uniform --s 128 --density 0.001 --num_cores 1
-	python3 profile_random_matrices.py --bench seg_scan_sc --dtype fp16 --prob Uniform --s 128 --density 0.0001 --num_cores 1
-	python3 profile_random_matrices.py --bench seg_scan_sc --dtype fp16 --prob PowerLaw --s 128 --density 0.01 --num_cores 1
-	python3 profile_random_matrices.py --bench seg_scan_sc --dtype fp16 --prob PowerLaw --s 128 --density 0.001 --num_cores 1
-	python3 profile_random_matrices.py --bench seg_scan_sc --dtype fp16 --prob PowerLaw --s 128 --density 0.0001 --num_cores 1
 
 paper_fig_6_segsum:
 	python3 profile_tcuscan_ops.py --bench mcscan --s 128 --dtype fp16
@@ -181,14 +163,7 @@ paper_fig_6_segsum:
 
 paper_fig_6_segscan:
 	python3 profile_tcuscan_ops.py --bench mcscan --s 128 --dtype fp16
-	python3 profile_tcuscan_ops.py --bench csr_gather --dtype fp16 --num_cores 40
-	python3 profile_tcuscan_ops.py --bench segscan_mc_revert --dtype fp32 --num_cores 40 --density 0.05
+	python3 profile_tcuscan_ops.py --bench mcscan --s 128 --dtype int8
+	python3 profile_tcuscan_ops.py --bench seg_scan_mc_revert --s 128 --dtype fp32 --density 0.001
 
-paper_fig_6:
-	python3 profile_tcuscan_ops.py --bench mcscan --s 128 --dtype fp16
-	python3 profile_tcuscan_ops.py --bench compress --s 128 --density 0.05 --dtype fp32
-	python3 profile_tcuscan_ops.py --bench diff_cann --s 128 --dtype fp32
-	python3 profile_tcuscan_ops.py --bench copy --dtype fp16
-	python3 profile_tcuscan_ops.py --bench mcscan --s 128 --dtype fp16
-	python3 profile_tcuscan_ops.py --bench csr_gather --dtype fp16 --num_cores 40
-	python3 profile_tcuscan_ops.py --bench segscan_mc_revert --dtype fp32 --num_cores 40 --density 0.05
+paper_fig_6: paper_fig_6_segsum paper_fig_6_segscan

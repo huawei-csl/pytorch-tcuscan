@@ -62,10 +62,10 @@ class KernelSegScanMcRevert {
 
     pipe.InitBuffer(in_q_, BUFFER_NUM, tile_len_ * sizeof(DataTypeT));
     pipe.InitBuffer(in_f_q_, BUFFER_NUM, tile_len_ * sizeof(InputFlagT));
-    pipe.InitBuffer(in_diff_q_, BUFFER_NUM, tile_len_ * sizeof(DataTypeT));
+    pipe.InitBuffer(in_diff_q_, BUFFER_NUM,
+                    (tile_len_ + 1) * sizeof(DataTypeT));
     pipe.InitBuffer(out_q_, BUFFER_NUM, tile_len_ * sizeof(DataTypeT));
 
-    pipe.InitBuffer(revert_buf_, tile_len_ * sizeof(float));
     pipe.InitBuffer(float_buf_, tile_len_ * sizeof(float));
     pipe.InitBuffer(mask_buf_, tile_len_ * sizeof(int32_t));
     pipe.InitBuffer(int16_buf_, tile_len_ * sizeof(int16_t));
@@ -121,13 +121,7 @@ class KernelSegScanMcRevert {
     Adds(mask_buf_lt, src, -scalar, tile_len_);
     Cast(int16_lt, mask_buf_lt, RoundMode::CAST_NONE, tile_len_);
     Not(int16_lt, int16_lt, tile_len_);
-
-    PipeBarrier<PIPE_V>();
-
     ShiftRight(uint16_lt, uint16_lt, FIFTEEN_, tile_len_);
-
-    PipeBarrier<PIPE_V>();
-
     Cast(dst, int16_lt, RoundMode::CAST_NONE, tile_len_);
   }
 
@@ -175,20 +169,16 @@ class KernelSegScanMcRevert {
 
     LocalTensor<DataTypeT> vec_in_diff_lt = in_diff_q_.DeQue<DataTypeT>();
 
-    LocalTensor<float> calc_buf_lt = revert_buf_.Get<float>();
-
-    DataCopy(calc_buf_lt, vec_in_lt, tile_len_);
+    DataCopy(vec_out_lt, vec_in_lt, tile_len_);
 
     DataTypeT previous_sum = 0;
     for (int32_t segm_idx = smallestSegmIdx; segm_idx <= largestSegmIdx;
          segm_idx++) {
       //  Get the last value of the previous segment
       const float delta = vec_in_diff_lt(segm_idx - smallestSegmIdx);
-      MaskedSub(calc_buf_lt, vec_f_in_lt, segm_idx + 1, delta - previous_sum);
+      MaskedSub(vec_out_lt, vec_f_in_lt, segm_idx + 1, delta - previous_sum);
       previous_sum = delta;
     }
-
-    DataCopy(vec_out_lt, calc_buf_lt, tile_len_);
 
     out_q_.EnQue<DataTypeT>(vec_out_lt);
     in_q_.FreeTensor<DataTypeT>(vec_in_lt);
@@ -203,7 +193,6 @@ class KernelSegScanMcRevert {
   TQue<QuePosition::VECIN, BUFFER_NUM> in_diff_q_;
   TQue<QuePosition::VECOUT, BUFFER_NUM> out_q_;
 
-  TBuf<QuePosition::VECCALC> revert_buf_;
   TBuf<QuePosition::VECCALC> float_buf_;
   TBuf<QuePosition::VECCALC> mask_buf_;
   TBuf<QuePosition::VECCALC> int16_buf_;

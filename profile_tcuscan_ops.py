@@ -345,7 +345,7 @@ def mcscan_benchmark(
 
 # TODO: Here we abuse of outputsize param. Outputsize = Inputsize, but len(diff) is needed
 # for bandwidth measurements
-def segscan_mc_revert_benchmark(
+def seg_scan_mc_revert_benchmark(
     device: Device, size: int, dtype: torch.dtype, segm_density: float
 ) -> Tuple[float, int]:
 
@@ -399,7 +399,7 @@ def benchmark(
             time, outputsize = fn(device, size)
             fd.write(f"{op_name},{dtype},{size},{density},{outputsize},{time:.2f}\n")
             logger.info(
-                f"OP:{op_name}, dtype: {dtype}, size: {size:},outputsize: {outputsize}, density: {density}, device: {device.str}"
+                f"OP:{op_name}, dtype: {dtype}, size: {size:}, outputsize: {outputsize}, density: {density}, device: {device.str}"
             )
 
 
@@ -424,7 +424,7 @@ if __name__ == "__main__":  # noqa
             "custom_copy",
             "vec_seg_scan_sc",
             "scscan",
-            "segscan_mc_revert",
+            "seg_scan_mc_revert",
         ],
     )
     parser.add_argument("--dtype", choices=["int8", "fp16", "int16", "fp32"])
@@ -478,13 +478,13 @@ if __name__ == "__main__":  # noqa
             sizes,
             sp_density,
         )
-    elif bench == "segscan_mc_revert" and dtype in ["fp32"]:
+    elif bench == "seg_scan_mc_revert" and dtype in ["fp32"]:
         benchmark(
             device,
-            "revert",
+            "seg_scan_mc_revert",
             dtype,
             partial(
-                segscan_mc_revert_benchmark, dtype=np.float32, segm_density=sp_density
+                seg_scan_mc_revert_benchmark, dtype=np.float32, segm_density=sp_density
             ),
             sizes,
             sp_density,
@@ -563,11 +563,11 @@ if __name__ == "__main__":  # noqa
             sizes,
             sp_density,
         )
-    elif bench == "mcscan" and dtype in ["fp16"]:
+    elif bench == "mcscan" and dtype in ["fp16", "int8"]:
         tdtype = STR_TO_DTYPE[dtype]
         benchmark(
             device,
-            f"mcscan_{s}",
+            f"mcscan_{dtype}_{s}",
             dtype,
             partial(mcscan_benchmark, dtype=tdtype, s=s),
             sizes,
