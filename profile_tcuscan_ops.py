@@ -181,7 +181,7 @@ def copy_benchmark(
 
 
 def clone_benchmark(device: Device, size: int, dtype: torch.dtype) -> Tuple[float, int]:
-    if dtype == torch.float16:
+    if dtype in {torch.float16, torch.float32}:
         x = torch.rand(size, device=device.str, dtype=dtype)
     elif dtype == torch.int16:
         x = torch.randint(0, 2**7 - 1, (size,), device=device.str, dtype=dtype)
@@ -439,7 +439,7 @@ if __name__ == "__main__":  # noqa
     max_size = args.max_size
     num_cores = args.num_cores
     s = args.s
-    sp_density = args.density
+    density = args.density
 
     if DEVICE == "npu":
         device = Device(torch.npu, NPU_DEVICE)
@@ -458,7 +458,7 @@ if __name__ == "__main__":  # noqa
     logger.info(f"* Max iterations : {max_iters}")
     logger.info(f"* num_cores      : {num_cores}")
     logger.info(f"* s              : {s}")
-    logger.info(f"* sp_density     : {sp_density}")
+    logger.info(f"* density        : {density}")
     logger.info(f"* device         : {device.str}")
     logger.info("*******************************")
     logger.info("*******************************")
@@ -468,7 +468,7 @@ if __name__ == "__main__":  # noqa
 
     if bench == "vadd":
         benchmark(device, "vadd", "fp16", vadd_benchmark, sizes)
-    elif bench == "copy" and dtype in ["int16", "fp16"]:
+    elif bench == "copy" and dtype in ["int16", "fp16", "fp32"]:
         tdtype = STR_TO_DTYPE[dtype]
         benchmark(
             device,
@@ -476,18 +476,18 @@ if __name__ == "__main__":  # noqa
             dtype,
             partial(clone_benchmark, dtype=tdtype),
             sizes,
-            sp_density,
+            density,
         )
     elif bench == "seg_scan_mc_revert" and dtype in ["fp32"]:
         benchmark(
             device,
-            "seg_scan_mc_revert",
+            f"seg_scan_mc_revert_{density}",
             dtype,
             partial(
-                seg_scan_mc_revert_benchmark, dtype=np.float32, segm_density=sp_density
+                seg_scan_mc_revert_benchmark, dtype=np.float32, segm_density=density
             ),
             sizes,
-            sp_density,
+            density,
         )
     elif bench == "custom_copy" and dtype in ["fp32", "fp16"]:
         tdtype = STR_TO_DTYPE[dtype]
@@ -497,7 +497,7 @@ if __name__ == "__main__":  # noqa
             dtype,
             partial(copy_benchmark, s=s, dtype=tdtype),
             sizes,
-            sp_density,
+            density,
         )
     elif bench == "diff_cann" and dtype in ["fp16", "fp32"]:
         tdtype = STR_TO_DTYPE[dtype]
@@ -507,7 +507,7 @@ if __name__ == "__main__":  # noqa
             dtype,
             partial(baseline_diff_benchmark, dtype=tdtype),
             sizes,
-            sp_density,
+            density,
         )
     elif bench == "diffp_cann" and dtype in ["fp16", "fp32"]:
         tdtype = STR_TO_DTYPE[dtype]
@@ -517,7 +517,7 @@ if __name__ == "__main__":  # noqa
             dtype,
             partial(baseline_diffp_benchmark, dtype=tdtype),
             sizes,
-            sp_density,
+            density,
         )
     elif bench == "diff" and dtype in ["fp16", "fp32"]:
         tdtype = STR_TO_DTYPE[dtype]
@@ -527,29 +527,27 @@ if __name__ == "__main__":  # noqa
             dtype,
             partial(diff_benchmark, dtype=tdtype),
             sizes,
-            sp_density,
+            density,
         )
     elif bench == "compress" and dtype in ["fp16", "fp32"]:
         tdtype = STR_TO_DTYPE[dtype]
         benchmark(
             device,
-            f"compress_{s}_{sp_density}",
+            f"compress_{s}_{density}",
             dtype,
-            partial(compress_benchmark, dtype=tdtype, s=s, segm_density=sp_density),
+            partial(compress_benchmark, dtype=tdtype, s=s, segm_density=density),
             sizes,
-            sp_density,
+            density,
         )
     elif bench == "segmented_sum" and dtype in ["fp16"]:
         tdtype = STR_TO_DTYPE[dtype]
         benchmark(
             device,
-            f"segmented_sum_{s}_{sp_density}",
+            f"segmented_sum_{s}_{density}",
             dtype,
-            partial(
-                segmented_sum_benchmark, dtype=tdtype, s=s, segm_density=sp_density
-            ),
+            partial(segmented_sum_benchmark, dtype=tdtype, s=s, segm_density=density),
             sizes,
-            sp_density,
+            density,
         )
     elif bench == "csr_gather":
         benchmark(device, "csr_gather", "fp16", csr_gather_benchmark, sizes)
@@ -557,32 +555,32 @@ if __name__ == "__main__":  # noqa
         tdtype = STR_TO_DTYPE[dtype]
         benchmark(
             device,
-            f"seg_scan_sc_{s}_{sp_density}",
+            f"seg_scan_sc_{s}_{density}",
             "fp16",
-            partial(segmented_scan_single_core_benchmark, s=s, segm_density=sp_density),
+            partial(segmented_scan_single_core_benchmark, s=s, segm_density=density),
             sizes,
-            sp_density,
+            density,
         )
     elif bench == "mcscan" and dtype in ["fp16", "int8"]:
         tdtype = STR_TO_DTYPE[dtype]
         benchmark(
             device,
-            f"mcscan_{dtype}_{s}",
+            f"mcscan_{s}",
             dtype,
             partial(mcscan_benchmark, dtype=tdtype, s=s),
             sizes,
-            sp_density,
+            density,
         )
     elif bench == "vec_seg_scan_sc":
         benchmark(
             device,
-            f"vec_seg_scan_sc_{s}_{sp_density}",
+            f"vec_seg_scan_sc_{s}_{density}",
             "fp16",
             partial(
-                vec_segmented_scan_single_core_benchmark, s=s, segm_density=sp_density
+                vec_segmented_scan_single_core_benchmark, s=s, segm_density=density
             ),
             sizes,
-            sp_density,
+            density,
         )
     elif bench == "scscan" and dtype in ["fp16"]:
         tdtype = STR_TO_DTYPE[dtype]
@@ -592,7 +590,7 @@ if __name__ == "__main__":  # noqa
             dtype,
             partial(scscan_benchmark, dtype=tdtype, s=s),
             sizes,
-            sp_density,
+            density,
         )
     else:
         raise RuntimeError(

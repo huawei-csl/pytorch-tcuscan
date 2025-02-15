@@ -167,3 +167,15 @@ paper_fig_6_segscan:
 	python3 profile_tcuscan_ops.py --bench seg_scan_mc_revert --s 128 --dtype fp32 --density 0.001
 
 paper_fig_6: paper_fig_6_segsum paper_fig_6_segscan
+
+
+paper_fig_7:
+	python3 profile_tcuscan_ops.py --bench copy --s 128 --dtype fp32
+	python3 profile_tcuscan_ops.py --bench mcscan --s 128 --dtype fp16
+	python3 profile_tcuscan_ops.py --bench mcscan --s 128 --dtype int8
+	python3 profile_tcuscan_ops.py --bench compress --s 128 --density 0.01 --dtype fp32
+	python3 profile_tcuscan_ops.py --bench compress --s 128 --density 0.001 --dtype fp32
+	python3 profile_tcuscan_ops.py --bench mcscan --s 128 --dtype int8
+	python3 profile_tcuscan_ops.py --bench diff_cann --s 128 --dtype fp32
+	python3 profile_tcuscan_ops.py --bench seg_scan_mc_revert --s 128 --dtype fp32 --density 0.001
+	python3 profile_tcuscan_ops.py --bench seg_scan_mc_revert --s 128 --dtype fp32 --density 0.01
