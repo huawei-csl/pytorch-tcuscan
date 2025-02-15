@@ -143,6 +143,13 @@ test_segmented_sum:
     - make setup_ci
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_segmented_sum
 
+test_seg_scan_mc_revert:
+  <<: *test_config
+  script:
+    - make setup_ci
+    - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_seg_scan_mc_revert
+
+
 test_vadd:
   <<: *test_config
   script:
