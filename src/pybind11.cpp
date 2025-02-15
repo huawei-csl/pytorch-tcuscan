@@ -158,13 +158,10 @@ at::Tensor run_seg_scan_mc_revert(const at::Tensor &x, const at::Tensor &f,
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();
 
-  const uint32_t tileLen = 3 * 1024;
+  const uint32_t tileLen = 1024;
   const uint32_t totalLength = x.numel();
 
-  uint32_t blockDim =
-      static_cast<uint32_t>((totalLength + tileLen - 1) / tileLen);
-  blockDim = blockDim > 20 ? 20 : blockDim;
-
+  uint32_t blockDim = 512;
   const at::Tensor z = at::empty(
       {totalLength}, at::TensorOptions().dtype(at::kFloat).device(device));
 

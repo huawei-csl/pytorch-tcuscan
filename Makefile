@@ -1,6 +1,6 @@
 .PHONY: all clean setup_ci setup_once setup_once_aarch64 build test profile
 
-DENSITY?=0.05
+DENSITY?=0.001
 LOCAL_SPARSE_MATRIX_NAME?='Boeing/bcsstk35/bcsstk35'
 BASE_SPARSE_MATRIX_PATH?=${HOME}/.ssgetpy/MM/
 FULL_SPARSE_MATRIX_PATH=${BASE_SPARSE_MATRIX_PATH}${LOCAL_SPARSE_MATRIX_NAME}
@@ -121,7 +121,7 @@ profile_fp32_diff_real:
 	python3 profile_sparse_matrices.py --bench diff --matrixpath ${FULL_SPARSE_MATRIX_PATH} --dtype fp16
 
 profile_fp32_revert_mcscan:
-	python3 profile_tcuscan_ops.py --bench segscan_mc_revert --dtype fp32 --num_cores 20 --s 128 --density 0.01
+	python3 profile_tcuscan_ops.py --bench seg_scan_mc_revert --dtype fp32 --num_cores 20 --s 128 --density 0.01
 
 profile_fp16_csr_gather:
 	python3 profile_tcuscan_ops.py --bench csr_gather --dtype fp16 --num_cores 40
@@ -157,14 +157,14 @@ paper_fig_5: powerlaw_fig_5 uniform_fig_5
 
 paper_fig_6_segsum:
 	python3 profile_tcuscan_ops.py --bench mcscan --s 128 --dtype fp16
-	python3 profile_tcuscan_ops.py --bench compress --s 128 --density 0.05 --dtype fp32
+	python3 profile_tcuscan_ops.py --bench compress --s 128 --density ${DENSITY} --dtype fp32
 	python3 profile_tcuscan_ops.py --bench diff_cann --s 128 --dtype fp32
 	python3 profile_tcuscan_ops.py --bench copy --dtype fp16
 
 paper_fig_6_segscan:
 	python3 profile_tcuscan_ops.py --bench mcscan --s 128 --dtype fp16
 	python3 profile_tcuscan_ops.py --bench mcscan --s 128 --dtype int8
-	python3 profile_tcuscan_ops.py --bench seg_scan_mc_revert --s 128 --dtype fp32 --density 0.001
+	python3 profile_tcuscan_ops.py --bench seg_scan_mc_revert --s 128 --dtype fp32 --density ${DENSITY}
 
 paper_fig_6: paper_fig_6_segsum paper_fig_6_segscan
 
