@@ -343,8 +343,6 @@ def mcscan_benchmark(
     return _run_benchmark(device, run_scan), size
 
 
-# TODO: Here we abuse of outputsize param. Outputsize = Inputsize, but len(diff) is needed
-# for bandwidth measurements
 def seg_scan_mc_revert_benchmark(
     device: Device, size: int, dtype: torch.dtype, segm_density: float
 ) -> Tuple[float, int]:
@@ -354,18 +352,24 @@ def seg_scan_mc_revert_benchmark(
     input_f = torch.empty(size).uniform_(0, 1) < segm_density
     input_f = input_f.numpy()
     input_f[0] = 0
-    scan_x = np.cumsum(input_x).astype(dtype)
+    scan_x = np.cumsum(input_x).astype(np.float32)
     scan_f = np.cumsum(input_f).astype(np.int32)
-    diff = np.compress(np.append(input_f[1:], 1), scan_x).astype(dtype)
+    diff = np.compress(np.append(input_f[1:], 1), scan_x).astype(np.float32)
 
     scan_x_npu = torch.Tensor(scan_x).npu()
     scan_f_npu = torch.Tensor(scan_f).to(torch.int32).npu()
     diff_npu = torch.Tensor(diff).npu()
 
+    assert scan_x_npu.dtype == torch.float32
+    assert scan_f_npu.dtype == torch.int32
+    assert diff_npu.dtype == torch.float32
+
     def run_revert() -> None:
         _ = tcuscan_ops.run_seg_scan_mc_revert(scan_x_npu, scan_f_npu, diff_npu)
 
-    return _run_benchmark(device, run_revert), len(diff)
+    # TODO: Here we abuse of outputsize param. Outputsize = Inputsize, but len(diff) is needed
+    # for bandwidth measurements
+    return _run_benchmark(device, run_revert), len(diff_npu)
 
 
 def benchmark(

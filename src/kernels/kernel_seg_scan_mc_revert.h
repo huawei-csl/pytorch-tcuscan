@@ -23,7 +23,7 @@ using namespace kernel_utils;
  */
 template <typename DataTypeT = float, typename InputFlagT = int32_t>
 class KernelSegScanMcRevert {
-  constexpr static uint32_t BUFFER_NUM = 2;
+  constexpr static uint32_t BUFFER_NUM = 1;
 
  public:
   /**
