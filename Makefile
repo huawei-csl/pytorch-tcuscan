@@ -121,7 +121,7 @@ profile_fp32_diff_real:
 	python3 profile_sparse_matrices.py --bench diff --matrixpath ${FULL_SPARSE_MATRIX_PATH} --dtype fp16
 
 profile_fp32_revert_mcscan:
-	python3 profile_tcuscan_ops.py --bench seg_scan_mc_revert --dtype fp32 --num_cores 20 --s 128 --density 0.01
+	python3 profile_tcuscan_ops.py --bench seg_scan_mc_revert --dtype fp32 --num_cores 20 --s 128 --density ${DENSITY}
 
 profile_fp16_csr_gather:
 	python3 profile_tcuscan_ops.py --bench csr_gather --dtype fp16 --num_cores 40
