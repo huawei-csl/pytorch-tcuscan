@@ -47,6 +47,9 @@ profile_fp32_%:
 profile_int16_%:
 	python3 profile_tcuscan_ops.py --bench $* --dtype int16
 
+profile_int32_%:
+	python3 profile_tcuscan_ops.py --bench $* --dtype int32
+
 profile_all_s_fp16_%:
 	python3 profile_tcuscan_ops.py --bench $* --s 32 --dtype fp16
 	python3 profile_tcuscan_ops.py --bench $* --s 64 --dtype fp16
