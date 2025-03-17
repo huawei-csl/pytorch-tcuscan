@@ -19,6 +19,7 @@
 #include "aclrtlaunch_csr_gather.h"
 #include "aclrtlaunch_diff_fp16.h"
 #include "aclrtlaunch_diff_fp32.h"
+#include "aclrtlaunch_mc_gather.h"
 #include "aclrtlaunch_scan_multi_core_fp16.h"
 #include "aclrtlaunch_scan_multi_core_int8.h"
 #include "aclrtlaunch_scan_single_core_fp16.h"
@@ -32,6 +33,7 @@
 #include "tiling/tiling_copy.h"
 #include "tiling/tiling_csr_gather.h"
 #include "tiling/tiling_diff.h"
+#include "tiling/tiling_mc_gather.h"
 #include "tiling/tiling_scan_multi_core.h"
 #include "tiling/tiling_scan_single_core.h"
 #include "tiling/tiling_seg_scan_mc_revert.h"
@@ -359,6 +361,39 @@ at::Tensor run_compress(const at::Tensor &x, const at::Tensor &mask, int S) {
   return z;
 }
 
+at::Tensor run_mc_gather(const at::Tensor &values, const at::Tensor &idxs,
+                         const uint32_t tile_len) {
+  auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
+
+  const at::Device device = values.options().device();
+  const uint32_t tileLen = tile_len;
+  const uint32_t blockDim = 20;
+
+  uint32_t values_len = values.numel();
+  uint32_t idx_len = idxs.numel();
+  const at::Tensor z = at::empty(
+      {idx_len}, at::TensorOptions().dtype(at::kFloat).device(device));
+  const at::Tensor workspace_tensor = alloc_workspace(0, device);
+  const McGatherTiling tiling{blockDim, idx_len, tileLen};
+
+  constexpr size_t tilingSize = sizeof(McGatherTiling);
+  const uint8_t *tilingHost = reinterpret_cast<const uint8_t *>(&tiling);
+  uint8_t *tilingDevice;
+
+  aclrtMalloc((void **)&tilingDevice, tilingSize, ACL_MEM_MALLOC_HUGE_FIRST);
+  aclrtMemcpy(tilingDevice, tilingSize, tilingHost, tilingSize,
+              ACL_MEMCPY_HOST_TO_DEVICE);
+  ACLRT_LAUNCH_KERNEL(mc_gather)
+  (blockDim, acl_stream, const_cast<void *>(values.storage().data()),
+   const_cast<void *>(idxs.storage().data()),
+   const_cast<void *>(z.storage().data()),
+   const_cast<void *>(workspace_tensor.storage().data()), tilingDevice);
+  aclrtFree(tilingDevice);
+  aclrtSynchronizeStream(acl_stream);
+
+  return z;
+}
+
 at::Tensor run_csr_gather(const at::Tensor &values, const at::Tensor &cols,
                           const at::Tensor &x) {
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
@@ -636,4 +671,6 @@ PYBIND11_MODULE(tcuscan_ops, m) {
         "AscendC Segmented Scan (vector-only)");
   m.def("run_seg_scan_mc_revert", &asc::run_seg_scan_mc_revert,
         "AscendC Vector Revert for MC Segmented Scan");
+  m.def("run_mc_gather", &asc::run_mc_gather,
+        "AscendC Vector Multi Core Gather");
 }

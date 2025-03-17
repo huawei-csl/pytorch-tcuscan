@@ -232,6 +232,24 @@ def baseline_diffp_benchmark(
     return _run_benchmark(device, run_diff), size
 
 
+def mc_gather_benchmark(device: Device, vec_len: int, s: int) -> Tuple[float, int]:
+    rng = np.random.default_rng()
+    input_values = rng.uniform(1, 100, vec_len).astype(np.float32)
+    idx_len = vec_len / s
+    input_cols = rng.uniform(0, vec_len, int(idx_len))
+    input_cols.sort()
+    input_cols = input_cols.astype(np.uint32)
+    val_torch = torch.Tensor(input_values).to(torch.float32).npu()
+    idx_torch = torch.from_numpy(input_cols).npu()
+    outputsize = idx_len
+    torch.npu.synchronize()
+
+    def run_mc_gather() -> None:
+        _ = tcuscan_ops.run_mc_gather(val_torch, idx_torch, s)
+
+    return _run_benchmark(device, run_mc_gather), outputsize
+
+
 def csr_gather_benchmark(device: Device, vec_len: int) -> Tuple[float, int]:
     # Maximum value of x cannot exceed 20K (UB shared memory size)
     max_x_len = 2 * 1024
@@ -460,6 +478,7 @@ if __name__ == "__main__":  # noqa
             "scscan",
             "seg_scan_mc_revert",
             "topk",
+            "mcgather",
         ],
     )
     parser.add_argument("--dtype", choices=["int8", "fp16", "int16", "int32", "fp32"])
@@ -596,6 +615,14 @@ if __name__ == "__main__":  # noqa
             partial(segmented_scan_single_core_benchmark, s=s, segm_density=density),
             sizes,
             density,
+        )
+    elif bench == "mcgather":
+        benchmark(
+            device,
+            f"mcgather_{s}",
+            dtype,
+            partial(mc_gather_benchmark, s=s),
+            sizes,
         )
     elif bench == "mcscan" and dtype in ["fp16", "int8"]:
         tdtype = STR_TO_DTYPE[dtype]

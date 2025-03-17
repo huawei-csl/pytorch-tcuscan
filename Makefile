@@ -211,3 +211,6 @@ paper_fig_4b:
 	python3 profile_tcuscan_ops.py --bench seg_scan_sc --dtype fp16 --s 128 --density 0.003 --num_cores 1
 	python3 profile_tcuscan_ops.py --bench seg_scan_sc --dtype fp16 --s 128 --density 0.004 --num_cores 1
 	python3 profile_tcuscan_ops.py --bench seg_scan_sc --dtype fp16 --s 128 --density 0.01 --num_cores 1
+
+custom_test:
+	python3 -m pytest tests/test_mc_gather.py -v
