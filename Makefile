@@ -55,7 +55,11 @@ profile_all_s_fp16_%:
 	python3 profile_tcuscan_ops.py --bench $* --s 64 --dtype fp16
 	python3 profile_tcuscan_ops.py --bench $* --s 128 --dtype fp16
 
-profile_mcscan: profile_all_s_fp16_mcscan
+profile_mcscan:
+	python3 profile_tcuscan_ops.py --bench copy --dtype fp16
+	python3 profile_tcuscan_ops.py --bench mcscan --s 32 --dtype fp16
+	python3 profile_tcuscan_ops.py --bench mcscan --s 64 --dtype fp16
+	python3 profile_tcuscan_ops.py --bench mcscan --s 128 --dtype fp16
 
 profile_scscan: profile_all_s_fp16_scscan
 

@@ -42,7 +42,7 @@ __aicore__ inline void _run_scan_multi_core(GM_ADDR input_vec,
 
   // We consider the L2 cache maxed when the scan takes up around 50% of the
   // L2 total cache size -> maybe available L2 size can be a tiling parameter
-  constexpr uint32_t available_l2_size = L2_SIZE / 2;
+  constexpr uint32_t available_l2_size = L2_SIZE;
   const uint32_t fitting_len = scalar::AlignUp(
       available_l2_size / (sizeof(InputT) + sizeof(OutputT)), GM_ALIGNMENT);
 

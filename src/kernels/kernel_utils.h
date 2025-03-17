@@ -19,7 +19,7 @@ constexpr uint16_t UB_ALIGNMENT = 32;
 /// @brief Number of bytes per data block.
 constexpr uint16_t DATA_BLOCK_SIZE = 32;
 /// Maximum size of the L2 cache.
-constexpr int32_t L2_SIZE = 192 * 1024 * 1024;
+constexpr int32_t L2_SIZE = 96 * 1024 * 1024;
 /// Global memory allocation alignment, added only for performance.
 constexpr int32_t GM_ALIGNMENT = 256;
 
