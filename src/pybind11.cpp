@@ -27,6 +27,7 @@
 #include "aclrtlaunch_seg_scan_mc_revert.h"
 #include "aclrtlaunch_seg_scan_single_core.h"
 #include "aclrtlaunch_seg_scan_vec_single_core.h"
+#include "aclrtlaunch_split_uint16.h"
 #include "aclrtlaunch_vadd_custom.h"
 #include "tiling/platform/platform_ascendc.h"
 #include "tiling/tiling_compress.h"
@@ -39,6 +40,7 @@
 #include "tiling/tiling_seg_scan_mc_revert.h"
 #include "tiling/tiling_seg_scan_single_core.h"
 #include "tiling/tiling_seg_scan_vec_single_core.h"
+#include "tiling/tiling_split.h"
 #include "tiling/tiling_vadd.h"
 #include "torch_npu/csrc/core/npu/NPUStream.h"
 #include "workspace.h"
@@ -650,6 +652,61 @@ at::Tensor run_seg_scan_vec(const at::Tensor &x, const at::Tensor &f, int S) {
   return z;
 }
 
+at::Tensor run_split(const at::Tensor &x, const at::Tensor &mask, int S) {
+  const auto ascendc_platform =
+      platform_ascendc::PlatformAscendCManager::GetInstance(SOC_VERSION);
+  auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
+  const at::Device device = x.options().device();
+  const auto dtype = x.options().dtype();
+
+  const uint32_t matmul_size = static_cast<uint32_t>(S);
+  const uint32_t totalLength = x.numel();
+
+  const uint32_t tile_elems = matmul_size * matmul_size;
+  const uint32_t vec_tile_size = tile_elems / 2;
+
+  const uint32_t num_tiles = totalLength / tile_elems;
+
+  uint32_t blockDim = ascendc_platform->GetCoreNum() / 2;
+  while (num_tiles % blockDim != 0) {
+    blockDim--;
+  }
+  if (blockDim <= 1) {
+    blockDim = 1;
+  }
+
+  const at::Tensor z =
+      at::empty({totalLength}, at::TensorOptions().dtype(dtype).device(device));
+
+  const SplitTiling tiling{blockDim, totalLength, matmul_size, vec_tile_size};
+
+  constexpr size_t tilingSize = sizeof(SplitTiling);
+  const uint8_t *tilingHost = reinterpret_cast<const uint8_t *>(&tiling);
+
+  uint8_t *tilingDevice;
+  aclrtMalloc((void **)&tilingDevice, tilingSize, ACL_MEM_MALLOC_HUGE_FIRST);
+  aclrtMemcpy(tilingDevice, tilingSize, tilingHost, tilingSize,
+              ACL_MEMCPY_HOST_TO_DEVICE);
+
+  const uint32_t user_workspace_size =
+      workspace::split::GetWorkspaceSize(tiling);
+  const at::Tensor workspace_tensor =
+      alloc_workspace(user_workspace_size, device);
+
+  if (dtype == torch::kHalf or dtype == torch::kInt16) {
+    ACLRT_LAUNCH_KERNEL(split_uint16)
+    (blockDim, acl_stream, const_cast<void *>(x.storage().data()),
+     const_cast<void *>(mask.storage().data()),
+     const_cast<void *>(z.storage().data()),
+     const_cast<void *>(workspace_tensor.storage().data()), tilingDevice);
+  }
+
+  aclrtFree(tilingDevice);
+  aclrtSynchronizeStream(acl_stream);
+
+  return z;
+}
+
 }  // namespace asc
 
 PYBIND11_MODULE(tcuscan_ops, m) {
@@ -671,6 +728,7 @@ PYBIND11_MODULE(tcuscan_ops, m) {
         "AscendC Segmented Scan (vector-only)");
   m.def("run_seg_scan_mc_revert", &asc::run_seg_scan_mc_revert,
         "AscendC Vector Revert for MC Segmented Scan");
+  m.def("run_split", &asc::run_split, "AscendC split");
   m.def("run_mc_gather", &asc::run_mc_gather,
         "AscendC Vector Multi Core Gather");
 }

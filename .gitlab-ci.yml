@@ -149,6 +149,11 @@ test_seg_scan_mc_revert:
     - make setup_ci
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_seg_scan_mc_revert
 
+test_split:
+  <<: *test_config
+  script:
+    - make setup_ci
+    - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_split
 
 test_vadd:
   <<: *test_config

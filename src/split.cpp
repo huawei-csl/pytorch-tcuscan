@@ -1,0 +1,48 @@
+/**
+ * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
+ *
+ * @file split.cpp
+ * @brief Entrypoint for parallel split kernel.
+ */
+
+#include "kernel_utils.h"
+#include "kernels/constants.h"
+#include "kernels/kernel_split.h"
+#include "lib/matmul_intf.h"
+#include "tiling/tiling_split.h"
+
+__aicore__ inline void CopyTiling(SplitTiling *tiling, GM_ADDR tilingGM) {
+  uint32_t *ptr = reinterpret_cast<uint32_t *>(tiling);
+  auto tiling32 = reinterpret_cast<__gm__ uint32_t *>(tilingGM);
+
+  for (uint32_t i = 0; i < sizeof(SplitTiling) / sizeof(uint32_t); i++, ptr++) {
+    *ptr = *(tiling32 + i);
+  }
+}
+
+/**
+ * @brief Run the `split_uint16` kernel.
+ *
+ * @param [in] in Pointer to input vector.
+ * @param [in] mask Pointer to mask vector.
+ * @param [in] out Pointer to output vector.
+ * @param [in] workspace Pointer to workspace.
+ * @param [in] tiling Pointer to tiling vector.
+ * @param [in] zeros_first Indicates whether the first elements in the output
+ * vector are the ones with corresponding mask value set to zero or one.
+ */
+extern "C" __global__ __aicore__ void split_uint16(GM_ADDR in, GM_ADDR mask,
+                                                   GM_ADDR out,
+                                                   GM_ADDR workspace,
+                                                   GM_ADDR tiling) {
+  constexpr bool zeros_first = false;
+  SplitTiling tiling_data;
+  tiling::GetTilingData(&tiling_data, tiling);
+
+  GM_ADDR const usrWorkspace = AscendC::GetUserWorkspace(workspace);
+  GM_ADDR const lower = load_tril_matrix<int8_t>(tiling_data.scan_matmul_size);
+
+  run_split_uint16(in, mask, out, lower, usrWorkspace, tiling_data.num_elems,
+                   tiling_data.scan_matmul_size, tiling_data.vec_tile_size,
+                   zeros_first);
+}

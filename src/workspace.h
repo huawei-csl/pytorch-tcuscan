@@ -13,6 +13,7 @@
 #include "tiling/tiling_copy.h"
 #include "tiling/tiling_scan_multi_core.h"
 #include "tiling/tiling_scan_single_core.h"
+#include "tiling/tiling_split.h"
 
 namespace workspace {
 
@@ -124,5 +125,39 @@ constexpr uint32_t GetWorkspaceSize(const SingleCoreScanTiling& tiling) {
   return total_size;
 }
 }  // namespace sc_scan
+
+namespace split {
+
+/**
+ * @brief Calculate the workspace size for split.
+ *
+ * @param [in] input_elems Number of elements in the input vector.
+ * @param [in] matmul_size Size of the matmul used in scan.
+ * @param [in] num_blocks Number of blocks.
+ * @return Size of the workspace in bytes.
+ */
+constexpr uint32_t GetWorkspaceSize(size_t input_elems, size_t matmul_size,
+                                    size_t num_blocks) {
+  const uint32_t scan_res_size = host_utils::AlignUp(
+      input_elems * sizeof(int32_t), host_utils::GM_ALIGNMENT);
+  const uint32_t scan_ws_size =
+      mc_scan::GetWorkspaceSize<int8_t>(input_elems, matmul_size, num_blocks);
+
+  return scan_res_size + scan_ws_size;
+}
+
+/**
+ * @brief Calculate the workspace size for split.
+ *
+ * @tparam InputT Input data type.
+ *
+ * @param [in] tiling Tiling parameters used in the kernel.
+ * @return Size of the workspace in bytes.
+ */
+constexpr uint32_t GetWorkspaceSize(const SplitTiling& tiling) {
+  return workspace::split::GetWorkspaceSize(
+      tiling.num_elems, tiling.scan_matmul_size, tiling.num_blocks);
+}
+}  // namespace split
 
 }  // namespace workspace
