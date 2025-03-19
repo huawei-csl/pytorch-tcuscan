@@ -345,30 +345,6 @@ class KernelSplit {
   constexpr static uint16_t IN_ELEMS_PER_MASK_ELEM = sizeof(PackedMaskT) * 8;
 };
 
-namespace split {
-
-/**
- * @brief Calculate the workspace size for split.
- *
- * @tparam InputT Input data type.
- *
- * @param [in] input_elems Number of elements in the input vector.
- * @param [in] scan_tile_size Size of the matmul used in scan.
- * @return Size of the workspace in bytes.
- */
-template <typename InputT>
-__aicore__ inline uint32_t get_workspace_size(uint32_t input_elems,
-                                              uint32_t scan_tile_size) {
-  const uint32_t scan_res_size =
-      scalar::AlignUp(input_elems * sizeof(int32_t), GM_ALIGNMENT);
-  const uint32_t scan_ws_size =
-      mc_scan::get_workspace_size<int8_t, int32_t, true>(input_elems,
-                                                         scan_tile_size);
-  return scan_res_size + scan_ws_size;
-}
-
-}  // namespace split
-
 /**
  * @brief Run the `split_uint16` kernel.
  *
@@ -410,5 +386,49 @@ __aicore__ inline void run_split_uint16(GM_ADDR in, GM_ADDR mask, GM_ADDR out,
   constexpr bool with_indices = false;
   KernelSplit<uint16_t, with_indices> op(in_len, split_tile_size, zeros_first);
   op.Init(in, mask, scan_res, out);
+  op.Process();
+}
+
+/**
+ * @brief Run the `split_ind_uint16` kernel.
+ *
+ * @param [in] in Pointer to input vector.
+ * @param [in] mask Pointer to mask vector.
+ * @param [in] indices_in Pointer to the input indices vector.
+ * @param [in] out Pointer to output vector.
+ * @param [in] indices_out Pointer to the output indices vector.
+ * @param [in] upper Pointer to an upper-triangular matrix filled
+ * with ones of size `scan_tile_size` x `scan_tile_size`.
+ * @param [in] workspace Pointer to workspace.
+ * @param [in] in_len Length of the input vector.
+ * @param [in] scan_tile_size Size of the tile processed in a single
+ * iteration of the scan kernel.
+ * @param [in] split_tile_size Size of the tile processed in a single
+ * iteration of the split kernel.
+ * @param [in] zeros_first Indicates whether the first elements in the output
+ * vector are the ones with corresponding mask value set to zero or one.
+ */
+__aicore__ inline void run_split_ind_uint16(
+    GM_ADDR in, GM_ADDR mask, GM_ADDR indices_in, GM_ADDR out,
+    GM_ADDR indices_out, GM_ADDR upper, GM_ADDR workspace, uint32_t in_len,
+    uint16_t scan_tile_size, uint32_t split_tile_size, bool zeros_first) {
+  const uint32_t scan_res_size =
+      scalar::AlignUp(in_len * sizeof(int32_t), GM_ALIGNMENT);
+
+  GM_ADDR const scan_res = workspace;
+  GM_ADDR const scan_workspace = scan_res + scan_res_size;
+
+  run_scan_multi_core_kernel<int8_t, true>(
+      mask, upper, scan_res, scan_workspace, in_len, scan_tile_size);
+
+  if ASCEND_IS_AIC {
+    return;
+  }
+
+  SyncAll<true /*isAIVOnly*/>();
+
+  constexpr bool with_indices = true;
+  KernelSplit<uint16_t, with_indices> op(in_len, split_tile_size, zeros_first);
+  op.Init(in, mask, scan_res, out, indices_in, indices_out);
   op.Process();
 }

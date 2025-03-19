@@ -6,6 +6,7 @@ import tcuscan_ops
 
 NUM_CORES = 20
 
+
 VEC_LENS = [
     256 - 1,
     1024 - 1,
@@ -28,10 +29,12 @@ def _test_split_ind(vec_len: int, s: int, dtype: torch.dtype = torch.int16):
     "Unit tests split_ind operator for given input length, s and dtype."
     x = torch.randint(0, 2**7 - 1, (vec_len,)).to(dtype).npu()
     mask = (torch.randn(vec_len) > 0).to(torch.int8).npu()
+    indices_in = torch.cumsum(torch.ones(vec_len), dim=-1).to(torch.int32).npu()
 
-    z = tcuscan_ops.run_split(x, mask, s)
+    z, indices_out = tcuscan_ops.run_split_ind(x, mask, indices_in, s)
 
     assert len(z) == len(x), "Input and output vector dimensions must agree."
+    assert len(z) == len(indices_out)
 
     expected_left_part = torch.masked_select(x, mask == 1)
     num_selected = len(expected_left_part)

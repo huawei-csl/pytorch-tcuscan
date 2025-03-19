@@ -155,6 +155,12 @@ test_split:
     - make setup_ci
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_split
 
+test_split_ind:
+  <<: *test_config
+  script:
+    - make setup_ci
+    - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_split_ind
+
 test_vadd:
   <<: *test_config
   script:

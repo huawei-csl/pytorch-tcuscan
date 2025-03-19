@@ -27,6 +27,7 @@
 #include "aclrtlaunch_seg_scan_mc_revert.h"
 #include "aclrtlaunch_seg_scan_single_core.h"
 #include "aclrtlaunch_seg_scan_vec_single_core.h"
+#include "aclrtlaunch_split_ind_uint16.h"
 #include "aclrtlaunch_split_uint16.h"
 #include "aclrtlaunch_vadd_custom.h"
 #include "tiling/platform/platform_ascendc.h"
@@ -707,28 +708,90 @@ at::Tensor run_split(const at::Tensor &x, const at::Tensor &mask, int S) {
   return z;
 }
 
+std::tuple<at::Tensor, at::Tensor> run_split_ind(const at::Tensor &x,
+                                                 const at::Tensor &mask,
+                                                 const at::Tensor &indices_in,
+                                                 int S) {
+  const auto ascendc_platform =
+      platform_ascendc::PlatformAscendCManager::GetInstance(SOC_VERSION);
+  auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
+  const at::Device device = x.options().device();
+  const auto dtype = x.options().dtype();
+
+  const uint32_t matmul_size = static_cast<uint32_t>(S);
+  const uint32_t totalLength = x.numel();
+
+  const uint32_t tile_elems = matmul_size * matmul_size;
+  const uint32_t vec_tile_size = tile_elems / 2;
+
+  const uint32_t num_tiles = totalLength / tile_elems;
+
+  uint32_t blockDim = ascendc_platform->GetCoreNum() / 2;
+  while (num_tiles % blockDim != 0) {
+    blockDim--;
+  }
+  if (blockDim <= 1) {
+    blockDim = 1;
+  }
+
+  const at::Tensor vec_out =
+      at::empty({totalLength}, at::TensorOptions().dtype(dtype).device(device));
+  const at::Tensor indices_out = at::empty(
+      {totalLength}, at::TensorOptions().dtype(torch::kInt32).device(device));
+
+  const SplitTiling tiling{blockDim, totalLength, matmul_size, vec_tile_size};
+
+  constexpr size_t tilingSize = sizeof(SplitTiling);
+  const uint8_t *tilingHost = reinterpret_cast<const uint8_t *>(&tiling);
+
+  uint8_t *tilingDevice;
+  aclrtMalloc((void **)&tilingDevice, tilingSize, ACL_MEM_MALLOC_HUGE_FIRST);
+  aclrtMemcpy(tilingDevice, tilingSize, tilingHost, tilingSize,
+              ACL_MEMCPY_HOST_TO_DEVICE);
+
+  const uint32_t user_workspace_size =
+      workspace::split::GetWorkspaceSize(tiling);
+  const at::Tensor workspace_tensor =
+      alloc_workspace(user_workspace_size, device);
+
+  if (dtype == torch::kHalf or dtype == torch::kInt16) {
+    ACLRT_LAUNCH_KERNEL(split_ind_uint16)
+    (blockDim, acl_stream, const_cast<void *>(x.storage().data()),
+     const_cast<void *>(mask.storage().data()),
+     const_cast<void *>(indices_in.storage().data()),
+     const_cast<void *>(vec_out.storage().data()),
+     const_cast<void *>(indices_out.storage().data()),
+     const_cast<void *>(workspace_tensor.storage().data()), tilingDevice);
+  }
+
+  aclrtFree(tilingDevice);
+  aclrtSynchronizeStream(acl_stream);
+
+  return std::make_tuple(vec_out, indices_out);
+}
+
 }  // namespace asc
 
 PYBIND11_MODULE(tcuscan_ops, m) {
-  m.doc() = "TCUSCAN pybind11 interfaces";
-  m.def("run_add", &asc::run_add, "AscendC Vector add");
+  m.doc() = "TCUSCAN AscendC operators";
+  m.def("run_add", &asc::run_add, "Vector add");
   m.def("run_diff", &asc::run_diff, pybind11::arg(),
-        pybind11::arg("max_size") = 0, "AscendC Vector diff");
-  m.def("run_seg_scan", &asc::run_seg_scan, "AscendC Segmented Scan");
-  m.def("run_scan_multi_core", &asc::run_scan_multi_core, "AscendC MCSCAN");
-  m.def("run_csr_gather", &asc::run_csr_gather, "AscendC CSR gather");
-  m.def("run_compress", &asc::run_compress, "AscendC compress");
+        pybind11::arg("max_size") = 0, "Vector diff");
+  m.def("run_seg_scan", &asc::run_seg_scan, "Segmented Scan");
+  m.def("run_scan_multi_core", &asc::run_scan_multi_core, "Multi-core Scan");
+  m.def("run_csr_gather", &asc::run_csr_gather, "CSR gather");
+  m.def("run_compress", &asc::run_compress, "Compaction/compress");
   m.def("run_compress_pos", &asc::run_compress_pos,
-        "AscendC compress with pre-computed output positions");
-  m.def("run_seg_sum", &asc::run_seg_sum, "AscendC Segmented Sum");
-  m.def("run_copy", &asc::run_copy, "AscendC Copy single core");
-  m.def("run_scan_single_core", &asc::run_scan_single_core,
-        "AscendC Scan Single Core");
+        "Compaction/compress with pre-computed output positions");
+  m.def("run_seg_sum", &asc::run_seg_sum, "Segmented Sum");
+  m.def("run_copy", &asc::run_copy, "Copy single core");
+  m.def("run_scan_single_core", &asc::run_scan_single_core, "Scan Single Core");
   m.def("run_seg_scan_vec", &asc::run_seg_scan_vec,
-        "AscendC Segmented Scan (vector-only)");
+        "Segmented Scan (vector-only)");
   m.def("run_seg_scan_mc_revert", &asc::run_seg_scan_mc_revert,
-        "AscendC Vector Revert for MC Segmented Scan");
-  m.def("run_split", &asc::run_split, "AscendC split");
+        "Vector Revert for MC Segmented Scan");
+  m.def("run_split", &asc::run_split, "Split (16-bits)");
+  m.def("run_split_ind", &asc::run_split_ind, "Split with indices (16-bits)");
   m.def("run_mc_gather", &asc::run_mc_gather,
         "AscendC Vector Multi Core Gather");
 }
