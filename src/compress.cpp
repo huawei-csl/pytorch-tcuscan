@@ -12,6 +12,12 @@
 
 using namespace AscendC;
 
+/**
+ * @brief Convert tiling struct to global memory.
+ *
+ * @param [in] tiling Input tiling struct.
+ * @param [in] tilingGM Output global memory point to write tiling struct.
+ */
 __aicore__ inline void CopyTiling(CompressTiling *tiling, GM_ADDR tilingGM) {
   uint32_t *ptr = reinterpret_cast<uint32_t *>(tiling);
   auto tiling32 = reinterpret_cast<__gm__ uint32_t *>(tilingGM);
@@ -22,6 +28,15 @@ __aicore__ inline void CopyTiling(CompressTiling *tiling, GM_ADDR tilingGM) {
   }
 }
 
+/**
+ * @brief Compress kernel for input dtype fp16
+ *
+ * @param x Input data vector
+ * @param mask Input mask vector
+ * @param z Output vector
+ * @param workspace Pointer to workspace.
+ * @param tilingGm Pointer to tiling structure.
+ */
 extern "C" __global__ __aicore__ void compress_fp16(GM_ADDR x, GM_ADDR mask,
                                                     GM_ADDR z,
                                                     GM_ADDR workspace,

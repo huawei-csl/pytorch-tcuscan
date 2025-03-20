@@ -1,7 +1,7 @@
 /**
  * Copyright (c) Huawei Technologies Co., Ltd. 2024. All rights reserved.
  *
- * @file kernel_copy.cpp
+ * @file copy.cpp
  * @brief Kernel implementing a copy operation.
  */
 
@@ -13,6 +13,7 @@
  *
  * @param [in] in Pointer to input vector.
  * @param [in] out Pointer to output vector.
+ * @param [in] workspace Pointer to workspace.
  * @param [in] tiling Pointer to tiling vector.
  */
 extern "C" __global__ __aicore__ void copy_fp16(GM_ADDR in, GM_ADDR out,
@@ -29,6 +30,7 @@ extern "C" __global__ __aicore__ void copy_fp16(GM_ADDR in, GM_ADDR out,
  *
  * @param [in] in Pointer to input vector.
  * @param [in] out Pointer to output vector.
+ * @param [in] workspace Pointer to workspace.
  * @param [in] tiling Pointer to tiling vector.
  */
 extern "C" __global__ __aicore__ void copy_fp32(GM_ADDR in, GM_ADDR out,

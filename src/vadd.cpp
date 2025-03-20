@@ -8,6 +8,12 @@
 #include "kernels/kernel_vadd.h"
 #include "tiling/tiling_vadd.h"
 
+/**
+ * @brief Convert tiling struct to global memory.
+ *
+ * @param [in] tiling Input tiling struct.
+ * @param [in] tilingGM Output global memory point to write tiling struct.
+ */
 __aicore__ inline void CopyTiling(VaddTiling *tiling, GM_ADDR tilingGM) {
   uint32_t *ptr = reinterpret_cast<uint32_t *>(tiling);
   auto tiling32 = reinterpret_cast<__gm__ uint32_t *>(tilingGM);

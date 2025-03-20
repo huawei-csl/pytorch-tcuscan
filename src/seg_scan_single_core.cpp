@@ -10,6 +10,12 @@
 #include "lib/matmul_intf.h"
 #include "tiling/tiling_seg_scan_single_core.h"
 
+/**
+ * @brief Convert tiling struct to global memory.
+ *
+ * @param [in] tiling Input tiling struct.
+ * @param [in] tilingGM Output global memory point to write tiling struct.
+ */
 __aicore__ inline void CopyTiling(SegScanSingleCoreTiling *tiling,
                                   GM_ADDR tilingGM) {
   uint32_t *ptr = reinterpret_cast<uint32_t *>(tiling);

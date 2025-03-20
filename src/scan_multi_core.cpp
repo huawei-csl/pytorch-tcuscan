@@ -1,7 +1,7 @@
 /**
  * Copyright (c) Huawei Technologies Co., Ltd. 2024. All rights reserved.
  *
- * @file kernel_scan_multi_core.cpp
+ * @file scan_multi_core.cpp
  * @brief Kernel implementing a multi-core inclusive scan using cube-vector
  * approach.
  */
@@ -12,6 +12,12 @@
 #include "lib/matmul_intf.h"
 #include "tiling/tiling_scan_multi_core.h"
 
+/**
+ * @brief Convert tiling struct to global memory.
+ *
+ * @param [in] tiling Input tiling struct.
+ * @param [in] tilingGM Output global memory point to write tiling struct.
+ */
 __aicore__ inline void CopyTiling(MultiCoreScanTiling *tiling,
                                   GM_ADDR tilingGM) {
   uint32_t *ptr = reinterpret_cast<uint32_t *>(tiling);

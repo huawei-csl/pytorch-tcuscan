@@ -1,7 +1,7 @@
 /**
  * Copyright (c) Huawei Technologies Co., Ltd. 2024. All rights reserved.
  *
- * @file kernel_seg_scan_mc_revert.cpp
+ * @file seg_scan_mc_revert.cpp
  * @brief Kernel implementing the vector multi-core segmented scan revertion
  * kernel operation.
  */
@@ -17,6 +17,7 @@
  * @param [in] vec_f_in Pointer to the input flag vector.
  * @param [in] vec_diff_in Pointer to the input diff vector.
  * @param [in] vec_out Pointer to the output vector.
+ * @param [in] workspace Pointer to the workspace in GM.
  * @param [in] tiling Pointer to the tiling structure.
  */
 

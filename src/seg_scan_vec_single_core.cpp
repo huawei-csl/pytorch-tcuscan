@@ -8,6 +8,12 @@
 #include "kernels/kernel_seg_scan_vec_single_core.h"
 #include "tiling/tiling_seg_scan_vec_single_core.h"
 
+/**
+ * @brief Convert tiling struct to global memory.
+ *
+ * @param [in] tiling Input tiling struct.
+ * @param [in] tilingGM Output global memory point to write tiling struct.
+ */
 __aicore__ inline void CopyTiling(SegScanVecSingleCoreTiling *tiling,
                                   GM_ADDR tilingGM) {
   uint32_t *ptr = reinterpret_cast<uint32_t *>(tiling);
@@ -24,7 +30,7 @@ __aicore__ inline void CopyTiling(SegScanVecSingleCoreTiling *tiling,
  *
  * @param [in] vec_in Pointer to an input data vector.
  * @param [in] f_in Pointer to an input flag vector.
- * @param [in] output_vec Pointer to the output vector.
+ * @param [in] vec_out Pointer to the output vector.
  * @param [in] workspace Pointer to the workspace struct.
  * @param [in] tilingGm Pointer to the tiling buffer.
  */

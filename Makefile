@@ -31,6 +31,9 @@ setup_once_aarch64:
 build: build.sh src/vadd.cpp src/diff.cpp src/seg_scan_single_core.cpp src/seg_scan_mc_revert.cpp src/pybind11.cpp
 	./build.sh -v ASCEND910B4
 
+docs:
+	doxygen doxygen/Doxyfile
+
 test:
 	python3 -m pytest tests/
 

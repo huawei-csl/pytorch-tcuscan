@@ -18,6 +18,15 @@
 namespace workspace {
 
 namespace seg_scan {
+/**
+ * @brief
+ *
+ * @tparam InputVecT Input data type.
+ * @tparam FlagVecT Input flag type.
+ * @param vec_len Input vector length.
+ * @param matmul_size Matrix multiplication tile size.
+ * @return
+ */
 template <typename InputVecT, typename FlagVecT>
 constexpr uint32_t GetWorkspaceSize(uint32_t vec_len, uint32_t matmul_size) {
   using OutputVecT = host_utils::CubeOutType_t<InputVecT>;

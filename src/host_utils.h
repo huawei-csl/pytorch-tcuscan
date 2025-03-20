@@ -89,6 +89,7 @@ double GetMedian(const std::vector<T> &v) {
  */
 template <typename InputT>
 struct CubeOutType {
+  /// Output cube unit type
   using type = typename std::conditional<
       sizeof(InputT) == 2, float,
       typename std::conditional<std::is_same_v<InputT, int8_t>, int32_t,

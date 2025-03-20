@@ -2,7 +2,7 @@
 /**
  * Copyright (c) Huawei Technologies Co., Ltd. 2024-2025. All rights reserved.
  *
- * @file kernel_csr_gather.cpp
+ * @file kernel_csr_gather.h
  * @brief Kernel implementing a CSR gather operation.
  */
 
@@ -158,6 +158,11 @@ class KernelCSRGather {
  * @param [in] cols_in Pointer to column indices input vector.
  * @param [in] x_in Pointer to x input vector.
  * @param [in] z_out Pointer to output vector.
+ * @param [in] values_len Length of `values_in` vector.
+ * @param [in] x_len Length of `x_in` vector.
+ * @param [in] tile_len Length of tiles.
+ * @param [in] workspace Pointer in global memory for workspace.
+
  */
 template <bool ForceMixMode = true>
 __aicore__ inline void run_csr_gather(GM_ADDR values_in, GM_ADDR cols_in,
