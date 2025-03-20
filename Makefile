@@ -5,6 +5,7 @@ LOCAL_SPARSE_MATRIX_NAME?='Boeing/bcsstk35/bcsstk35'
 BASE_SPARSE_MATRIX_PATH?=${HOME}/.ssgetpy/MM/
 FULL_SPARSE_MATRIX_PATH=${BASE_SPARSE_MATRIX_PATH}${LOCAL_SPARSE_MATRIX_NAME}
 PROFILING_SCRIPTS_PATH=./scripts/profiling/
+CONDA_ENV_NAME="pytorch_tcuscan"
 
 DEVICE_TYPE?=npu
 LD_LIBRARY_PATH := ${LD_LIBRARY_PATH}:$(shell pwd)/build/lib/
@@ -17,6 +18,20 @@ clean:
 
 setup_ci:
 	pip3 install --cache-dir=/scratch/TCUSCAN/wheels/ -r requirements.txt
+
+install_in_local_conda_env: create_conda_env
+	conda run -n ${CONDA_ENV_NAME} ./build.sh -v ASCEND910B4
+	mv tcuscan_ops.cpython-*.so $(shell conda env list | grep ${CONDA_ENV_NAME} | awk '{print $$2}')/lib/python3.10/site-packages/
+	mv build/lib/libkernels.so $(shell conda env list | grep ${CONDA_ENV_NAME} | awk '{print $$2}')/lib/
+	rm -rf build/
+
+create_conda_env:
+	conda create -y -n ${CONDA_ENV_NAME} python=3.10
+	# PyTorch Ascend requires cmake >= 3.18
+	conda install -y cmake -n ${CONDA_ENV_NAME}
+	conda run -n ${CONDA_ENV_NAME} pip3 install -r requirements.txt
+	wget -nc https://gitee.com/ascend/pytorch/releases/download/v6.0.0-pytorch2.4.0/torch_npu-2.4.0.post2-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
+	conda run -n ${CONDA_ENV_NAME} pip3 install torch_npu-2.4.0.post2-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl --index-url https://download.pytorch.org/whl/cpu
 
 setup_once:
 	pip3 install -r requirements.txt
