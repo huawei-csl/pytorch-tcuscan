@@ -343,6 +343,22 @@ def scscan_benchmark(
     return _run_benchmark(device, run_scan), size
 
 
+def radixsort_benchmark(device: Device, vec_len: int, dtype: torch.dtype, s: int):
+    if dtype == torch.int16:
+        x = (
+            torch.randint(torch.iinfo(dtype).min, torch.iinfo(dtype).max, (vec_len,))
+            .to(dtype)
+            .npu()
+        )
+    else:
+        x = torch.rand((vec_len,), dtype=dtype).npu()
+
+    def run_radixsort() -> None:
+        _, _ = tcuscan_ops.run_radix_sort(x, s)
+
+    return _run_benchmark(device, run_radixsort), vec_len
+
+
 def mcscan_benchmark(
     device: Device, size: int, dtype: torch.dtype, s: int
 ) -> Tuple[float, int]:
@@ -479,6 +495,7 @@ if __name__ == "__main__":  # noqa
             "seg_scan_mc_revert",
             "topk",
             "mcgather",
+            "radixsort",
         ],
     )
     parser.add_argument("--dtype", choices=["int8", "fp16", "int16", "int32", "fp32"])
@@ -674,6 +691,16 @@ if __name__ == "__main__":  # noqa
             f"scscan_{s}",
             dtype,
             partial(scscan_benchmark, dtype=tdtype, s=s),
+            sizes,
+            density,
+        )
+    elif bench == "radixsort" and dtype in ["fp16"]:
+        tdtype = STR_TO_DTYPE[dtype]
+        benchmark(
+            device,
+            f"radixsort_{s}",
+            dtype,
+            partial(radixsort_benchmark, dtype=tdtype, s=s),
             sizes,
             density,
         )

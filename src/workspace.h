@@ -169,4 +169,34 @@ constexpr uint32_t GetWorkspaceSize(const SplitTiling& tiling) {
 }
 }  // namespace split
 
+namespace radix_sort {
+
+/**
+ * @brief Calculate the workspace size for radix sort.
+ *
+ * @tparam InputT Input data type.
+ *
+ * @param [in] input_elems Number of elements in the input vector.
+ * @param [in] matmul_size Size of the matmul used in scan.
+ * @return Size of the workspace in bytes.
+ */
+template <typename InputT>
+uint32_t GetWorkspaceSize(const RadixSortTiling& t) {
+  const uint32_t tmp_output_size = t.num_elems * sizeof(InputT);
+  // Arrays in workspace have to be aligned to their data type size. Therefore
+  // we align the size of the radices array to 4 bytes, so that the
+  // indices array that comes after starts at a valid address for int32_t.
+  const uint32_t radices_size =
+      host_utils::AlignUp(t.num_elems * sizeof(uint8_t), sizeof(int32_t));
+  const uint32_t indices_size = t.num_elems * sizeof(int32_t);
+  const uint32_t split_ws_size =
+      split::GetWorkspaceSize(t.num_elems, t.matmul_size, t.num_blocks);
+
+  const uint32_t total_size =
+      tmp_output_size + radices_size + indices_size + split_ws_size;
+  return total_size;
+}
+
+}  // namespace radix_sort
+
 }  // namespace workspace

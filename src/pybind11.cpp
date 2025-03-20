@@ -20,6 +20,7 @@
 #include "aclrtlaunch_diff_fp16.h"
 #include "aclrtlaunch_diff_fp32.h"
 #include "aclrtlaunch_mc_gather.h"
+#include "aclrtlaunch_radix_sort_fp16.h"
 #include "aclrtlaunch_scan_multi_core_fp16.h"
 #include "aclrtlaunch_scan_multi_core_int8.h"
 #include "aclrtlaunch_scan_single_core_fp16.h"
@@ -30,6 +31,7 @@
 #include "aclrtlaunch_split_ind_uint16.h"
 #include "aclrtlaunch_split_uint16.h"
 #include "aclrtlaunch_vadd_custom.h"
+#include "tiling/heuristics/heuristics_radix_sort.h"
 #include "tiling/platform/platform_ascendc.h"
 #include "tiling/tiling_compress.h"
 #include "tiling/tiling_copy.h"
@@ -770,6 +772,58 @@ std::tuple<at::Tensor, at::Tensor> run_split_ind(const at::Tensor &x,
   return std::make_tuple(vec_out, indices_out);
 }
 
+std::tuple<at::Tensor, at::Tensor> run_radix_sort(const at::Tensor &x, int S) {
+  const auto ascendc_platform =
+      platform_ascendc::PlatformAscendCManager::GetInstance(SOC_VERSION);
+  auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
+  const at::Device device = x.options().device();
+  const auto dtype = x.options().dtype();
+
+  const uint32_t totalLength = x.numel();
+  const uint32_t matmul_size = static_cast<uint32_t>(S);
+
+  const uint32_t tile_elems = matmul_size * matmul_size;
+  const size_t num_tiles = totalLength / tile_elems;
+
+  uint32_t blockDim = ascendc_platform->GetCoreNum() / 2;
+  while (num_tiles % blockDim != 0) {
+    blockDim--;
+  }
+
+  RadixSortTiling tiling{blockDim, totalLength, matmul_size, tile_elems / 2};
+
+  const at::Tensor vec_out =
+      at::empty({totalLength}, at::TensorOptions().dtype(dtype).device(device));
+  const at::Tensor indices_out = at::empty(
+      {totalLength}, at::TensorOptions().dtype(torch::kInt32).device(device));
+
+  constexpr size_t tilingSize = sizeof(RadixSortTiling);
+  const uint8_t *tilingHost = reinterpret_cast<const uint8_t *>(&tiling);
+
+  uint8_t *tilingDevice;
+  aclrtMalloc((void **)&tilingDevice, tilingSize, ACL_MEM_MALLOC_HUGE_FIRST);
+  aclrtMemcpy(tilingDevice, tilingSize, tilingHost, tilingSize,
+              ACL_MEMCPY_HOST_TO_DEVICE);
+
+  const uint32_t user_workspace_size =
+      workspace::radix_sort::GetWorkspaceSize<int16_t>(tiling);
+  const at::Tensor workspace_tensor =
+      alloc_workspace(user_workspace_size, device);
+
+  if (dtype == torch::kHalf or dtype == torch::kInt16) {
+    ACLRT_LAUNCH_KERNEL(radix_sort_fp16)
+    (blockDim, acl_stream, const_cast<void *>(x.storage().data()),
+     const_cast<void *>(vec_out.storage().data()),
+     const_cast<void *>(indices_out.storage().data()),
+     const_cast<void *>(workspace_tensor.storage().data()), tilingDevice);
+  }
+
+  aclrtFree(tilingDevice);
+  aclrtSynchronizeStream(acl_stream);
+
+  return std::make_tuple(vec_out, indices_out);
+}
+
 }  // namespace asc
 
 PYBIND11_MODULE(tcuscan_ops, m) {
@@ -792,6 +846,6 @@ PYBIND11_MODULE(tcuscan_ops, m) {
         "Vector Revert for MC Segmented Scan");
   m.def("run_split", &asc::run_split, "Split (16-bits)");
   m.def("run_split_ind", &asc::run_split_ind, "Split with indices (16-bits)");
-  m.def("run_mc_gather", &asc::run_mc_gather,
-        "AscendC Vector Multi Core Gather");
+  m.def("run_mc_gather", &asc::run_mc_gather, "Vector Multi Core Gather");
+  m.def("run_radix_sort", &asc::run_radix_sort, "Radix sort using cube units");
 }

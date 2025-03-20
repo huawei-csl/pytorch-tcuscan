@@ -345,6 +345,30 @@ class KernelSplit {
   constexpr static uint16_t IN_ELEMS_PER_MASK_ELEM = sizeof(PackedMaskT) * 8;
 };
 
+namespace split {
+
+/**
+ * @brief Calculate the workspace size for split.
+ *
+ * @tparam InputT Input data type.
+ *
+ * @param [in] input_elems Number of elements in the input vector.
+ * @param [in] scan_tile_size Size of the matmul used in scan.
+ * @return Size of the workspace in bytes.
+ */
+template <typename InputT>
+__aicore__ inline uint32_t get_workspace_size(uint32_t input_elems,
+                                              uint32_t scan_tile_size) {
+  const uint32_t scan_res_size =
+      scalar::AlignUp(input_elems * sizeof(int32_t), GM_ALIGNMENT);
+  const uint32_t scan_ws_size =
+      mc_scan::get_workspace_size<int8_t, int32_t, true>(input_elems,
+                                                         scan_tile_size);
+  return scan_res_size + scan_ws_size;
+}
+
+}  // namespace split
+
 /**
  * @brief Run the `split_uint16` kernel.
  *
