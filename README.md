@@ -1,93 +1,67 @@
 # pybind11-ascend
 
+Integrating TCUSCAN kernels to pytorch npu.
 
-
-## Getting started
-
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
-
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
-
-## Add your files
-
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/ee/gitlab-basics/add-file.html#add-a-file-using-the-command-line) or push an existing Git repository with the following command:
-
+## Build, test, and install
+Currently there is no explicit "pythonic" installation of the package. 
+All the artifacts are created using:
+```bash
+make build
 ```
-cd existing_repo
-git remote add origin https://gitlab.huaweirc.ch/zrc-von-neumann-lab/individual-projects/a00565472/pybind11-ascend.git
-git branch -M main
-git push -uf origin main
+This will create two shared objects: `build/lib/libkernels.so` and `tcuscan_ops.*.so`.
+Unit tests can be executed with
+```bash
+make test
+```
+The artifacts can currently be installed inside a local python environment (e.g. conda) by manually moving them to the appropriate folders.
+This can be done with:
+```bash
+make install_in_local_conda_env
+```
+which will manually create a new python environment, build the package, and move the shared objects inside the environment.
+After this, the package can be imported as follows:
+```python
+import torch
+import torch_npu
+import tcuscan_ops
 ```
 
-## Integrate with your tools
+## Integrating a new kernel
+To integrate a new kernel from the `ascend-scan-910b` repo we need three main steps.
 
-- [ ] [Set up project integrations](https://gitlab.huaweirc.ch/zrc-von-neumann-lab/individual-projects/a00565472/pybind11-ascend/-/settings/integrations)
+### 1: Copy kernel header files
+The first step is to copy the kernel header files from the `ascend-scan-910b` repo.
+Let's say the kernel is `${MYKERNEL}`
+We need to copy:
+```bash
+cp ascendc-scan-910b/src/kernels/kernel_${MYKERNEL}.h pytorch-tcuscan/src/kernels/kernel_${MYKERNEL}.h
+cp ascendc-scan-910b/src/kernels/kernel_${MYKERNEL}.cpp pytorch-tcuscan/src/${MYKERNEL}.cpp
+cp ascendc-scan-910b/src/kernels/tiling_${MYKERNEL}.h pytorch-tcuscan/src/tiling/tiling_${MYKERNEL}.h
+```
+The `${MYKERNEL}.cpp` file needs to be also added inside `CMakeLists.txt`
 
-## Collaborate with your team
+### 2: Implement entrypoint in pybind
+In the `src/pybind11.cpp` file we need to implement a wrapper function to call the kernel.
+This function lies inside the `asc` namespace, and added inside the `PYBIND11_MODULE`
+```cpp
+namespace asc{
+    // ...
+  at::Tensor run_my_kernel(const at::Tensor &x, int S) {
+    //...
+  }
+} // namespace asc
+PYBIND11_MODULE(tcuscan_ops, m) {
+  m.doc() = "TCUSCAN AscendC operators";
+  //...
+  m.def("run_my_kernel", &asc::run_my_kernel, "MYKERNEL execution");
+}
+```
 
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/ee/user/project/merge_requests/merge_when_pipeline_succeeds.html)
+### 3: Implement tests and add them in CI
+The final step is to build a test file `tests/test_${MYKERNEL}.py`, and add a job in `.gitlab-ci.yml` to run the tests in CI.
 
-## Test and Deploy
-
-Use the built-in continuous integration in GitLab.
-
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/index.html)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
-
-***
-
-# Editing this README
-
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
-
-## Suggestions for a good README
-
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
-
-## Name
-Choose a self-explaining name for your project.
-
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
-
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
-
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
-
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
-
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
-
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
-
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
-
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
-
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
-
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
-
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
-
-## License
-For open source projects, say how it is licensed.
-
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+### 4: Important notes / nitpicks
+- In `pybind11.cpp`, every `run_*` function must allocate a workspace tensor, even if it is an empty tensor. This tensor must be passed as an argument to the kernel.
+- In `test/test_*.py`, we always need to import `torch_npu`, which might be unused. Make sure to add a comment `import torch_npu # noqa` so that the prospector passes the CI
+- When the input is a 2d-tensor, e.g., as in `scan_batch`, we usually set `block_size` (i.e. the number of cube cores) equal to the batch size.
+- All the files related to a kernel (test, tiling, header, cpp,...) must all have the same name. E.g., if the kernel name is `scan_fp16`, we need to name the files `tiling_scan_fp16.h`, `kernel_scan_fp16.h`, `scan_fp16.cpp`, `test_scan_fp16.py`, etc.
