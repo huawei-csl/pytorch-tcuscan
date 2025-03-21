@@ -17,7 +17,7 @@ import tcuscan_ops
 
 torch.npu.config.allow_internal_format = False
 
-_MULTIPLIER = [1, 2, 3, 4, 5, 10, 15, 20, 25, 30]
+_MULTIPLIER = [1, 2, 3, 5, 11, 23]
 
 
 def ref_segscan(x, f):
