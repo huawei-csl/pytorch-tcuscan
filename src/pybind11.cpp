@@ -22,6 +22,7 @@
 #include "aclrtlaunch_mc_gather.h"
 #include "aclrtlaunch_radix_sort_fp16.h"
 #include "aclrtlaunch_radix_sort_int16.h"
+#include "aclrtlaunch_scan_batch.h"
 #include "aclrtlaunch_scan_multi_core_fp16.h"
 #include "aclrtlaunch_scan_multi_core_int8.h"
 #include "aclrtlaunch_scan_single_core_fp16.h"
@@ -39,6 +40,7 @@
 #include "tiling/tiling_csr_gather.h"
 #include "tiling/tiling_diff.h"
 #include "tiling/tiling_mc_gather.h"
+#include "tiling/tiling_scan_batch.h"
 #include "tiling/tiling_scan_multi_core.h"
 #include "tiling/tiling_scan_single_core.h"
 #include "tiling/tiling_seg_scan_mc_revert.h"
@@ -572,6 +574,44 @@ at::Tensor run_copy(const at::Tensor &x, int s) {
   return z;
 }
 
+at::Tensor run_scan_batch(const at::Tensor &x, int S) {
+  auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
+  const at::Device device = x.options().device();
+  const auto dtype = x.options().dtype();
+  const uint32_t block_size = x.size(0);  // For tiling/cube core parallelism
+
+  const uint32_t matmul_size = static_cast<uint32_t>(S);
+  const uint32_t batch_size = x.size(0);
+  const uint32_t vec_len = x.size(1);
+  // Outuput is always 32-bits (float or int32_t)
+  const at::Tensor z =
+      at::empty({batch_size, vec_len},
+                at::TensorOptions().dtype(at::kFloat).device(device));
+  // Workspace is **always** required, even if it is an empty tensor
+  const at::Tensor workspace_tensor = alloc_workspace(0, device);
+
+  const ScanBatchTiling tiling{block_size, vec_len, batch_size, matmul_size,
+                               2 /* vec-cube ratio */};
+
+  constexpr size_t tiling_size = sizeof(ScanBatchTiling);
+  const uint8_t *tiling_host = reinterpret_cast<const uint8_t *>(&tiling);
+
+  uint8_t *tiling_device;
+  aclrtMalloc((void **)&tiling_device, tiling_size, ACL_MEM_MALLOC_HUGE_FIRST);
+  aclrtMemcpy(tiling_device, tiling_size, tiling_host, tiling_size,
+              ACL_MEMCPY_HOST_TO_DEVICE);
+
+  ACLRT_LAUNCH_KERNEL(scan_batch)
+  (block_size, acl_stream, const_cast<void *>(x.storage().data()),
+   const_cast<void *>(z.storage().data()),
+   const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
+
+  aclrtFree(tiling_device);
+  aclrtSynchronizeStream(acl_stream);
+
+  return z;
+}
+
 at::Tensor run_scan_single_core(const at::Tensor &x, int S) {
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();
@@ -849,6 +889,7 @@ PYBIND11_MODULE(tcuscan_ops, m) {
         "Compaction/compress with pre-computed output positions");
   m.def("run_seg_sum", &asc::run_seg_sum, "Segmented Sum");
   m.def("run_copy", &asc::run_copy, "Copy single core");
+  m.def("run_scan_batch", &asc::run_scan_batch, "Scan Batch");
   m.def("run_scan_single_core", &asc::run_scan_single_core, "Scan Single Core");
   m.def("run_seg_scan_vec", &asc::run_seg_scan_vec,
         "Segmented Scan (vector-only)");

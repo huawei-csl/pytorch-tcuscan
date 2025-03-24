@@ -1,0 +1,70 @@
+from typing import List
+import torch
+import torch_npu  # noqa
+import pytest
+
+import tcuscan_ops
+
+torch.npu.config.allow_internal_format = False
+
+_MULTIPLIERS = [1, 2, 3, 11, 63]
+_BATCH_SIZES = [2, 16, 20, 32, 44]
+
+
+def get_lengths_and_batch_sizes(s: int, multipliers: List[int], batch_sizes: List[int]):
+    for multiplier in multipliers:
+        for batch_size in batch_sizes:
+            yield (multiplier * s * s, batch_size)
+
+
+def _test_scan_batch_fp16(s: int, vec_len: int, batch_size: int):
+
+    x = torch.rand((batch_size, vec_len)).half().npu()
+
+    expected = torch.cumsum(x, dim=1, dtype=torch.float)
+    torch.npu.synchronize()
+    actual = tcuscan_ops.run_scan_batch(x, s)
+    torch.npu.synchronize()
+    assert torch.allclose(
+        actual, expected, rtol=1e-03
+    ), f"batch scan (fp16) wrong. s={s}, vec_len={vec_len}, batch_size= {batch_size}"
+
+
+@pytest.mark.parametrize(
+    "vec_len, batch_size",
+    get_lengths_and_batch_sizes(
+        s=16, multipliers=_MULTIPLIERS, batch_sizes=_BATCH_SIZES
+    ),
+)
+def test_scan_batch_fp16_s_16(vec_len: int, batch_size: int):
+    _test_scan_batch_fp16(16, vec_len, batch_size)
+
+
+@pytest.mark.parametrize(
+    "vec_len, batch_size",
+    get_lengths_and_batch_sizes(
+        s=32, multipliers=_MULTIPLIERS, batch_sizes=_BATCH_SIZES
+    ),
+)
+def test_scan_batch_fp16_s_32(vec_len: int, batch_size: int):
+    _test_scan_batch_fp16(32, vec_len, batch_size)
+
+
+@pytest.mark.parametrize(
+    "vec_len, batch_size",
+    get_lengths_and_batch_sizes(
+        s=64, multipliers=_MULTIPLIERS, batch_sizes=_BATCH_SIZES
+    ),
+)
+def test_scan_batch_fp16_s_64(vec_len: int, batch_size: int):
+    _test_scan_batch_fp16(64, vec_len, batch_size)
+
+
+@pytest.mark.parametrize(
+    "vec_len, batch_size",
+    get_lengths_and_batch_sizes(
+        s=128, multipliers=_MULTIPLIERS, batch_sizes=_BATCH_SIZES
+    ),
+)
+def test_scan_batch_fp16_s_128(vec_len: int, batch_size: int):
+    _test_scan_batch_fp16(128, vec_len, batch_size)

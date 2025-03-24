@@ -138,6 +138,12 @@ test_scan_single_core:
     - make setup_ci
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_scan_single_core
 
+test_scan_batch:
+  <<: *test_config
+  script:
+    - make setup_ci
+    - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_scan_batch
+
 test_seg_scan_single_core:
   <<: *test_config
   script:
