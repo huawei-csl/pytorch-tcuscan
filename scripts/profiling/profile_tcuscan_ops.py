@@ -343,7 +343,7 @@ def scscan_benchmark(
     return _run_benchmark(device, run_scan), size
 
 
-def radixsort_benchmark(device: Device, vec_len: int, dtype: torch.dtype, s: int):
+def radix_sort_benchmark(device: Device, vec_len: int, dtype: torch.dtype, s: int):
     if dtype == torch.int16:
         x = (
             torch.randint(torch.iinfo(dtype).min, torch.iinfo(dtype).max, (vec_len,))
@@ -353,10 +353,26 @@ def radixsort_benchmark(device: Device, vec_len: int, dtype: torch.dtype, s: int
     else:
         x = torch.rand((vec_len,), dtype=dtype).npu()
 
-    def run_radixsort() -> None:
+    def run_radix_sort() -> None:
         _, _ = tcuscan_ops.run_radix_sort(x, s)
 
-    return _run_benchmark(device, run_radixsort), vec_len
+    return _run_benchmark(device, run_radix_sort), vec_len
+
+
+def sort_benchmark(device: Device, size: int, dtype: torch.dtype) -> float:
+    if dtype in {torch.float16, torch.float32}:
+        x = torch.rand(size, device=device.str, dtype=dtype)
+    else:
+        x = torch.randint(
+            0, torch.iinfo(dtype).max, (size,), device=device.str, dtype=dtype
+        )
+    out = torch.zeros(size, device=device.str, dtype=dtype)
+    ind = torch.zeros(size, device=device.str, dtype=torch.int64)
+
+    def run_sort() -> None:
+        torch.sort(x, dim=-1, descending=False, out=(out, ind))
+
+    return _run_benchmark(device, run_sort), size
 
 
 def mcscan_benchmark(
@@ -495,7 +511,8 @@ if __name__ == "__main__":  # noqa
             "seg_scan_mc_revert",
             "topk",
             "mcgather",
-            "radixsort",
+            "sort",
+            "radix_sort",
         ],
     )
     parser.add_argument("--dtype", choices=["int8", "fp16", "int16", "int32", "fp32"])
@@ -694,13 +711,16 @@ if __name__ == "__main__":  # noqa
             sizes,
             density,
         )
-    elif bench == "radixsort" and dtype in ["fp16"]:
+    elif bench == "sort" and dtype in ["int16", "fp16"]:
+        tdtype = STR_TO_DTYPE[dtype]
+        benchmark(device, "sort", dtype, partial(sort_benchmark, dtype=tdtype), sizes)
+    elif bench == "radix_sort" and dtype in ["int16", "fp16"]:
         tdtype = STR_TO_DTYPE[dtype]
         benchmark(
             device,
-            f"radixsort_{s}",
+            f"radix_sort_{s}",
             dtype,
-            partial(radixsort_benchmark, dtype=tdtype, s=s),
+            partial(radix_sort_benchmark, dtype=tdtype, s=s),
             sizes,
             density,
         )

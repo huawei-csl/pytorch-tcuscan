@@ -1,3 +1,5 @@
+from math import ceil
+
 import pytest
 import torch
 import torch_npu  # noqa
@@ -23,6 +25,18 @@ _SORT_SIZES = [
 ]
 
 
+def get_sizes():
+    s = 128
+    max_size = 1e7
+    num_cores = 20
+
+    # Maximum number of iterations
+    # Remove '- 3' for more thorough testing
+    max_iters = ceil(max_size / (num_cores * s * s)) - 5
+
+    return [i * num_cores * s * s for i in range(1, max_iters, 16 * 128 // s)]
+
+
 def generate_random_int(dtype, vec_len):
     if dtype == torch.int16:
         return (
@@ -35,6 +49,7 @@ def generate_random_int(dtype, vec_len):
 
 
 def _test_sort(vec_len: int, dtype: torch.dtype, s: int):
+    torch.manual_seed(42)
     x = generate_random_int(dtype, vec_len)
 
     expected, expected_indices = torch.sort(x, dim=-1, descending=False)
@@ -42,10 +57,10 @@ def _test_sort(vec_len: int, dtype: torch.dtype, s: int):
 
     assert len(expected) == len(
         actual
-    ), f"Input and output vector size must agree. Expected: {len(expected)}. Actual: {actual}"
+    ), f"Vector size must agree. Expected: {len(expected)}. Actual: {actual}"
     assert len(expected_indices) == len(
         actual_indices
-    ), f"Input and output indices size must agree. Expected: {len(expected_indices)}. Actual: {actual_indices}"
+    ), f"Indices size must agree. Expected: {len(expected_indices)}. Actual: {actual_indices}"
 
     assert torch.allclose(expected, actual), "Output must be sorted"
 
@@ -57,35 +72,36 @@ def test_tcuscan_sort_fp16_s_32(vec_len):
 
 @pytest.mark.parametrize("vec_len", _SORT_SIZES)
 def test_tcuscan_sort_fp16_s_64(vec_len):
-    _test_sort(vec_len, torch.float16, 64)
+    s = 64
+    if vec_len >= s * s:
+        _test_sort(vec_len, torch.float16, s)
 
 
 @pytest.mark.parametrize("vec_len", _SORT_SIZES)
 def test_tcuscan_sort_fp16_s_128(vec_len):
-    _test_sort(vec_len, torch.float16, 128)
+    s = 128
+    if vec_len >= s * s:
+        _test_sort(vec_len, torch.float16, s)
 
 
-# @pytest.mark.skip(reason="Radixsort does not work on the following input sizes")
-# def test_tcuscan_sort_int16_s_128_BUG():
-#     dtype = torch.int16
-#     s = 128
+# TODO: See ISSUE-52
+# Radix sort fails on irregular length.
+# @pytest.mark.parametrize("vec_len", _SORT_SIZES[1:])
+# def test_tcuscan_sort_int16_s_128_irregular(vec_len):
+#    s = 128
+#    dtype = torch.int16
+#    _test_sort(vec_len, dtype, s)
 
-#     for vec_len in _SORT_SIZES:
-#         _test_sort(vec_len, dtype, s)
+
+@pytest.mark.parametrize("vec_len", get_sizes())
+def test_tcuscan_sort_int16_s_64(vec_len):
+    s = 64
+    dtype = torch.int16
+    _test_sort(vec_len, dtype, s)
 
 
-# def test_tcuscan_sort_int16_s_128():
-#     dtype = torch.int16
-#     s = 128
-
-#     max_size = 1e8
-#     num_cores = 20
-
-#     # Maximum number of iterations
-#     max_iters = ceil(max_size / (num_cores * s * s))
-
-#     # Input sizes to benchmark
-#     sizes = [i * num_cores * s * s for i in range(1, max_iters, 16 * 128 // s)]
-#     # Remove [:3] slice to extended testing
-#     for vec_len in sizes[:3]:
-#         _test_sort(vec_len, dtype, s)
+@pytest.mark.parametrize("vec_len", get_sizes())
+def test_tcuscan_sort_int16_s_128(vec_len):
+    s = 128
+    dtype = torch.int16
+    _test_sort(vec_len, dtype, s)

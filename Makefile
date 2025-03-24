@@ -4,7 +4,7 @@ DENSITY?=0.001
 LOCAL_SPARSE_MATRIX_NAME?='Boeing/bcsstk35/bcsstk35'
 BASE_SPARSE_MATRIX_PATH?=${HOME}/.ssgetpy/MM/
 FULL_SPARSE_MATRIX_PATH=${BASE_SPARSE_MATRIX_PATH}${LOCAL_SPARSE_MATRIX_NAME}
-PROFILING_SCRIPTS_PATH=./scripts/profiling/
+PROFILING_SCRIPTS_PATH=scripts/profiling/
 CONDA_ENV_NAME="pytorch_tcuscan"
 
 DEVICE_TYPE?=npu
@@ -149,10 +149,19 @@ profile_fp32_diff_real:
 profile_fp32_revert_mcscan:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench seg_scan_mc_revert --dtype fp32 --num_cores 20 --s 128 --density ${DENSITY}
 
-profile_fp16_radixsort:
-	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench radixsort --dtype fp16 --s 32 --num_cores 20
-	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench radixsort --dtype fp16 --s 64 --num_cores 20
-	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench radixsort --dtype fp16 --s 128 --num_cores 20
+profile_radix_sort: profile_fp16_radix_sort profile_int16_radix_sort
+
+profile_fp16_radix_sort:
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench sort --dtype fp16 --s 128 --num_cores 20
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench radix_sort --dtype fp16 --s 32 --num_cores 20
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench radix_sort --dtype fp16 --s 64 --num_cores 20
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench radix_sort --dtype fp16 --s 128 --num_cores 20
+
+profile_int16_radix_sort:
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench sort --dtype int16 --s 128 --num_cores 20
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench radix_sort --dtype int16 --s 32 --num_cores 20
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench radix_sort --dtype int16 --s 64 --num_cores 20
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench radix_sort --dtype int16 --s 128 --num_cores 20
 
 
 paper_fig_5:

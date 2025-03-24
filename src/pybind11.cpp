@@ -21,6 +21,7 @@
 #include "aclrtlaunch_diff_fp32.h"
 #include "aclrtlaunch_mc_gather.h"
 #include "aclrtlaunch_radix_sort_fp16.h"
+#include "aclrtlaunch_radix_sort_int16.h"
 #include "aclrtlaunch_scan_multi_core_fp16.h"
 #include "aclrtlaunch_scan_multi_core_int8.h"
 #include "aclrtlaunch_scan_single_core_fp16.h"
@@ -256,14 +257,14 @@ at::Tensor run_scan_multi_core(const at::Tensor &x, int S) {
       {totalLength}, at::TensorOptions().dtype(dtype_out).device(device));
 
   const uint32_t tile_elems = matmul_size * matmul_size;
-  const size_t num_tiles = totalLength / tile_elems;
+  const size_t num_tiles = host_utils::CeilDiv(totalLength, tile_elems);
 
   uint32_t blockDim = ascendc_platform->GetCoreNum() / 2;
   while (num_tiles % blockDim != 0) {
     blockDim--;
   }
   if (blockDim <= 1) {
-    blockDim = 8;
+    blockDim = 1;
   }
 
   const MultiCoreScanTiling tiling{blockDim, totalLength, matmul_size};
@@ -789,6 +790,9 @@ std::tuple<at::Tensor, at::Tensor> run_radix_sort(const at::Tensor &x, int S) {
   while (num_tiles % blockDim != 0) {
     blockDim--;
   }
+  if (blockDim <= 1) {
+    blockDim = 1;
+  }
 
   RadixSortTiling tiling{blockDim, totalLength, matmul_size, tile_elems / 2};
 
@@ -810,8 +814,14 @@ std::tuple<at::Tensor, at::Tensor> run_radix_sort(const at::Tensor &x, int S) {
   const at::Tensor workspace_tensor =
       alloc_workspace(user_workspace_size, device);
 
-  if (dtype == torch::kHalf or dtype == torch::kInt16) {
+  if (dtype == torch::kHalf) {
     ACLRT_LAUNCH_KERNEL(radix_sort_fp16)
+    (blockDim, acl_stream, const_cast<void *>(x.storage().data()),
+     const_cast<void *>(vec_out.storage().data()),
+     const_cast<void *>(indices_out.storage().data()),
+     const_cast<void *>(workspace_tensor.storage().data()), tilingDevice);
+  } else if (dtype == torch::kInt16) {
+    ACLRT_LAUNCH_KERNEL(radix_sort_int16)
     (blockDim, acl_stream, const_cast<void *>(x.storage().data()),
      const_cast<void *>(vec_out.storage().data()),
      const_cast<void *>(indices_out.storage().data()),

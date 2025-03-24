@@ -43,6 +43,24 @@ constexpr uint16_t MAX_AIV_PER_BLOCK = 2;
 constexpr uint16_t UB_ALIGNMENT = 32;
 
 /**
+ * @brief Performs a division on two integral numbers and rounds the result up
+ * to the nearest integer.
+ *
+ * @tparam T1 Data type of dividend.
+ * @tparam T2 Data type of divisor.
+ * @param [in] value Dividend.
+ * @param [in] divisor Divisor.
+ * @return Result of division.
+ */
+template <typename T1, typename T2,
+          typename std::enable_if<std::is_integral<T1>::value &&
+                                      std::is_integral<T2>::value,
+                                  int>::type = 0>
+T1 CeilDiv(T1 value, T2 divisor) {
+  return (value + divisor - 1) / divisor;
+}
+
+/**
  * @brief Rounds an integral value up to the nearest multiple of a given
  * alignment.
  *

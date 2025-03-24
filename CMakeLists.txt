@@ -32,7 +32,7 @@ ascendc_library(kernels SHARED
     src/seg_scan_single_core.cpp
     src/scan_multi_core.cpp
     src/csr_gather.cpp
-    src/radix_sort_fp16.cpp
+    src/radix_sort.cpp
     src/compress.cpp
     src/copy.cpp
     src/scan_single_core.cpp
