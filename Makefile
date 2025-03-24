@@ -55,6 +55,10 @@ test:
 test_%:
 	python3 -m pytest tests/test_$*.py
 
+###
+# Profiling kernels
+###
+
 profile_%: profile_fp32_$* profile_fp16_$* profile_int16_$*
 
 profile_fp16_%:
@@ -163,15 +167,9 @@ profile_int16_radix_sort:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench radix_sort --dtype int16 --s 64 --num_cores 20
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench radix_sort --dtype int16 --s 128 --num_cores 20
 
-
-paper_fig_5:
-	python3 ${PROFILING_SCRIPTS_PATH}/profile_random_matrices.py --bench custom_copy --dtype fp16 --prob Uniform --num_cores 1 --s 4096
-	python3 ${PROFILING_SCRIPTS_PATH}/profile_random_matrices.py --bench seg_scan_sc --dtype fp16 --prob Uniform --s 128 --density 0.01 --num_cores 1
-	python3 ${PROFILING_SCRIPTS_PATH}/profile_random_matrices.py --bench seg_scan_sc --dtype fp16 --prob Uniform --s 128 --density 0.001 --num_cores 1
-	python3 ${PROFILING_SCRIPTS_PATH}/profile_random_matrices.py --bench seg_scan_sc --dtype fp16 --prob Uniform --s 128 --density 0.0001 --num_cores 1
-	python3 ${PROFILING_SCRIPTS_PATH}/profile_random_matrices.py --bench seg_scan_sc --dtype fp16 --prob PowerLaw --s 128 --density 0.01 --num_cores 1
-	python3 ${PROFILING_SCRIPTS_PATH}/profile_random_matrices.py --bench seg_scan_sc --dtype fp16 --prob PowerLaw --s 128 --density 0.001 --num_cores 1
-	python3 ${PROFILING_SCRIPTS_PATH}/profile_random_matrices.py --bench seg_scan_sc --dtype fp16 --prob PowerLaw --s 128 --density 0.0001 --num_cores 1
+###
+# SPAA 2025 paper figures
+###
 
 paper_fig_3:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_sparse_matrices.py --bench vec_seg_scan_sc --dtype fp16 --matrixpath ${BASE_SPARSE_MATRIX_PATH}Sandia/ASIC_680k/ASIC_680k --s 128 --num_cores 1
@@ -184,8 +182,8 @@ paper_fig_3:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_sparse_matrices.py --bench seg_scan_sc --dtype fp16 --matrixpath ${BASE_SPARSE_MATRIX_PATH}Williams/mac_econ_fwd500/mac_econ_fwd500 --s 128 --num_cores 1
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_sparse_matrices.py --bench seg_scan_sc --dtype fp16 --matrixpath ${BASE_SPARSE_MATRIX_PATH}Williams/mc2depi/mc2depi --s 128 --num_cores 1
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_sparse_matrices.py --bench seg_scan_sc --dtype fp16 --matrixpath ${BASE_SPARSE_MATRIX_PATH}Sandia/ASIC_680k/ASIC_680k --s 128 --num_cores 1
-profile_fp16_csr_gather:
 
+profile_fp16_csr_gather:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench csr_gather --dtype fp16 --num_cores 40
 
 fig_3_matmul:
