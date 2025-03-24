@@ -192,6 +192,18 @@ test_vadd:
     - make setup_ci
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_vadd
 
+test_mcgather:
+  <<: *test_config
+  script:
+    - make setup_ci
+    - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_mc_gather
+
+test_gather_spmv:
+  <<: *test_config
+  script:
+    - make setup_ci
+    - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_gather_spmv
+
 # Uncomment to run all tests in a single run
 .unit_test:
   tags:

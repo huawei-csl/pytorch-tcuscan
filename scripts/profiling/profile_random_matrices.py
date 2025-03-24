@@ -239,6 +239,16 @@ def baseline_diff_benchmark(device: Device, x: torch.Tensor) -> float:
     return _run_benchmark(device, run_diff)
 
 
+def baseline_gather_spmv(device: Device, x: torch.Tensor, idx: torch.Tensor, s: int):
+    x_npu = x.npu()
+    idx_npu = idx.npu()
+
+    def run_gather_spmv() -> None:
+        _ = tcuscan_ops.run_gather_spmv(x_npu, idx_npu, s)
+
+    return _run_benchmark(device, run_gather_spmv)
+
+
 def copy_benchmark(device: Device, x: torch.Tensor, s: int) -> float:
     """
     Benchmark torch.clone kernel.
@@ -325,6 +335,7 @@ if __name__ == "__main__":
             "diff",
             "vec_seg_scan_sc",
             "custom_copy",
+            "gather_spmv",
         ],
     )
     parser.add_argument("--dtype", choices=["int8", "fp16", "int16", "fp32"])
@@ -354,13 +365,13 @@ if __name__ == "__main__":
     else:
         device = Device(torch.cuda, "cuda:0")
 
-    for nnr in range(10000, 50000, 1000):
+    for nnr in range(102400, 500000, s * 20):
         vec_len = nnr * nnr * density
         B = []
         if "Uniform" == distr:
             B = random(
-                nnr,
-                nnr,
+                nnr - 1,
+                nnr - 1,
                 density=density,
                 format="csr",
                 dtype=np.float32,
@@ -369,8 +380,8 @@ if __name__ == "__main__":
 
         elif "PowerLaw" == distr:
             B = random(
-                nnr,
-                nnr,
+                nnr - 1,
+                nnr - 1,
                 density=density,
                 format="csr",
                 dtype=np.float32,
@@ -450,6 +461,24 @@ if __name__ == "__main__":
                 dtype,
                 partial(baseline_diff_benchmark, x=my_x),
                 vec_len,
+                density,
+                nnr,
+                distr,
+            )
+        elif bench == "gather_spmv" and dtype in ["fp32"]:
+            values = (B.data).astype(np.float32)
+            indexes = (B.indptr).astype(np.uint32)
+            benchmark(
+                device,
+                f"gather_spmv_{s}",
+                dtype,
+                partial(
+                    baseline_gather_spmv,
+                    x=torch.from_numpy(values),
+                    idx=torch.from_numpy(indexes),
+                    s=s,
+                ),
+                len(values),
                 density,
                 nnr,
                 distr,

@@ -1,0 +1,24 @@
+/**
+ * Copyright (c) Huawei Technologies Co., Ltd. 2024. All rights reserved.
+ *
+ * @file tiling_gather_spmv.h
+ * @brief Tiling structure for Vector gather_spmv kernel operation.
+ */
+
+#pragma once
+
+#include <cstdint>
+
+#pragma pack(push, 8)
+/**
+ * @brief Vector GatherSPMV kernel tiling parameter structure.
+ */
+struct GatherSpmvTiling {
+  /// @brief Number of blocks.
+  uint32_t blockDim;
+  /// @brief Total number of input elements.
+  uint32_t idx_len;
+  /// @brief Tiling length.
+  uint32_t tile_len;
+};
+#pragma pack(pop)

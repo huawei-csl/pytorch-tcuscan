@@ -232,6 +232,26 @@ def baseline_diffp_benchmark(
     return _run_benchmark(device, run_diff), size
 
 
+def gather_spmv_benchmark(device: Device, vec_len: int, s: int) -> Tuple[float, int]:
+    rng = np.random.default_rng()
+    input_values = rng.uniform(1, 100, vec_len).astype(np.float32)
+    idx_len = vec_len / s
+    input_cols = rng.uniform(0, vec_len, int(idx_len))
+    input_cols[0] = 0
+    input_cols[1] = 0
+    input_cols[2] = 0
+    input_cols.sort()
+    input_cols = input_cols.astype(np.uint32)
+    val_torch = torch.Tensor(input_values).to(torch.float32).npu()
+    idx_torch = torch.from_numpy(input_cols).npu()
+    outputsize = idx_len
+
+    def run_gather_spmv() -> None:
+        _ = tcuscan_ops.run_gather_spmv(val_torch, idx_torch, s)
+
+    return _run_benchmark(device, run_gather_spmv), outputsize
+
+
 def mc_gather_benchmark(device: Device, vec_len: int, s: int) -> Tuple[float, int]:
     rng = np.random.default_rng()
     input_values = rng.uniform(1, 100, vec_len).astype(np.float32)
@@ -511,6 +531,7 @@ if __name__ == "__main__":  # noqa
             "seg_scan_mc_revert",
             "topk",
             "mcgather",
+            "gather_spmv",
             "sort",
             "radix_sort",
         ],
@@ -654,6 +675,14 @@ if __name__ == "__main__":  # noqa
         benchmark(
             device,
             f"mcgather_{s}",
+            dtype,
+            partial(mc_gather_benchmark, s=s),
+            sizes,
+        )
+    elif bench == "gather_spmv":
+        benchmark(
+            device,
+            f"gather_spmv_{s}",
             dtype,
             partial(mc_gather_benchmark, s=s),
             sizes,

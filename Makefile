@@ -247,3 +247,16 @@ paper_fig_4b:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench seg_scan_sc --dtype fp16 --s 128 --density 0.003 --num_cores 1
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench seg_scan_sc --dtype fp16 --s 128 --density 0.004 --num_cores 1
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench seg_scan_sc --dtype fp16 --s 128 --density 0.01 --num_cores 1
+
+profile_fp32_gather_spmv_matrix:
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_random_matrices.py --bench gather_spmv --dtype fp32 --prob Uniform --num_cores 20 --s 128 --density 0.001
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_random_matrices.py --bench gather_spmv --dtype fp32 --prob Uniform --num_cores 20 --s 256 --density 0.001
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_random_matrices.py --bench gather_spmv --dtype fp32 --prob Uniform --num_cores 20 --s 512 --density 0.001
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_random_matrices.py --bench gather_spmv --dtype fp32 --prob Uniform --num_cores 20 --s 128 --density 0.0001
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_random_matrices.py --bench gather_spmv --dtype fp32 --prob Uniform --num_cores 20 --s 256 --density 0.0001
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_random_matrices.py --bench gather_spmv --dtype fp32 --prob Uniform --num_cores 20 --s 512 --density 0.0001
+
+profile_fp32_gather_spmv:
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench gather_spmv --dtype fp32 --num_cores 20 --s 128
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench gather_spmv --dtype fp32 --num_cores 20 --s 256
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench gather_spmv --dtype fp32 --num_cores 20 --s 512

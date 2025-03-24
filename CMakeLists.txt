@@ -39,6 +39,7 @@ ascendc_library(kernels SHARED
     src/scan_single_core.cpp
     src/seg_scan_vec_single_core.cpp
     src/seg_scan_mc_revert.cpp
+    src/gather_spmv.cpp
     src/split.cpp
     src/mc_gather.cpp
 )

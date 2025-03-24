@@ -19,6 +19,7 @@
 #include "aclrtlaunch_csr_gather.h"
 #include "aclrtlaunch_diff_fp16.h"
 #include "aclrtlaunch_diff_fp32.h"
+#include "aclrtlaunch_gather_spmv.h"
 #include "aclrtlaunch_mc_gather.h"
 #include "aclrtlaunch_radix_sort_fp16.h"
 #include "aclrtlaunch_radix_sort_int16.h"
@@ -39,6 +40,7 @@
 #include "tiling/tiling_copy.h"
 #include "tiling/tiling_csr_gather.h"
 #include "tiling/tiling_diff.h"
+#include "tiling/tiling_gather_spmv.h"
 #include "tiling/tiling_mc_gather.h"
 #include "tiling/tiling_scan_batch.h"
 #include "tiling/tiling_scan_multi_core.h"
@@ -439,6 +441,41 @@ at::Tensor run_csr_gather(const at::Tensor &values, const at::Tensor &cols,
    const_cast<void *>(z.storage().data()),
    const_cast<void *>(workspace_tensor.storage().data()), tilingDevice);
 
+  aclrtFree(tilingDevice);
+  aclrtSynchronizeStream(acl_stream);
+
+  return z;
+}
+
+at::Tensor run_gather_spmv(const at::Tensor &values, const at::Tensor &idxs,
+                           const uint32_t tile_len) {
+  auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
+
+  const at::Device device = values.options().device();
+  const uint32_t tileLen = tile_len;
+  const uint32_t blockDim = 20;
+
+  uint32_t values_len = values.numel();
+  uint32_t idx_len = idxs.numel();
+  const at::Tensor z =
+      at::empty({idx_len},
+                at::TensorOptions().dtype(values.scalar_type()).device(device));
+  const at::Tensor workspace_tensor = alloc_workspace(0, device);
+  const GatherSpmvTiling tiling{blockDim, idx_len, tileLen};
+
+  constexpr size_t tilingSize = sizeof(GatherSpmvTiling);
+  const uint8_t *tilingHost = reinterpret_cast<const uint8_t *>(&tiling);
+  uint8_t *tilingDevice;
+
+  aclrtMalloc((void **)&tilingDevice, tilingSize, ACL_MEM_MALLOC_HUGE_FIRST);
+  aclrtMemcpy(tilingDevice, tilingSize, tilingHost, tilingSize,
+              ACL_MEMCPY_HOST_TO_DEVICE);
+
+  ACLRT_LAUNCH_KERNEL(gather_spmv)
+  (blockDim, acl_stream, const_cast<void *>(values.storage().data()),
+   const_cast<void *>(idxs.storage().data()),
+   const_cast<void *>(z.storage().data()),
+   const_cast<void *>(workspace_tensor.storage().data()), tilingDevice);
   aclrtFree(tilingDevice);
   aclrtSynchronizeStream(acl_stream);
 
@@ -898,5 +935,7 @@ PYBIND11_MODULE(tcuscan_ops, m) {
   m.def("run_split", &asc::run_split, "Split (16-bits)");
   m.def("run_split_ind", &asc::run_split_ind, "Split with indices (16-bits)");
   m.def("run_mc_gather", &asc::run_mc_gather, "Vector Multi Core Gather");
+  m.def("run_gather_spmv", &asc::run_gather_spmv,
+        "Vector Multi Core Gather SPMV");
   m.def("run_radix_sort", &asc::run_radix_sort, "Radix sort using cube units");
 }
