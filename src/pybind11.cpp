@@ -57,6 +57,13 @@ static const char *SOC_VERSION = "Ascend910B4";
 
 namespace asc {
 
+/**
+ * @brief Allocates a torch tensor for AscendC kernel working space.
+ *
+ * @param user_workspace_size Workspace size in bytes
+ * @param device Device on which the tensor is allocated.
+ * @return at::Tensor The allocated workspace tensor.
+ */
 at::Tensor alloc_workspace(uint32_t user_workspace_size, at::Device device) {
   const auto ascendc_platform =
       platform_ascendc::PlatformAscendCManager::GetInstance(SOC_VERSION);
@@ -81,6 +88,29 @@ size_t byte_size(const at::Tensor &x) {
   }
 }
 
+/**
+ * @brief Returns a device pointer on which the host tiling struct is copied at.
+ *
+ * Note: the user of this method must aclrtFree the returned pointer.
+ *
+ * @tparam T Struct of tiling
+ * @param tiling_struct Input tiling
+ * @return Device pointer where tiling struct is copied.
+ */
+template <typename T>
+uint8_t *allocCopyTiling(const T &tiling_struct) {
+  constexpr size_t tiling_size = sizeof(T);
+  const uint8_t *tiling_host =
+      reinterpret_cast<const uint8_t *>(&tiling_struct);
+
+  uint8_t *tiling_device;
+  aclrtMalloc((void **)&tiling_device, tiling_size, ACL_MEM_MALLOC_HUGE_FIRST);
+  aclrtMemcpy(tiling_device, tiling_size, tiling_host, tiling_size,
+              ACL_MEMCPY_HOST_TO_DEVICE);
+
+  return tiling_device;
+}
+
 at::Tensor run_add(const at::Tensor &x, const at::Tensor &y) {
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Tensor z = at::empty_like(x);
@@ -91,22 +121,15 @@ at::Tensor run_add(const at::Tensor &x, const at::Tensor &y) {
   const at::Tensor workspace_tensor = alloc_workspace(0, device);
 
   const VaddTiling tiling{totalLength, tileLen};
-
-  constexpr size_t tilingSize = sizeof(VaddTiling);
-  const uint8_t *tilingHost = reinterpret_cast<const uint8_t *>(&tiling);
-  uint8_t *tilingDevice;
-
-  aclrtMalloc((void **)&tilingDevice, tilingSize, ACL_MEM_MALLOC_HUGE_FIRST);
-  aclrtMemcpy(tilingDevice, tilingSize, tilingHost, tilingSize,
-              ACL_MEMCPY_HOST_TO_DEVICE);
+  uint8_t *tiling_device = allocCopyTiling(tiling);
 
   ACLRT_LAUNCH_KERNEL(vadd_custom)
   (blockDim, acl_stream, const_cast<void *>(x.storage().data()),
    const_cast<void *>(y.storage().data()),
    const_cast<void *>(z.storage().data()),
-   const_cast<void *>(workspace_tensor.storage().data()), tilingDevice);
+   const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
 
-  aclrtFree(tilingDevice);
+  aclrtFree(tiling_device);
   aclrtSynchronizeStream(acl_stream);
 
   return z;
@@ -128,17 +151,7 @@ at::Tensor run_diff(const at::Tensor &x, int64_t max_size) {
 
   const at::Tensor z =
       at::empty({totalLength}, at::TensorOptions().dtype(dtype).device(device));
-
   const at::Tensor workspace_tensor = alloc_workspace(0, device);
-
-  const DiffTiling tiling{totalLength, tileLen};
-  constexpr size_t tilingSize = sizeof(DiffTiling);
-  const uint8_t *tilingHost = reinterpret_cast<const uint8_t *>(&tiling);
-
-  uint8_t *tilingDevice;
-  aclrtMalloc((void **)&tilingDevice, tilingSize, ACL_MEM_MALLOC_HUGE_FIRST);
-  aclrtMemcpy(tilingDevice, tilingSize, tilingHost, tilingSize,
-              ACL_MEMCPY_HOST_TO_DEVICE);
 
   uint32_t blockDim =
       static_cast<uint32_t>((totalLength + tileLen - 1) / tileLen);
@@ -147,19 +160,22 @@ at::Tensor run_diff(const at::Tensor &x, int64_t max_size) {
     blockDim = 1;
   }
 
+  const DiffTiling tiling{totalLength, tileLen};
+  uint8_t *tiling_device = allocCopyTiling(tiling);
+
   if (dtype == torch::kHalf) {
     ACLRT_LAUNCH_KERNEL(diff_fp16)
     (blockDim, acl_stream, const_cast<void *>(x.storage().data()),
      const_cast<void *>(z.storage().data()),
-     const_cast<void *>(workspace_tensor.storage().data()), tilingDevice);
+     const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
   } else {
     ACLRT_LAUNCH_KERNEL(diff_fp32)
     (blockDim, acl_stream, const_cast<void *>(x.storage().data()),
      const_cast<void *>(z.storage().data()),
-     const_cast<void *>(workspace_tensor.storage().data()), tilingDevice);
+     const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
   }
 
-  aclrtFree(tilingDevice);
+  aclrtFree(tiling_device);
   aclrtSynchronizeStream(acl_stream);
 
   return z;
@@ -183,14 +199,8 @@ at::Tensor run_seg_scan_mc_revert(const at::Tensor &x, const at::Tensor &f,
   const uint32_t diff_len = static_cast<uint32_t>(diff.numel());
 
   const SegScanMcRevertTiling tiling{blockDim, totalLength, diff_len, tileLen};
+  uint8_t *tiling_device = allocCopyTiling(tiling);
 
-  constexpr size_t tilingSize = sizeof(SegScanMcRevertTiling);
-  const uint8_t *tilingHost = reinterpret_cast<const uint8_t *>(&tiling);
-
-  uint8_t *tilingDevice;
-  aclrtMalloc((void **)&tilingDevice, tilingSize, ACL_MEM_MALLOC_HUGE_FIRST);
-  aclrtMemcpy(tilingDevice, tilingSize, tilingHost, tilingSize,
-              ACL_MEMCPY_HOST_TO_DEVICE);
   const at::Tensor workspace_tensor = alloc_workspace(0, device);
 
   ACLRT_LAUNCH_KERNEL(seg_scan_mc_revert)
@@ -198,9 +208,9 @@ at::Tensor run_seg_scan_mc_revert(const at::Tensor &x, const at::Tensor &f,
    const_cast<void *>(f.storage().data()),
    const_cast<void *>(diff.storage().data()),
    const_cast<void *>(z.storage().data()),
-   const_cast<void *>(workspace_tensor.storage().data()), tilingDevice);
+   const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
 
-  aclrtFree(tilingDevice);
+  aclrtFree(tiling_device);
   aclrtSynchronizeStream(acl_stream);
 
   return z;
@@ -217,14 +227,7 @@ at::Tensor run_seg_scan(const at::Tensor &x, const at::Tensor &f, int S) {
       {totalLength}, at::TensorOptions().dtype(at::kFloat).device(device));
 
   const SegScanSingleCoreTiling tiling{totalLength, matmul_size};
-
-  constexpr size_t tilingSize = sizeof(SegScanSingleCoreTiling);
-  const uint8_t *tilingHost = reinterpret_cast<const uint8_t *>(&tiling);
-
-  uint8_t *tilingDevice;
-  aclrtMalloc((void **)&tilingDevice, tilingSize, ACL_MEM_MALLOC_HUGE_FIRST);
-  aclrtMemcpy(tilingDevice, tilingSize, tilingHost, tilingSize,
-              ACL_MEMCPY_HOST_TO_DEVICE);
+  uint8_t *tiling_device = allocCopyTiling(tiling);
 
   const uint32_t user_workspace_size =
       workspace::seg_scan::GetWorkspaceSize<int16_t /* half */, int8_t>(
@@ -236,9 +239,9 @@ at::Tensor run_seg_scan(const at::Tensor &x, const at::Tensor &f, int S) {
   (1 /* single core*/, acl_stream, const_cast<void *>(x.storage().data()),
    const_cast<void *>(f.storage().data()),
    const_cast<void *>(z.storage().data()),
-   const_cast<void *>(workspace_tensor.storage().data()), tilingDevice);
+   const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
 
-  aclrtFree(tilingDevice);
+  aclrtFree(tiling_device);
   aclrtSynchronizeStream(acl_stream);
 
   return z;
@@ -272,14 +275,7 @@ at::Tensor run_scan_multi_core(const at::Tensor &x, int S) {
   }
 
   const MultiCoreScanTiling tiling{blockDim, totalLength, matmul_size};
-
-  constexpr size_t tilingSize = sizeof(MultiCoreScanTiling);
-  const uint8_t *tilingHost = reinterpret_cast<const uint8_t *>(&tiling);
-
-  uint8_t *tilingDevice;
-  aclrtMalloc((void **)&tilingDevice, tilingSize, ACL_MEM_MALLOC_HUGE_FIRST);
-  aclrtMemcpy(tilingDevice, tilingSize, tilingHost, tilingSize,
-              ACL_MEMCPY_HOST_TO_DEVICE);
+  uint8_t *tiling_device = allocCopyTiling(tiling);
 
   if (dtype == torch::kHalf) {
     const uint32_t user_workspace_size =
@@ -290,7 +286,7 @@ at::Tensor run_scan_multi_core(const at::Tensor &x, int S) {
     ACLRT_LAUNCH_KERNEL(scan_multi_core_fp16)
     (blockDim, acl_stream, const_cast<void *>(x.storage().data()),
      const_cast<void *>(z.storage().data()),
-     const_cast<void *>(workspace_tensor.storage().data()), tilingDevice);
+     const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
   } else {
     const uint32_t user_workspace_size =
         workspace::mc_scan::GetWorkspaceSize<int8_t>(
@@ -301,10 +297,10 @@ at::Tensor run_scan_multi_core(const at::Tensor &x, int S) {
     ACLRT_LAUNCH_KERNEL(scan_multi_core_int8)
     (blockDim, acl_stream, const_cast<void *>(x.storage().data()),
      const_cast<void *>(z.storage().data()),
-     const_cast<void *>(workspace_tensor.storage().data()), tilingDevice);
+     const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
   }
 
-  aclrtFree(tilingDevice);
+  aclrtFree(tiling_device);
   aclrtSynchronizeStream(acl_stream);
 
   return z;
@@ -337,14 +333,7 @@ at::Tensor run_compress(const at::Tensor &x, const at::Tensor &mask, int S) {
       at::empty({totalLength}, at::TensorOptions().dtype(dtype).device(device));
 
   const CompressTiling tiling{totalLength, matmul_size, vec_tile_size};
-
-  constexpr size_t tilingSize = sizeof(CompressTiling);
-  const uint8_t *tilingHost = reinterpret_cast<const uint8_t *>(&tiling);
-
-  uint8_t *tilingDevice;
-  aclrtMalloc((void **)&tilingDevice, tilingSize, ACL_MEM_MALLOC_HUGE_FIRST);
-  aclrtMemcpy(tilingDevice, tilingSize, tilingHost, tilingSize,
-              ACL_MEMCPY_HOST_TO_DEVICE);
+  uint8_t *tiling_device = allocCopyTiling(tiling);
 
   const uint32_t user_workspace_size =
       workspace::compress::GetWorkspaceSize<int8_t>(tiling, blockDim);
@@ -356,16 +345,16 @@ at::Tensor run_compress(const at::Tensor &x, const at::Tensor &mask, int S) {
     (blockDim, acl_stream, const_cast<void *>(x.storage().data()),
      const_cast<void *>(mask.storage().data()),
      const_cast<void *>(z.storage().data()),
-     const_cast<void *>(workspace_tensor.storage().data()), tilingDevice);
+     const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
   } else {
     ACLRT_LAUNCH_KERNEL(compress_fp32)
     (blockDim, acl_stream, const_cast<void *>(x.storage().data()),
      const_cast<void *>(mask.storage().data()),
      const_cast<void *>(z.storage().data()),
-     const_cast<void *>(workspace_tensor.storage().data()), tilingDevice);
+     const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
   }
 
-  aclrtFree(tilingDevice);
+  aclrtFree(tiling_device);
   aclrtSynchronizeStream(acl_stream);
 
   return z;
@@ -381,24 +370,20 @@ at::Tensor run_mc_gather(const at::Tensor &values, const at::Tensor &idxs,
 
   uint32_t values_len = values.numel();
   uint32_t idx_len = idxs.numel();
+
   const at::Tensor z = at::empty(
       {idx_len}, at::TensorOptions().dtype(at::kFloat).device(device));
   const at::Tensor workspace_tensor = alloc_workspace(0, device);
+
   const McGatherTiling tiling{blockDim, idx_len, tileLen};
+  uint8_t *tiling_device = allocCopyTiling(tiling);
 
-  constexpr size_t tilingSize = sizeof(McGatherTiling);
-  const uint8_t *tilingHost = reinterpret_cast<const uint8_t *>(&tiling);
-  uint8_t *tilingDevice;
-
-  aclrtMalloc((void **)&tilingDevice, tilingSize, ACL_MEM_MALLOC_HUGE_FIRST);
-  aclrtMemcpy(tilingDevice, tilingSize, tilingHost, tilingSize,
-              ACL_MEMCPY_HOST_TO_DEVICE);
   ACLRT_LAUNCH_KERNEL(mc_gather)
   (blockDim, acl_stream, const_cast<void *>(values.storage().data()),
    const_cast<void *>(idxs.storage().data()),
    const_cast<void *>(z.storage().data()),
-   const_cast<void *>(workspace_tensor.storage().data()), tilingDevice);
-  aclrtFree(tilingDevice);
+   const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
+  aclrtFree(tiling_device);
   aclrtSynchronizeStream(acl_stream);
 
   return z;
@@ -418,14 +403,7 @@ at::Tensor run_csr_gather(const at::Tensor &values, const at::Tensor &cols,
   const at::Tensor workspace_tensor = alloc_workspace(0, device);
 
   const CSRGatherTiling tiling{values_len, x_len, tileLen};
-
-  constexpr size_t tilingSize = sizeof(CSRGatherTiling);
-  const uint8_t *tilingHost = reinterpret_cast<const uint8_t *>(&tiling);
-  uint8_t *tilingDevice;
-
-  aclrtMalloc((void **)&tilingDevice, tilingSize, ACL_MEM_MALLOC_HUGE_FIRST);
-  aclrtMemcpy(tilingDevice, tilingSize, tilingHost, tilingSize,
-              ACL_MEMCPY_HOST_TO_DEVICE);
+  uint8_t *tiling_device = allocCopyTiling(tiling);
 
   uint32_t blockDim = static_cast<uint32_t>(values_len / (4 * tileLen));
   blockDim = blockDim > 60 ? 40 : blockDim;
@@ -439,9 +417,9 @@ at::Tensor run_csr_gather(const at::Tensor &values, const at::Tensor &cols,
    const_cast<void *>(cols.storage().data()),
    const_cast<void *>(x.storage().data()),
    const_cast<void *>(z.storage().data()),
-   const_cast<void *>(workspace_tensor.storage().data()), tilingDevice);
+   const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
 
-  aclrtFree(tilingDevice);
+  aclrtFree(tiling_device);
   aclrtSynchronizeStream(acl_stream);
 
   return z;
@@ -457,26 +435,21 @@ at::Tensor run_gather_spmv(const at::Tensor &values, const at::Tensor &idxs,
 
   uint32_t values_len = values.numel();
   uint32_t idx_len = idxs.numel();
+
   const at::Tensor z =
       at::empty({idx_len},
                 at::TensorOptions().dtype(values.scalar_type()).device(device));
   const at::Tensor workspace_tensor = alloc_workspace(0, device);
+
   const GatherSpmvTiling tiling{blockDim, idx_len, tileLen};
-
-  constexpr size_t tilingSize = sizeof(GatherSpmvTiling);
-  const uint8_t *tilingHost = reinterpret_cast<const uint8_t *>(&tiling);
-  uint8_t *tilingDevice;
-
-  aclrtMalloc((void **)&tilingDevice, tilingSize, ACL_MEM_MALLOC_HUGE_FIRST);
-  aclrtMemcpy(tilingDevice, tilingSize, tilingHost, tilingSize,
-              ACL_MEMCPY_HOST_TO_DEVICE);
+  uint8_t *tiling_device = allocCopyTiling(tiling);
 
   ACLRT_LAUNCH_KERNEL(gather_spmv)
   (blockDim, acl_stream, const_cast<void *>(values.storage().data()),
    const_cast<void *>(idxs.storage().data()),
    const_cast<void *>(z.storage().data()),
-   const_cast<void *>(workspace_tensor.storage().data()), tilingDevice);
-  aclrtFree(tilingDevice);
+   const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
+  aclrtFree(tiling_device);
   aclrtSynchronizeStream(acl_stream);
 
   return z;
@@ -512,14 +485,7 @@ at::Tensor run_compress_pos(const at::Tensor &x, const at::Tensor &mask,
                 at::TensorOptions().dtype(dtype).device(device));
 
   const CompressTiling tiling{totalLength, matmul_size, vec_tile_size};
-
-  constexpr size_t tilingSize = sizeof(CompressTiling);
-  const uint8_t *tilingHost = reinterpret_cast<const uint8_t *>(&tiling);
-
-  uint8_t *tilingDevice;
-  aclrtMalloc((void **)&tilingDevice, tilingSize, ACL_MEM_MALLOC_HUGE_FIRST);
-  aclrtMemcpy(tilingDevice, tilingSize, tilingHost, tilingSize,
-              ACL_MEMCPY_HOST_TO_DEVICE);
+  uint8_t *tiling_device = allocCopyTiling(tiling);
 
   const uint32_t user_workspace_size =
       workspace::compress::GetWorkspaceSize<int8_t>(tiling, blockDim);
@@ -532,17 +498,17 @@ at::Tensor run_compress_pos(const at::Tensor &x, const at::Tensor &mask,
      const_cast<void *>(mask.storage().data()),
      const_cast<void *>(pos.storage().data()),
      const_cast<void *>(z.storage().data()),
-     const_cast<void *>(workspace_tensor.storage().data()), tilingDevice);
+     const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
   } else {
     ACLRT_LAUNCH_KERNEL(compress_pos_fp32)
     (blockDim, acl_stream, const_cast<void *>(x.storage().data()),
      const_cast<void *>(mask.storage().data()),
      const_cast<void *>(pos.storage().data()),
      const_cast<void *>(z.storage().data()),
-     const_cast<void *>(workspace_tensor.storage().data()), tilingDevice);
+     const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
   }
 
-  aclrtFree(tilingDevice);
+  aclrtFree(tiling_device);
   aclrtSynchronizeStream(acl_stream);
 
   return z;
@@ -584,28 +550,21 @@ at::Tensor run_copy(const at::Tensor &x, int s) {
   const uint32_t num_block = 1;  // required for 1 core
   const uint32_t tile_size = static_cast<uint32_t>(s);
   const CopyTiling tiling{num_block, totalLength, tile_size};
-
-  constexpr size_t tilingSize = sizeof(CopyTiling);
-  const uint8_t *tilingHost = reinterpret_cast<const uint8_t *>(&tiling);
-
-  uint8_t *tilingDevice;
-  aclrtMalloc((void **)&tilingDevice, tilingSize, ACL_MEM_MALLOC_HUGE_FIRST);
-  aclrtMemcpy(tilingDevice, tilingSize, tilingHost, tilingSize,
-              ACL_MEMCPY_HOST_TO_DEVICE);
+  uint8_t *tiling_device = allocCopyTiling(tiling);
 
   if (dtype == at::kFloat) {
     ACLRT_LAUNCH_KERNEL(copy_fp32)
     (1 /* single core*/, acl_stream, const_cast<void *>(x.storage().data()),
      const_cast<void *>(z.storage().data()),
-     const_cast<void *>(workspace_tensor.storage().data()), tilingDevice);
+     const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
   } else {
     ACLRT_LAUNCH_KERNEL(copy_fp16)
     (1 /* single core*/, acl_stream, const_cast<void *>(x.storage().data()),
      const_cast<void *>(z.storage().data()),
-     const_cast<void *>(workspace_tensor.storage().data()), tilingDevice);
+     const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
   }
 
-  aclrtFree(tilingDevice);
+  aclrtFree(tiling_device);
   aclrtSynchronizeStream(acl_stream);
 
   return z;
@@ -629,14 +588,7 @@ at::Tensor run_scan_batch(const at::Tensor &x, int S) {
 
   const ScanBatchTiling tiling{block_size, vec_len, batch_size, matmul_size,
                                2 /* vec-cube ratio */};
-
-  constexpr size_t tiling_size = sizeof(ScanBatchTiling);
-  const uint8_t *tiling_host = reinterpret_cast<const uint8_t *>(&tiling);
-
-  uint8_t *tiling_device;
-  aclrtMalloc((void **)&tiling_device, tiling_size, ACL_MEM_MALLOC_HUGE_FIRST);
-  aclrtMemcpy(tiling_device, tiling_size, tiling_host, tiling_size,
-              ACL_MEMCPY_HOST_TO_DEVICE);
+  uint8_t *tiling_device = allocCopyTiling(tiling);
 
   ACLRT_LAUNCH_KERNEL(scan_batch)
   (block_size, acl_stream, const_cast<void *>(x.storage().data()),
@@ -662,14 +614,7 @@ at::Tensor run_scan_single_core(const at::Tensor &x, int S) {
       {totalLength}, at::TensorOptions().dtype(at::kFloat).device(device));
 
   const SingleCoreScanTiling tiling{totalLength, matmul_size};
-
-  constexpr size_t tilingSize = sizeof(SingleCoreScanTiling);
-  const uint8_t *tilingHost = reinterpret_cast<const uint8_t *>(&tiling);
-
-  uint8_t *tilingDevice;
-  aclrtMalloc((void **)&tilingDevice, tilingSize, ACL_MEM_MALLOC_HUGE_FIRST);
-  aclrtMemcpy(tilingDevice, tilingSize, tilingHost, tilingSize,
-              ACL_MEMCPY_HOST_TO_DEVICE);
+  uint8_t *tiling_device = allocCopyTiling(tiling);
 
   if (dtype == torch::kInt8) {
     const uint32_t user_workspace_size =
@@ -679,7 +624,7 @@ at::Tensor run_scan_single_core(const at::Tensor &x, int S) {
     ACLRT_LAUNCH_KERNEL(scan_single_core_int8)
     (1 /* single core*/, acl_stream, const_cast<void *>(x.storage().data()),
      const_cast<void *>(z.storage().data()),
-     const_cast<void *>(workspace_tensor.storage().data()), tilingDevice);
+     const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
   } else {
     const uint32_t user_workspace_size =
         workspace::sc_scan::GetWorkspaceSize<int16_t>(tiling);
@@ -688,10 +633,10 @@ at::Tensor run_scan_single_core(const at::Tensor &x, int S) {
     ACLRT_LAUNCH_KERNEL(scan_single_core_fp16)
     (1 /* single core*/, acl_stream, const_cast<void *>(x.storage().data()),
      const_cast<void *>(z.storage().data()),
-     const_cast<void *>(workspace_tensor.storage().data()), tilingDevice);
+     const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
   }
 
-  aclrtFree(tilingDevice);
+  aclrtFree(tiling_device);
   aclrtSynchronizeStream(acl_stream);
 
   return z;
@@ -708,14 +653,7 @@ at::Tensor run_seg_scan_vec(const at::Tensor &x, const at::Tensor &f, int S) {
       {totalLength}, at::TensorOptions().dtype(at::kFloat).device(device));
 
   const SegScanVecSingleCoreTiling tiling{totalLength, tile_len};
-
-  constexpr size_t tilingSize = sizeof(SegScanVecSingleCoreTiling);
-  const uint8_t *tilingHost = reinterpret_cast<const uint8_t *>(&tiling);
-
-  uint8_t *tilingDevice;
-  aclrtMalloc((void **)&tilingDevice, tilingSize, ACL_MEM_MALLOC_HUGE_FIRST);
-  aclrtMemcpy(tilingDevice, tilingSize, tilingHost, tilingSize,
-              ACL_MEMCPY_HOST_TO_DEVICE);
+  uint8_t *tiling_device = allocCopyTiling(tiling);
 
   const uint32_t user_workspace_size = 0;
   const at::Tensor workspace_tensor =
@@ -725,9 +663,9 @@ at::Tensor run_seg_scan_vec(const at::Tensor &x, const at::Tensor &f, int S) {
   (1 /* single core*/, acl_stream, const_cast<void *>(x.storage().data()),
    const_cast<void *>(f.storage().data()),
    const_cast<void *>(z.storage().data()),
-   const_cast<void *>(workspace_tensor.storage().data()), tilingDevice);
+   const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
 
-  aclrtFree(tilingDevice);
+  aclrtFree(tiling_device);
   aclrtSynchronizeStream(acl_stream);
 
   return z;
@@ -760,14 +698,7 @@ at::Tensor run_split(const at::Tensor &x, const at::Tensor &mask, int S) {
       at::empty({totalLength}, at::TensorOptions().dtype(dtype).device(device));
 
   const SplitTiling tiling{blockDim, totalLength, matmul_size, vec_tile_size};
-
-  constexpr size_t tilingSize = sizeof(SplitTiling);
-  const uint8_t *tilingHost = reinterpret_cast<const uint8_t *>(&tiling);
-
-  uint8_t *tilingDevice;
-  aclrtMalloc((void **)&tilingDevice, tilingSize, ACL_MEM_MALLOC_HUGE_FIRST);
-  aclrtMemcpy(tilingDevice, tilingSize, tilingHost, tilingSize,
-              ACL_MEMCPY_HOST_TO_DEVICE);
+  uint8_t *tiling_device = allocCopyTiling(tiling);
 
   const uint32_t user_workspace_size =
       workspace::split::GetWorkspaceSize(tiling);
@@ -779,10 +710,10 @@ at::Tensor run_split(const at::Tensor &x, const at::Tensor &mask, int S) {
     (blockDim, acl_stream, const_cast<void *>(x.storage().data()),
      const_cast<void *>(mask.storage().data()),
      const_cast<void *>(z.storage().data()),
-     const_cast<void *>(workspace_tensor.storage().data()), tilingDevice);
+     const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
   }
 
-  aclrtFree(tilingDevice);
+  aclrtFree(tiling_device);
   aclrtSynchronizeStream(acl_stream);
 
   return z;
@@ -820,14 +751,7 @@ std::tuple<at::Tensor, at::Tensor> run_split_ind(const at::Tensor &x,
       {totalLength}, at::TensorOptions().dtype(torch::kInt32).device(device));
 
   const SplitTiling tiling{blockDim, totalLength, matmul_size, vec_tile_size};
-
-  constexpr size_t tilingSize = sizeof(SplitTiling);
-  const uint8_t *tilingHost = reinterpret_cast<const uint8_t *>(&tiling);
-
-  uint8_t *tilingDevice;
-  aclrtMalloc((void **)&tilingDevice, tilingSize, ACL_MEM_MALLOC_HUGE_FIRST);
-  aclrtMemcpy(tilingDevice, tilingSize, tilingHost, tilingSize,
-              ACL_MEMCPY_HOST_TO_DEVICE);
+  uint8_t *tiling_device = allocCopyTiling(tiling);
 
   const uint32_t user_workspace_size =
       workspace::split::GetWorkspaceSize(tiling);
@@ -841,10 +765,10 @@ std::tuple<at::Tensor, at::Tensor> run_split_ind(const at::Tensor &x,
      const_cast<void *>(indices_in.storage().data()),
      const_cast<void *>(vec_out.storage().data()),
      const_cast<void *>(indices_out.storage().data()),
-     const_cast<void *>(workspace_tensor.storage().data()), tilingDevice);
+     const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
   }
 
-  aclrtFree(tilingDevice);
+  aclrtFree(tiling_device);
   aclrtSynchronizeStream(acl_stream);
 
   return std::make_tuple(vec_out, indices_out);
@@ -871,20 +795,13 @@ std::tuple<at::Tensor, at::Tensor> run_radix_sort(const at::Tensor &x, int S) {
     blockDim = 1;
   }
 
-  RadixSortTiling tiling{blockDim, totalLength, matmul_size, tile_elems / 2};
-
   const at::Tensor vec_out =
       at::empty({totalLength}, at::TensorOptions().dtype(dtype).device(device));
   const at::Tensor indices_out = at::empty(
       {totalLength}, at::TensorOptions().dtype(torch::kInt32).device(device));
 
-  constexpr size_t tilingSize = sizeof(RadixSortTiling);
-  const uint8_t *tilingHost = reinterpret_cast<const uint8_t *>(&tiling);
-
-  uint8_t *tilingDevice;
-  aclrtMalloc((void **)&tilingDevice, tilingSize, ACL_MEM_MALLOC_HUGE_FIRST);
-  aclrtMemcpy(tilingDevice, tilingSize, tilingHost, tilingSize,
-              ACL_MEMCPY_HOST_TO_DEVICE);
+  RadixSortTiling tiling{blockDim, totalLength, matmul_size, tile_elems / 2};
+  uint8_t *tiling_device = allocCopyTiling(tiling);
 
   const uint32_t user_workspace_size =
       workspace::radix_sort::GetWorkspaceSize<int16_t>(tiling);
@@ -896,16 +813,16 @@ std::tuple<at::Tensor, at::Tensor> run_radix_sort(const at::Tensor &x, int S) {
     (blockDim, acl_stream, const_cast<void *>(x.storage().data()),
      const_cast<void *>(vec_out.storage().data()),
      const_cast<void *>(indices_out.storage().data()),
-     const_cast<void *>(workspace_tensor.storage().data()), tilingDevice);
+     const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
   } else if (dtype == torch::kInt16) {
     ACLRT_LAUNCH_KERNEL(radix_sort_int16)
     (blockDim, acl_stream, const_cast<void *>(x.storage().data()),
      const_cast<void *>(vec_out.storage().data()),
      const_cast<void *>(indices_out.storage().data()),
-     const_cast<void *>(workspace_tensor.storage().data()), tilingDevice);
+     const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
   }
 
-  aclrtFree(tilingDevice);
+  aclrtFree(tiling_device);
   aclrtSynchronizeStream(acl_stream);
 
   return std::make_tuple(vec_out, indices_out);
