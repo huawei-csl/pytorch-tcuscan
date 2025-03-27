@@ -10,11 +10,28 @@
 
 using namespace AscendC;
 
+/**
+ * @brief Return the ceil of a division
+ *
+ * @tparam T Input data type
+ * @param value Input value
+ * @param divisor Divisor
+ * @return ceil(value/divisor)
+ */
 template <typename T>
 __aicore__ inline T CeilDiv(T value, T divisor) {
   return (value + divisor - 1) / divisor;
 }
 
+/**
+ * @brief Compute the AIV work distribution given input length, tile size and
+ * number of blocks.
+ *
+ * @param vec_len Input length.
+ * @param tile_size Tile length.
+ * @param block_n Number of blocks
+ * @return Work length given to each AIV core.
+ */
 __aicore__ inline uint32_t GetWorkDistribution(uint32_t vec_len,
                                                uint32_t tile_size,
                                                uint32_t block_n) {

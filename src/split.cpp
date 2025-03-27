@@ -11,15 +11,6 @@
 #include "lib/matmul_intf.h"
 #include "tiling/tiling_split.h"
 
-__aicore__ inline void CopyTiling(SplitTiling *tiling, GM_ADDR tilingGM) {
-  uint32_t *ptr = reinterpret_cast<uint32_t *>(tiling);
-  auto tiling32 = reinterpret_cast<__gm__ uint32_t *>(tilingGM);
-
-  for (uint32_t i = 0; i < sizeof(SplitTiling) / sizeof(uint32_t); i++, ptr++) {
-    *ptr = *(tiling32 + i);
-  }
-}
-
 /**
  * @brief Run the `split_uint16` kernel.
  *
@@ -28,8 +19,6 @@ __aicore__ inline void CopyTiling(SplitTiling *tiling, GM_ADDR tilingGM) {
  * @param [in] out Pointer to output vector.
  * @param [in] workspace Pointer to workspace.
  * @param [in] tiling Pointer to tiling vector.
- * @param [in] zeros_first Indicates whether the first elements in the output
- * vector are the ones with corresponding mask value set to zero or one.
  */
 extern "C" __global__ __aicore__ void split_uint16(GM_ADDR in, GM_ADDR mask,
                                                    GM_ADDR out,

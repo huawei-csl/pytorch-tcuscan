@@ -6,7 +6,7 @@
  * kernel operation.
  */
 
-#include "kernels/ascendc_kernel_operator.h"
+#include "kernel_utils.h"
 #include "kernels/kernel_seg_scan_mc_revert.h"
 #include "tiling/tiling_seg_scan_mc_revert.h"
 

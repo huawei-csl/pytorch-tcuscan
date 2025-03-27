@@ -176,8 +176,7 @@ namespace radix_sort {
  *
  * @tparam InputT Input data type.
  *
- * @param [in] input_elems Number of elements in the input vector.
- * @param [in] matmul_size Size of the matmul used in scan.
+ * @param [in] t Radix sort tiling struct.
  * @return Size of the workspace in bytes.
  */
 template <typename InputT>

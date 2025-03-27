@@ -5,25 +5,9 @@
  * @brief Launcher of seg_scan_vec_single_core
  */
 
+#include "kernel_utils.h"
 #include "kernels/kernel_seg_scan_vec_single_core.h"
 #include "tiling/tiling_seg_scan_vec_single_core.h"
-
-/**
- * @brief Convert tiling struct to global memory.
- *
- * @param [in] tiling Input tiling struct.
- * @param [in] tilingGM Output global memory point to write tiling struct.
- */
-__aicore__ inline void CopyTiling(SegScanVecSingleCoreTiling *tiling,
-                                  GM_ADDR tilingGM) {
-  uint32_t *ptr = reinterpret_cast<uint32_t *>(tiling);
-  auto tiling32 = reinterpret_cast<__gm__ uint32_t *>(tilingGM);
-
-  for (uint32_t i = 0;
-       i < sizeof(SegScanVecSingleCoreTiling) / sizeof(uint32_t); i++, ptr++) {
-    *ptr = *(tiling32 + i);
-  }
-}
 
 /**
  * @brief Run the single core segmented scan vector-only kernel.
@@ -38,12 +22,12 @@ extern "C" __global__ __aicore__ void seg_scan_vec_single_core(
     GM_ADDR vec_in, GM_ADDR f_in, GM_ADDR vec_out, GM_ADDR workspace,
     GM_ADDR tilingGm) {
   (void)workspace;
-  SegScanVecSingleCoreTiling tiling;
-  CopyTiling(&tiling, tilingGm);
+  SegScanVecSingleCoreTiling tiling_data;
+  tiling::GetTilingData(&tiling_data, tilingGm);
 
   if ASCEND_IS_AIV {
-    KernelSegScanVecSingleCore<half, int8_t> op_vec(tiling.num_elems,
-                                                    tiling.tile_len);
+    KernelSegScanVecSingleCore<half, int8_t> op_vec(tiling_data.num_elems,
+                                                    tiling_data.tile_len);
     op_vec.Init(vec_in, f_in, vec_out);
     op_vec.Process();
   }

@@ -11,28 +11,12 @@
 #include "tiling/tiling_scan_batch.h"
 
 /**
- * @brief Convert tiling struct to global memory.
- *
- * @param [in] tiling Input tiling struct.
- * @param [in] tilingGM Output global memory point to write tiling struct.
- */
-__aicore__ inline void CopyTiling(ScanBatchTiling *tiling, GM_ADDR tilingGM) {
-  uint32_t *ptr = reinterpret_cast<uint32_t *>(tiling);
-  auto tiling32 = reinterpret_cast<__gm__ uint32_t *>(tilingGM);
-
-  for (uint32_t i = 0; i < sizeof(ScanBatchTiling) / sizeof(uint32_t);
-       i++, ptr++) {
-    *ptr = *(tiling32 + i);
-  }
-}
-
-/**
  *  @brief Run the multi core inclusive scan kernel on a batched input.
  *
  * @param [in] input_vec Pointer to an input vector.
  * @param [in] output_vec Pointer to an output vector.
  * @param [in] workspace Pointer to a workspace vector (empty vector!).
- * @param [in] tiling Pointer to the tiling structure.
+ * @param [in] tiling_gm Pointer to the tiling structure.
  */
 extern "C" __global__ __aicore__ void scan_batch(GM_ADDR input_vec,
                                                  GM_ADDR output_vec,
@@ -40,7 +24,8 @@ extern "C" __global__ __aicore__ void scan_batch(GM_ADDR input_vec,
                                                  GM_ADDR tiling_gm) {
   (void)workspace;
   ScanBatchTiling tiling_data;
-  CopyTiling(&tiling_data, tiling_gm);
+  tiling::GetTilingData(&tiling_data, tiling_gm);
+
   GM_ADDR const lower = load_tril_matrix<half>(tiling_data.matmul_size);
 
   ASCENDC_ASSERT(tiling_data.num_elems % GetFractalK<half>() == 0, {

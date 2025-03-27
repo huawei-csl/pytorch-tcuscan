@@ -5,27 +5,11 @@
  * @brief Entrypoint for scan single core kernel operation.
  */
 
+#include "kernel_utils.h"
 #include "kernels/constants.h"
 #include "kernels/kernel_scan_single_core.h"
 #include "lib/matmul_intf.h"
 #include "tiling/tiling_scan_single_core.h"
-
-/**
- * @brief Convert tiling struct to global memory.
- *
- * @param [in] tiling Input tiling struct.
- * @param [in] tilingGM Output global memory point to write tiling struct.
- */
-__aicore__ inline void CopyTiling(SingleCoreScanTiling *tiling,
-                                  GM_ADDR tilingGM) {
-  uint32_t *ptr = reinterpret_cast<uint32_t *>(tiling);
-  auto tiling32 = reinterpret_cast<__gm__ uint32_t *>(tilingGM);
-
-  for (uint32_t i = 0; i < sizeof(SingleCoreScanTiling) / sizeof(uint32_t);
-       i++, ptr++) {
-    *ptr = *(tiling32 + i);
-  }
-}
 
 /**
  * @brief Run the `scan_single_core` kernel with int8 dtype.
@@ -41,7 +25,7 @@ extern "C" __global__ __aicore__ void scan_single_core_int8(GM_ADDR vec_in,
                                                             GM_ADDR workspace,
                                                             GM_ADDR tilingGm) {
   SingleCoreScanTiling tiling;
-  CopyTiling(&tiling, tilingGm);
+  tiling::GetTilingData(&tiling, tilingGm);
 
   const uint32_t vec_len = tiling.num_elems;
   const uint32_t matmul_size = tiling.matmul_size;
@@ -67,7 +51,7 @@ extern "C" __global__ __aicore__ void scan_single_core_fp16(GM_ADDR vec_in,
                                                             GM_ADDR workspace,
                                                             GM_ADDR tilingGm) {
   SingleCoreScanTiling tiling;
-  CopyTiling(&tiling, tilingGm);
+  tiling::GetTilingData(&tiling, tilingGm);
 
   const uint32_t vec_len = tiling.num_elems;
   const uint32_t matmul_size = tiling.matmul_size;

@@ -5,23 +5,11 @@
  * @brief vadd launcher
  */
 
+#include "kernels/kernel_utils.h"
 #include "kernels/kernel_vadd.h"
 #include "tiling/tiling_vadd.h"
 
-/**
- * @brief Convert tiling struct to global memory.
- *
- * @param [in] tiling Input tiling struct.
- * @param [in] tilingGM Output global memory point to write tiling struct.
- */
-__aicore__ inline void CopyTiling(VaddTiling *tiling, GM_ADDR tilingGM) {
-  uint32_t *ptr = reinterpret_cast<uint32_t *>(tiling);
-  auto tiling32 = reinterpret_cast<__gm__ uint32_t *>(tilingGM);
-
-  for (uint32_t i = 0; i < sizeof(VaddTiling) / sizeof(uint32_t); i++, ptr++) {
-    *ptr = *(tiling32 + i);
-  }
-}
+using namespace kernel_utils;
 
 /**
  * @brief Run the `vadd` kernel.
@@ -32,15 +20,14 @@ __aicore__ inline void CopyTiling(VaddTiling *tiling, GM_ADDR tilingGM) {
  * @param [in] workspace Pointer to workspace.
  * @param [in] tilingGm Pointer to the tiling buffer.
  */
-
 extern "C" __global__ __aicore__ void vadd_custom(GM_ADDR x, GM_ADDR y,
                                                   GM_ADDR z, GM_ADDR workspace,
                                                   GM_ADDR tilingGm) {
-  VaddTiling tiling;
-  CopyTiling(&tiling, tilingGm);
+  VaddTiling tiling_data;
+  tiling::GetTilingData(&tiling_data, tilingGm);
 
   if ASCEND_IS_AIV {
-    KernelAdd op(tiling.vec_len, tiling.tile_len);
+    KernelAdd op(tiling_data.vec_len, tiling_data.tile_len);
     op.Init(x, y, z);
     op.Process();
   }

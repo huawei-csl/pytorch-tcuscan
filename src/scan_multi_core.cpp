@@ -12,23 +12,6 @@
 #include "lib/matmul_intf.h"
 #include "tiling/tiling_scan_multi_core.h"
 
-/**
- * @brief Convert tiling struct to global memory.
- *
- * @param [in] tiling Input tiling struct.
- * @param [in] tilingGM Output global memory point to write tiling struct.
- */
-__aicore__ inline void CopyTiling(MultiCoreScanTiling *tiling,
-                                  GM_ADDR tilingGM) {
-  uint32_t *ptr = reinterpret_cast<uint32_t *>(tiling);
-  auto tiling32 = reinterpret_cast<__gm__ uint32_t *>(tilingGM);
-
-  for (uint32_t i = 0; i < sizeof(MultiCoreScanTiling) / sizeof(uint32_t);
-       i++, ptr++) {
-    *ptr = *(tiling32 + i);
-  }
-}
-
 template <typename InputT>
 __aicore__ inline void _run_scan_multi_core(GM_ADDR input_vec,
                                             GM_ADDR output_vec,
@@ -37,7 +20,7 @@ __aicore__ inline void _run_scan_multi_core(GM_ADDR input_vec,
   using OutputT = kernel_utils::cube_unit::CubeOutType_t<InputT>;
 
   MultiCoreScanTiling tiling;
-  CopyTiling(&tiling, tilingGm);
+  tiling::GetTilingData(&tiling, tilingGm);
 
   const uint32_t vec_len = tiling.num_elems;
   const uint32_t matmul_size = tiling.matmul_size;

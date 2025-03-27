@@ -5,27 +5,11 @@
  * @brief Launcher of seg_scan_single_core
  */
 
+#include "kernel_utils.h"
 #include "kernels/constants.h"
 #include "kernels/kernel_seg_scan_single_core.h"
 #include "lib/matmul_intf.h"
 #include "tiling/tiling_seg_scan_single_core.h"
-
-/**
- * @brief Convert tiling struct to global memory.
- *
- * @param [in] tiling Input tiling struct.
- * @param [in] tilingGM Output global memory point to write tiling struct.
- */
-__aicore__ inline void CopyTiling(SegScanSingleCoreTiling *tiling,
-                                  GM_ADDR tilingGM) {
-  uint32_t *ptr = reinterpret_cast<uint32_t *>(tiling);
-  auto tiling32 = reinterpret_cast<__gm__ uint32_t *>(tilingGM);
-
-  for (uint32_t i = 0; i < sizeof(SegScanSingleCoreTiling) / sizeof(uint32_t);
-       i++, ptr++) {
-    *ptr = *(tiling32 + i);
-  }
-}
 
 __aicore__ inline void _run_kernel(GM_ADDR input_vec, GM_ADDR input_flag,
                                    GM_ADDR u_s_half, GM_ADDR u_s_int8,
@@ -112,7 +96,7 @@ extern "C" __global__ __aicore__ void seg_scan_single_core(GM_ADDR input_vec,
                                                            GM_ADDR workspace,
                                                            GM_ADDR tilingGm) {
   SegScanSingleCoreTiling tiling;
-  CopyTiling(&tiling, tilingGm);
+  tiling::GetTilingData(&tiling, tilingGm);
 
   GM_ADDR const lower_half = load_tril_matrix<half>(tiling.matmul_size);
   GM_ADDR const lower_int8 = load_tril_matrix<int8_t>(tiling.matmul_size);
