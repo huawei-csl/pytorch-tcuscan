@@ -8,13 +8,13 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # ===============================================================================
 
-import random
 
+import random
 import numpy as np
 import pytest
+from scipy.sparse import random as sp_random
 import torch
 import torch_npu  # noqa
-from scipy.sparse import random as sp_random
 
 import tcuscan_ops
 
@@ -23,37 +23,29 @@ torch.manual_seed(42)
 np.random.seed(42)
 
 torch.npu.config.allow_internal_format = False
+_n_rows = [256, 512, 1024, 2048, 4096, 8192, 16384]
+_densities = [0.01, 0.001, 0.0001]
+_matrices = {}
+for density in _densities:
+    _matrices[density] = {}
+    for n in _n_rows:
+        _matrices[density][n] = sp_random(
+            n - 1,
+            n - 1,
+            density=density,
+            format="csr",
+            dtype=np.float32,
+        )
 
-_NNR_ = [256, 512, 1024, 2048, 4096, 8192, 16384, 32768]
 
-
-def uniform_rvs(shape):
-    print(shape)
-    return np.random.uniform(0, 1, size=shape)
-
-
-def _test_tcuscan_gather_spmv(nnr: int, s: int, density: float):
-
-    B = sp_random(
-        nnr - 1,
-        nnr - 1,
-        density=density,
-        format="csr",
-        dtype=np.float32,
-        data_rvs=uniform_rvs,
-    )
-
+def _test_tcuscan_gather_spmv(n: int, s: int, density: float):
+    B = _matrices[density][n]
     values = (B.data).astype(np.float32)
     indexes = (B.indptr).astype(np.uint32)
 
-    input_cols_idx = [x - 1 for x in indexes]
-    expected = np.zeros(len(input_cols_idx)).astype(np.float32)
-    for i, idx in enumerate(input_cols_idx):
-        if idx < 0:
-            expected[i] = 0
-        else:
-            expected[i] = values[idx]
-
+    expected = np.zeros(indexes.shape).astype(np.float32)
+    mask = indexes != 0
+    expected[1:] = values[[idx - 1 for idx in indexes[1:]]] * mask[1:]
     expected = torch.from_numpy(expected)
 
     torch.npu.synchronize()
@@ -63,17 +55,27 @@ def _test_tcuscan_gather_spmv(nnr: int, s: int, density: float):
     torch.npu.synchronize()
 
     actual = tcuscan_ops.run_gather_spmv(values_npu, indexes_npu, s)
+    torch.npu.synchronize()
     assert actual.shape == expected.shape, "Output shape does not match expected shape."
 
     assert actual.dtype == expected.dtype, "Output dtype does not match expected dtype"
 
-    assert torch.allclose(
-        actual.cpu(), expected, atol=1e-02
-    ), f"Error gather spmv ({expected.dtype}). s={s}, nnr={nnr}, density: {density}"
+    actual_cpu = actual.cpu()
+    error_indices = []
+    for i in range(expected.shape[0]):
+        if np.abs(actual_cpu[i] - expected[i]) > 1e-3:
+            error_indices.append(i)
+    assert len(error_indices) == 0, "\n".join(
+        [f"Error for size n={n}, occured at:"]
+        + [
+            f"index i = {i}: value = {actual_cpu[i]:.4f}, expected = {expected[i]:.4f}"
+            for i in error_indices
+        ]
+    )
 
 
-@pytest.mark.parametrize("nnr", _NNR_)
+@pytest.mark.parametrize("n", _n_rows)
 @pytest.mark.parametrize("s", [128, 256])
-@pytest.mark.parametrize("density", [0.0001, 0.001, 0.001])
-def test_tcuscan_gather_spmv(nnr: int, s: int, density: float):
-    _test_tcuscan_gather_spmv(nnr, s, density)
+@pytest.mark.parametrize("density", _densities)
+def test_tcuscan_gather_spmv(n: int, s: int, density: float):
+    _test_tcuscan_gather_spmv(n, s, density)

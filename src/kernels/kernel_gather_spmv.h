@@ -14,15 +14,18 @@ using namespace kernel_utils;
 
 /**
  * @brief Performs a multi-core AIV gather operation given an 1D vector
-    `values_in` and an 1D indices vector `idx_in` that returns
-* @tparam DataType The data type of the tensor elements that must be gathered.
-
-
-    z_out = values_in[x - 1 for x in idx_in] (in numpy notation)
-    Notice that idx_in = 0 then z_out = 0
-
-    The output vector has length `len(idx_in)`
-
+ *   `values_in` and an 1D indices vector `indices_in` that returns a vector:
+ *       z_out = values_in[x - 1 for x in indices_in] (in numpy notation)
+ *
+ *   Notice that indices_in = 0 then z_out = 0
+ *   The output vector has length `len(indices_in)`
+ *
+ *   Example:
+ *     values_in = [11 12 13 14 15 16 17 18 19]
+ *     indices_in = [0  0  2  5  5  5  9  9]
+ *     output = [0  0 12 15 15 15 19 19]
+ *
+ * @tparam DataType The data type of the tensor elements that must be gathered.
  *
  */
 template <typename DataType>
@@ -145,10 +148,10 @@ class KernelGatherSpmv {
     }
 
     output_q_.EnQue<DataType>(z_lt);
-    copy::CopyVecToGm(global_z_[output_gm], output_q_, i - 1);
+    copy::CopyVecToGm(global_z_[output_gm], output_q_, i);
 
     output_gm = output_gm + i;
-    uint32_t start = idx_lt.GetValue(1);
+    uint32_t start = idx_lt.GetValue(i);
     uint32_t end = idx_lt.GetValue(tile_len_ - 1);
     uint32_t es_diff = (end - start + 1);
 
