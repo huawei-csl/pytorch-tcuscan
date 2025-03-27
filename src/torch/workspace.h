@@ -8,12 +8,13 @@
 
 #include <cstdint>
 
-#include "host_utils.h"
-#include "tiling/tiling_compress.h"
-#include "tiling/tiling_copy.h"
-#include "tiling/tiling_scan_multi_core.h"
-#include "tiling/tiling_scan_single_core.h"
-#include "tiling/tiling_split.h"
+#include "../host_utils.h"
+#include "../tiling/tiling_compress.h"
+#include "../tiling/tiling_copy.h"
+#include "../tiling/tiling_radix_sort.h"
+#include "../tiling/tiling_scan_multi_core.h"
+#include "../tiling/tiling_scan_single_core.h"
+#include "../tiling/tiling_split.h"
 
 namespace workspace {
 
