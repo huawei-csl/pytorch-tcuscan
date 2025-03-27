@@ -67,32 +67,8 @@ def _test_tcuscan_gather_spmv(s: int, nnz: int, idx_len: int):
 
 
 @pytest.mark.parametrize("multiplier", _MULTIPLIER)
-def test_tcuscan_gather_spmv_s_128(multiplier: int):
-    s = 128
-    nnz = multiplier * 20 * s * s
-    idx_len = s * s
-    _test_tcuscan_gather_spmv(s, nnz, idx_len)
-
-
-@pytest.mark.parametrize("multiplier", _MULTIPLIER)
-def test_tcuscan_gather_spmv_s_64(multiplier: int):
-    s = 64
-    nnz = multiplier * 20 * s * s
-    idx_len = s * s
-    _test_tcuscan_gather_spmv(s, nnz, idx_len)
-
-
-@pytest.mark.parametrize("multiplier", _MULTIPLIER)
-def test_tcuscan_gather_spmv_s_256(multiplier: int):
-    s = 256
-    nnz = multiplier * 20 * s * s
-    idx_len = s * s
-    _test_tcuscan_gather_spmv(s, nnz, idx_len)
-
-
-@pytest.mark.parametrize("multiplier", _MULTIPLIER)
-def test_tcuscan_gather_spmv_s_512(multiplier: int):
-    s = 512
+@pytest.mark.parametrize("s", [64, 128, 256, 512])
+def test_tcuscan_gather_spmv(multiplier: int, s: int):
     nnz = multiplier * 20 * s * s
     idx_len = s * s
     _test_tcuscan_gather_spmv(s, nnz, idx_len)

@@ -14,7 +14,7 @@ import numpy as np
 import pytest
 import torch
 import torch_npu  # noqa
-from scipy.sparse import sp_random
+from scipy.sparse import random as sp_random
 
 import tcuscan_ops
 
@@ -73,42 +73,7 @@ def _test_tcuscan_gather_spmv(nnr: int, s: int, density: float):
 
 
 @pytest.mark.parametrize("nnr", _NNR_)
-def test_tcuscan_gather_spmv_128_0_01(nnr: int):
-    s = 128
-    density = 0.01
-    _test_tcuscan_gather_spmv(nnr, s, density)
-
-
-@pytest.mark.parametrize("nnr", _NNR_)
-def test_tcuscan_gather_spmv_128_0_001(nnr: int):
-    s = 128
-    density = 0.001
-    _test_tcuscan_gather_spmv(nnr, s, density)
-
-
-@pytest.mark.parametrize("nnr", _NNR_)
-def test_tcuscan_gather_spmv_128_0_0001(nnr: int):
-    s = 128
-    density = 0.0001
-    _test_tcuscan_gather_spmv(nnr, s, density)
-
-
-@pytest.mark.parametrize("nnr", _NNR_)
-def test_tcuscan_gather_spmv_s_256_0_01(nnr: int):
-    s = 256
-    density = 0.01
-    _test_tcuscan_gather_spmv(nnr, s, density)
-
-
-@pytest.mark.parametrize("nnr", _NNR_)
-def test_tcuscan_gather_spmv_s_256_0_001(nnr: int):
-    s = 256
-    density = 0.001
-    _test_tcuscan_gather_spmv(nnr, s, density)
-
-
-@pytest.mark.parametrize("nnr", _NNR_)
-def test_tcuscan_gather_spmv_256_0_0001(nnr: int):
-    s = 256
-    density = 0.0001
+@pytest.mark.parametrize("s", [128, 256])
+@pytest.mark.parametrize("density", [0.0001, 0.001, 0.001])
+def test_tcuscan_gather_spmv(nnr: int, s: int, density: float):
     _test_tcuscan_gather_spmv(nnr, s, density)

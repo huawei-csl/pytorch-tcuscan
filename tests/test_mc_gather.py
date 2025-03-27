@@ -63,32 +63,8 @@ def _test_tcuscan_mcgather(s: int, nnz: int, idx_len: int):
 
 
 @pytest.mark.parametrize("multiplier", _MULTIPLIER)
-def test_tcuscan_mc_gather_s_64(multiplier: int):
-    s = 64
-    nnz = multiplier * 20 * s * s
-    idx_len = s * s
-    _test_tcuscan_mcgather(s, nnz, idx_len)
-
-
-@pytest.mark.parametrize("multiplier", _MULTIPLIER)
-def test_tcuscan_mc_gather_s_128(multiplier: int):
-    s = 128
-    nnz = multiplier * 20 * s * s
-    idx_len = s * s
-    _test_tcuscan_mcgather(s, nnz, idx_len)
-
-
-@pytest.mark.parametrize("multiplier", _MULTIPLIER)
-def test_tcuscan_mc_gather_s_256(multiplier: int):
-    s = 256
-    nnz = multiplier * 20 * s * s
-    idx_len = s * s
-    _test_tcuscan_mcgather(s, nnz, idx_len)
-
-
-@pytest.mark.parametrize("multiplier", _MULTIPLIER)
-def test_tcuscan_mc_gather_s_512(multiplier: int):
-    s = 512
+@pytest.mark.parametrize("s", [64, 128, 256, 512])
+def test_tcuscan_mc_gather(multiplier: int, s: int):
     nnz = multiplier * 20 * s * s
     idx_len = s * s
     _test_tcuscan_mcgather(s, nnz, idx_len)

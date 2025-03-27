@@ -21,64 +21,34 @@ def get_lengths(s: int, max_iters: int):
         yield multiplier * NUM_AI_CORES * s * s
 
 
-def _test_fp16(vec_len: int, s: int):
-    x = torch.randn(vec_len).half().npu()
+def _test_dtype(vec_len: int, s: int, dtype: torch.dtype):
+    out_dtype = None
+    if dtype == torch.float16:
+        x = torch.randn(vec_len).half().npu()
+        out_dtype = torch.float32
+    elif dtype == torch.int8:
+        x = torch.randint(0, 10, size=(vec_len,), dtype=torch.int8).npu()
+        out_dtype = torch.int32
+    else:
+        assert False, "Unsupported dtype for MCSCAN. Got {dtype}."
 
-    expected = torch.cumsum(x, dim=-1, dtype=torch.float32)
+    expected = torch.cumsum(x, dim=-1, dtype=out_dtype)
     torch.npu.synchronize()
     actual = tcuscan_ops.run_scan_multi_core(x, s)
     torch.npu.synchronize()
     assert actual.dtype == expected.dtype
     assert torch.allclose(
         actual, expected, atol=1e-02
-    ), f"multi-core scan (fp16) is wrong. s={s}, vec_len={vec_len}"
-
-
-def _test_int8(vec_len: int, s: int):
-    x = torch.randint(0, 10, size=(vec_len,), dtype=torch.int8).npu()
-
-    assert x.dtype == torch.int8
-
-    expected = torch.cumsum(x, dim=-1, dtype=torch.int32)
-    torch.npu.synchronize()
-    actual = tcuscan_ops.run_scan_multi_core(x, s)
-    torch.npu.synchronize()
-    assert actual.dtype == expected.dtype
-    assert torch.allclose(
-        actual, expected, atol=1e-02
-    ), f"single-core scan (int8) is wrong. s={s}, vec_len={vec_len}"
+    ), f"multi-core scan ({dtype}) is wrong. s={s}, vec_len={vec_len}"
 
 
 @pytest.mark.parametrize("vec_len", get_lengths(s=16, max_iters=16))
-def test_mcscan_fp16_s_16(vec_len: int):
-    _test_fp16(vec_len, 16)
+@pytest.mark.parametrize("s", [32, 64, 128])
+@pytest.mark.parametrize("dtype", [torch.int8, torch.float16])
+def test_mcscan(vec_len: int, s: int, dtype: torch.dtype):
+    _test_dtype(vec_len, s, dtype)
 
 
 @pytest.mark.parametrize("vec_len", get_lengths(s=32, max_iters=12))
-def test_mcscan_fp16_s_32(vec_len: int):
-    _test_fp16(vec_len, 32)
-
-
-@pytest.mark.parametrize("vec_len", get_lengths(s=64, max_iters=8))
-def test_mcscan_fp16_s_64(vec_len: int):
-    _test_fp16(vec_len, 64)
-
-
-@pytest.mark.parametrize("vec_len", get_lengths(s=128, max_iters=6))
-def test_mcscan_fp16_s_128(vec_len: int):
-    _test_fp16(vec_len, 128)
-
-
-@pytest.mark.parametrize("vec_len", get_lengths(s=32, max_iters=24))
-def test_mcscan_int8_s_32(vec_len: int):
-    _test_int8(vec_len, 32)
-
-
-@pytest.mark.parametrize("vec_len", get_lengths(s=64, max_iters=8))
-def test_mcscan_int8_s_64(vec_len: int):
-    _test_int8(vec_len, 64)
-
-
-@pytest.mark.parametrize("vec_len", get_lengths(s=128, max_iters=6))
-def test_mcscan_int8_s_128(vec_len: int):
-    _test_int8(vec_len, 128)
+def test_mcscan_fp16_s_16(vec_len: int):
+    _test_dtype(vec_len, 16, torch.float16)

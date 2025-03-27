@@ -49,49 +49,15 @@ def _test_split_ind(vec_len: int, s: int, dtype: torch.dtype = torch.int16):
     assert torch.allclose(expected_right_part, z[-num_tail:])
 
 
-def test_tcuscan_split_ind_int16_s32():
-    s = 32
+@pytest.mark.parametrize("dtype", [torch.int16, torch.float16])
+@pytest.mark.parametrize("s", [32, 64, 128])
+def test_tcuscan_split(dtype: torch.dtype, s):
     vec_len = 8 * NUM_CORES * s * s
-    _test_split_ind(vec_len, s)
+    _test_split_ind(vec_len, s, dtype)
 
 
-def test_tcuscan_split_ind_int16_s64():
-    s = 64
-    vec_len = 8 * NUM_CORES * s * s
-    _test_split_ind(vec_len, s)
-
-
-def test_tcuscan_split_int16_s128():
-    s = 128
-    vec_len = 8 * NUM_CORES * s * s
-    _test_split_ind(vec_len, s)
-
-
-def test_tcuscan_split_ind_fp16_s32():
-    s = 32
-    vec_len = 8 * NUM_CORES * s * s
-    _test_split_ind(vec_len, s, torch.float16)
-
-
-def test_tcuscan_split_ind_fp16_s64():
-    s = 64
-    vec_len = 8 * NUM_CORES * s * s
-    _test_split_ind(vec_len, s, torch.float16)
-
-
-def test_tcuscan_split_fp16_s128():
-    s = 128
-    vec_len = 8 * NUM_CORES * s * s
-    _test_split_ind(vec_len, s, torch.float16)
-
-
+@pytest.mark.parametrize("dtype", [torch.int16, torch.float16])
 @pytest.mark.parametrize("vec_len", VEC_LENS)
-def test_tcuscan_split_s_32_padded(vec_len):
+def test_tcuscan_split_s_32_padded(dtype, vec_len):
     s = 32
-    _test_split_ind(vec_len, s, torch.int16)
-
-
-@pytest.mark.parametrize("vec_len", VEC_LENS)
-def test_tcuscan_split_fp16_s32_padded(vec_len):
-    s = 32
-    _test_split_ind(vec_len, s, torch.float16)
+    _test_split_ind(vec_len, s, dtype)

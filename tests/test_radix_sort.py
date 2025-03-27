@@ -71,20 +71,8 @@ def _test_sort(vec_len: int, dtype: torch.dtype, s: int):
 
 
 @pytest.mark.parametrize("vec_len", _SORT_SIZES)
-def test_tcuscan_sort_fp16_s_32(vec_len):
-    _test_sort(vec_len, torch.float16, 32)
-
-
-@pytest.mark.parametrize("vec_len", _SORT_SIZES)
-def test_tcuscan_sort_fp16_s_64(vec_len):
-    s = 64
-    if vec_len >= s * s:
-        _test_sort(vec_len, torch.float16, s)
-
-
-@pytest.mark.parametrize("vec_len", _SORT_SIZES)
-def test_tcuscan_sort_fp16_s_128(vec_len):
-    s = 128
+@pytest.mark.parametrize("s", [32, 64, 128])
+def test_tcuscan_sort_fp16(vec_len: int, s: int):
     if vec_len >= s * s:
         _test_sort(vec_len, torch.float16, s)
 
@@ -99,14 +87,7 @@ def test_tcuscan_sort_fp16_s_128(vec_len):
 
 
 @pytest.mark.parametrize("vec_len", get_sizes())
-def test_tcuscan_sort_int16_s_64(vec_len):
-    s = 64
-    dtype = torch.int16
-    _test_sort(vec_len, dtype, s)
-
-
-@pytest.mark.parametrize("vec_len", get_sizes())
-def test_tcuscan_sort_int16_s_128(vec_len):
-    s = 128
+@pytest.mark.parametrize("s", [64, 128])
+def test_tcuscan_sort_int16(vec_len: int, s: int):
     dtype = torch.int16
     _test_sort(vec_len, dtype, s)
