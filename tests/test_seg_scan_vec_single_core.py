@@ -8,6 +8,8 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # ===============================================================================
 
+import random
+
 import numpy as np
 import numpy.typing as npt
 import pytest
@@ -15,6 +17,10 @@ import torch
 import torch_npu  # noqa
 
 import tcuscan_ops
+
+random.seed(42)
+torch.manual_seed(42)
+np.random.seed(42)
 
 torch.npu.config.allow_internal_format = False
 

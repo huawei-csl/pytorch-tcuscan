@@ -8,13 +8,19 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # ===============================================================================
 
+import random
+
+import numpy as np
 import pytest
 import torch
 import torch_npu  # noqa
+from scipy.sparse import sp_random
 
-from scipy.sparse import random
-import numpy as np
 import tcuscan_ops
+
+random.seed(42)
+torch.manual_seed(42)
+np.random.seed(42)
 
 torch.npu.config.allow_internal_format = False
 
@@ -28,7 +34,7 @@ def uniform_rvs(shape):
 
 def _test_tcuscan_gather_spmv(nnr: int, s: int, density: float):
 
-    B = random(
+    B = sp_random(
         nnr - 1,
         nnr - 1,
         density=density,

@@ -1,8 +1,15 @@
+import random
+
+import numpy as np
 import pytest
 import torch
 import torch_npu  # noqa
 
 import tcuscan_ops
+
+random.seed(42)
+torch.manual_seed(42)
+np.random.seed(42)
 
 NUM_CORES = 20
 

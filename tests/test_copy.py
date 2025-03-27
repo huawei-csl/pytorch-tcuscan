@@ -8,12 +8,19 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # ===============================================================================
 
+import random
+from math import ceil
+
+import numpy as np
+import pytest
 import torch
 import torch_npu  # noqa
 
 import tcuscan_ops
-import pytest
-from math import ceil
+
+random.seed(42)
+torch.manual_seed(42)
+np.random.seed(42)
 
 
 torch.npu.config.allow_internal_format = False

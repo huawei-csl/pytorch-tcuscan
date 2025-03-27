@@ -8,12 +8,13 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # ===============================================================================
 
+from math import ceil
+
+import pytest
 import torch
 import torch_npu  # noqa
 
 import tcuscan_ops
-import pytest
-from math import ceil
 
 torch.npu.config.allow_internal_format = False
 

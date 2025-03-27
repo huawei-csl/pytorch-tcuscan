@@ -1,10 +1,16 @@
+import random
 from math import ceil
 
+import numpy as np
 import pytest
 import torch
 import torch_npu  # noqa
 
 import tcuscan_ops
+
+random.seed(42)
+torch.manual_seed(42)
+np.random.seed(42)
 
 # Input array size to benchmark sort
 _SORT_SIZES = [
@@ -49,7 +55,6 @@ def generate_random_int(dtype, vec_len):
 
 
 def _test_sort(vec_len: int, dtype: torch.dtype, s: int):
-    torch.manual_seed(42)
     x = generate_random_int(dtype, vec_len)
 
     expected, expected_indices = torch.sort(x, dim=-1, descending=False)

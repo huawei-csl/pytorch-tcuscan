@@ -1,10 +1,18 @@
+import random
+
+import numpy as np
+import pytest
 import torch
 import torch_npu  # noqa
-import pytest
 
 import tcuscan_ops
 
 torch.npu.config.allow_internal_format = False
+
+
+random.seed(42)
+torch.manual_seed(42)
+np.random.seed(42)
 
 
 def get_lengths(s: int, max_iters: int):
