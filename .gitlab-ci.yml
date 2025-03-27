@@ -204,6 +204,12 @@ test_gather_spmv:
     - make setup_ci
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_gather_spmv
 
+test_spmv:
+  <<: *test_config
+  script:
+    - make setup_ci
+    - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_spmv
+
 # Uncomment to run all tests in a single run
 .unit_test:
   tags:

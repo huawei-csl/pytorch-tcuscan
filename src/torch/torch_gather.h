@@ -71,7 +71,7 @@ at::Tensor run_csr_gather(const at::Tensor &values, const at::Tensor &cols,
   uint8_t *tiling_device = allocCopyTiling(tiling);
 
   uint32_t blockDim =
-      static_cast<uint32_t>(host_utils::CeilDiv(values_len, (4 * tileLen)));
+      static_cast<uint32_t>(host_utils::CeilDiv(values_len, (tileLen)));
   blockDim = blockDim > 60 ? 40 : blockDim;
 
   if (blockDim <= 1) {

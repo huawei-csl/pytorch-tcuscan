@@ -14,10 +14,10 @@ import typing
 from dataclasses import dataclass
 from functools import partial
 from typing import Optional
-
 import numpy as np
 import torch
 import torch.nn.functional as F
+import scipy
 from scipy.sparse import random
 
 
@@ -269,6 +269,38 @@ def copy_benchmark(device: Device, x: torch.Tensor, s: int) -> float:
     return _run_benchmark(device, run_copy)
 
 
+def baseline_spmv(
+    device: Device,
+    B: scipy.sparse._csr.csr_matrix,
+    s: int,
+):
+    """
+    Baseline for SPMV using different python calls.
+
+    Args:
+        device: Device to run benchmark on.
+        B: CSR random matrix
+        S: Tiling Size for the matrix unit, used for mcscan
+
+    Returns:
+        Average time in microseconds.
+    """
+    rng = np.random.default_rng(seed=42)
+    vals = torch.from_numpy((B.data).astype(np.float16))
+    idx = torch.from_numpy((B.indptr).astype(np.uint32))
+    cols = torch.from_numpy((B.indices).astype(np.uint32))
+    vector = torch.from_numpy(rng.uniform(1, 9, len(idx) - 1).astype(np.float16))
+    vals_npu = vals.npu()
+    idx_npu = idx.npu()
+    col_npu = cols.npu()
+    vec_npu = vector.npu()
+
+    def run_spmv():
+        _ = tcuscan_ops.run_spmv(vals_npu, idx_npu, col_npu, vec_npu, s)
+
+    return _run_benchmark(device, run_spmv)
+
+
 def benchmark(  # noqa
     device: Device,
     op_name: str,
@@ -336,6 +368,7 @@ if __name__ == "__main__":
             "vec_seg_scan_sc",
             "custom_copy",
             "gather_spmv",
+            "spmv",
         ],
     )
     parser.add_argument("--dtype", choices=["int8", "fp16", "int16", "fp32"])
@@ -365,7 +398,7 @@ if __name__ == "__main__":
     else:
         device = Device(torch.cuda, "cuda:0")
 
-    for nnr in range(102400, 500000, s * 20):
+    for nnr in range(s * num_cores, s * 200 * num_cores, s * 20):
         vec_len = nnr * nnr * density
         B = []
         if "Uniform" == distr:
@@ -387,7 +420,6 @@ if __name__ == "__main__":
                 dtype=np.float32,
                 data_rvs=lambda shape: power_law_rvs(shape, exponent=2.5),
             )
-
         my_x = torch.tensor(B.data).to(torch.float16)
         f = np.zeros(B.nnz + 1)
         f[B.indptr] = 1
@@ -479,6 +511,21 @@ if __name__ == "__main__":
                     s=s,
                 ),
                 len(values),
+                density,
+                nnr,
+                distr,
+            )
+        elif bench == "spmv" and dtype in ["fp16"]:
+            benchmark(
+                device,
+                f"spmv_{s}",
+                dtype,
+                partial(
+                    baseline_spmv,
+                    B=B,
+                    s=s,
+                ),
+                len(B.data),
                 density,
                 nnr,
                 distr,

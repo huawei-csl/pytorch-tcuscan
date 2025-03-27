@@ -18,6 +18,7 @@
 #include "torch/torch_seg_ops.h"
 #include "torch/torch_sort.h"
 #include "torch/torch_split.h"
+#include "torch/torch_spmv.h"
 #include "torch/torch_vadd.h"
 
 PYBIND11_MODULE(tcuscan_ops, m) {
@@ -33,6 +34,8 @@ PYBIND11_MODULE(tcuscan_ops, m) {
   m.def("run_compress_pos", &asc::compress::run_compress_pos,
         "Compaction/compress with pre-computed output positions");
   m.def("run_seg_sum", &asc::seg_ops::run_seg_sum, "Segmented Sum");
+  m.def("run_spmv", &asc::spmv::run_spmv,
+        "Sparse Matrix-Vector Multiplication");
   m.def("run_copy", &asc::copy::run_copy, "Copy single core");
   m.def("run_scan_batch", &asc::scan::run_scan_batch, "Scan Batch");
   m.def("run_scan_single_core", &asc::scan::run_scan_single_core,

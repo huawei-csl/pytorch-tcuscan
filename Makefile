@@ -260,3 +260,6 @@ profile_fp32_gather_spmv:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench gather_spmv --dtype fp32 --num_cores 20 --s 128
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench gather_spmv --dtype fp32 --num_cores 20 --s 256
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench gather_spmv --dtype fp32 --num_cores 20 --s 512
+
+profile_fp16_spmv:
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_random_matrices.py --bench spmv --dtype fp16 --prob Uniform --num_cores 20 --s 128 --density 0.001
