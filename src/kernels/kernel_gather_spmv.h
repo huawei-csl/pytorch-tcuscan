@@ -114,7 +114,7 @@ class KernelGatherSpmv {
     LocalTensor<uint32_t> idx_lt = idx_q_.DeQue<uint32_t>();
 
     if (idx_lt.GetValue(0) == 0) {
-      HandleZeroIDx(idx_lt, output_gm);
+      HandleTileWithInitialZeros(idx_lt, output_gm);
     } else {
       const uint32_t start = idx_lt.GetValue(0);
       const uint32_t end = idx_lt.GetValue(tile_len_ - 1);
@@ -138,8 +138,8 @@ class KernelGatherSpmv {
    * @param output_gm Output GM index to be written with gathered values
    */
  private:
-  __aicore__ inline void HandleZeroIDx(LocalTensor<uint32_t> &idx_lt,
-                                       uint32_t output_gm) {
+  __aicore__ inline void HandleTileWithInitialZeros(
+      LocalTensor<uint32_t> &idx_lt, uint32_t output_gm) {
     LocalTensor<DataType> z_lt = output_q_.AllocTensor<DataType>();
     uint32_t i = 0;
     while (idx_lt.GetValue(i) == 0) {
@@ -150,23 +150,21 @@ class KernelGatherSpmv {
     output_q_.EnQue<DataType>(z_lt);
     copy::CopyVecToGm(global_z_[output_gm], output_q_, i);
 
-    output_gm = output_gm + i;
-    uint32_t start = idx_lt.GetValue(i);
-    uint32_t end = idx_lt.GetValue(tile_len_ - 1);
-    uint32_t es_diff = (end - start + 1);
+    if (i < idx_lt.GetSize()) {
+      output_gm = output_gm + i;
+      uint32_t start = idx_lt.GetValue(i);
+      uint32_t end = idx_lt.GetValue(tile_len_ - 1);
+      uint32_t es_diff = (end - start + 1);
 
-    if (es_diff < value_tile_size_) {
-      idx_q_.FreeTensor<uint32_t>(idx_lt);
-      const uint32_t partial_tile = tile_len_ - i;
-      copy::CopyGmToVec(idx_q_, global_idx_[output_gm], partial_tile);
-      LocalTensor<uint32_t> sub_idx_lt = idx_q_.DeQue<uint32_t>();
-      start = sub_idx_lt.GetValue(0);
-      end = sub_idx_lt.GetValue(partial_tile - 1);
-      es_diff = (end - start + 1);
-      HandleSingleTile(sub_idx_lt, output_gm, start, es_diff, partial_tile);
-    } else {
-      idx_lt.SetValue(0, 1);
-      HandleMultipleTiles(idx_lt, output_gm, start, end, tile_len_, true);
+      if (es_diff < value_tile_size_) {
+        idx_q_.FreeTensor<uint32_t>(idx_lt);
+        const uint32_t partial_tile = tile_len_ - i;
+        copy::CopyGmToVec(idx_q_, global_idx_[output_gm], partial_tile);
+        LocalTensor<uint32_t> sub_idx_lt = idx_q_.DeQue<uint32_t>();
+        HandleSingleTile(sub_idx_lt, output_gm, start, es_diff, partial_tile);
+      } else {
+        HandleMultipleTiles(idx_lt, output_gm, start, end, tile_len_, true);
+      }
     }
   }
   /**
