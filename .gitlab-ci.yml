@@ -68,7 +68,7 @@ secret_detection:
   script:
     - gitleaks detect -v --source .
 
-.pages:
+pages:
   image: registry-eu.inhuawei.com:5050/zrc-von-neumann-lab/tcuscan/doxygen-alpine:latest
   stage: linter
   dependencies: []

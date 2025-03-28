@@ -22,6 +22,15 @@ namespace asc {
 
 namespace split {
 
+/**
+ * @brief Returns the binary split with indices of x given a boolean mask
+ * `mask`.
+ *
+ * @param x Input data vector.
+ * @param mask Input boolean mask to use for splitting.
+ * @param S Matrix tile parameter. Typical values 32,64,128.
+ * @return Splitted input data vector.
+ */
 at::Tensor run_split(const at::Tensor &x, const at::Tensor &mask, int S) {
   const auto ascendc_platform =
       platform_ascendc::PlatformAscendCManager::GetInstance(SOC_VERSION);
@@ -70,6 +79,16 @@ at::Tensor run_split(const at::Tensor &x, const at::Tensor &mask, int S) {
   return z;
 }
 
+/**
+ * @brief Returns the binary split with indices of x given a boolean mask
+ * `mask`. It permutes the input `indices_in` accordingly.
+ *
+ * @param x Input data vector.
+ * @param mask Input boolean mask to use for splitting.
+ * @param indices_in Input indices that is a permuation of [0,1,..., len(x)].
+ * @param S Matrix tile parameter. Typical values 32,64,128.
+ * @return Tuple of splitted data and indices.
+ */
 std::tuple<at::Tensor, at::Tensor> run_split_ind(const at::Tensor &x,
                                                  const at::Tensor &mask,
                                                  const at::Tensor &indices_in,

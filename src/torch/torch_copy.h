@@ -21,6 +21,13 @@ namespace asc {
 
 namespace copy {
 
+/**
+ * @brief Memory copy (single AI core)
+ *
+ * @param x Input data vector.
+ * @param s Tiling length
+ * @return Copy of input vector `x`.
+ */
 at::Tensor run_copy(const at::Tensor &x, int s) {
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();

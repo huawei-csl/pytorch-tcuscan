@@ -27,6 +27,13 @@ namespace asc {
 
 namespace scan {
 
+/**
+ * @brief Returns the prefix sum of an input 1D vector using one AI Core.
+ *
+ * @param x Input 1D vector.
+ * @param S Matrix tiling parameter. Typical values: 32, 64, 128.
+ * @return The prefix sum of `x`.
+ */
 at::Tensor run_scan_single_core(const at::Tensor &x, int S) {
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();
@@ -68,6 +75,13 @@ at::Tensor run_scan_single_core(const at::Tensor &x, int S) {
   return z;
 }
 
+/**
+ * @brief Returns the row-wise scan of a 2D input matrix `x`.
+ *
+ * @param x Input 2D matrix in row-major order.
+ * @param S Tiling parameter. Typical values 32, 64, 128.
+ * @return A 2D matrix that is the row-wise scan of `x`.
+ */
 at::Tensor run_scan_batch(const at::Tensor &x, int S) {
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();
@@ -99,6 +113,13 @@ at::Tensor run_scan_batch(const at::Tensor &x, int S) {
   return z;
 }
 
+/**
+ * @brief Returns the prefix sum (scan) of a 1D vector `x`.
+ *
+ * @param x Input 1D vector.
+ * @param S Tiling parameter. Typical values 32, 64, 128.
+ * @return The prefix sum of `x`
+ */
 at::Tensor run_scan_multi_core(const at::Tensor &x, int S) {
   const auto ascendc_platform =
       platform_ascendc::PlatformAscendCManager::GetInstance(SOC_VERSION);

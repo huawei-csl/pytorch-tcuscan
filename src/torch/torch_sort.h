@@ -23,6 +23,13 @@ namespace asc {
 
 namespace sort {
 
+/**
+ * @brief Radix sort on 1D vector with indices.
+ *
+ * @param x Input 1D vector.
+ * @param S Tiling parameter. Typical values: 32,64, 128.
+ * @return Returns 2-tuple of sorted values of `x` along with its indices.
+ */
 std::tuple<at::Tensor, at::Tensor> run_radix_sort(const at::Tensor &x, int S) {
   const auto ascendc_platform =
       platform_ascendc::PlatformAscendCManager::GetInstance(SOC_VERSION);

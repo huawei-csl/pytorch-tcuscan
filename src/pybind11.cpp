@@ -21,6 +21,9 @@
 #include "torch/torch_spmv.h"
 #include "torch/torch_vadd.h"
 
+/**
+ * @brief Pybind11 module.
+ */
 PYBIND11_MODULE(tcuscan_ops, m) {
   m.doc() = "TCUSCAN AscendC operators";
   m.def("run_add", &asc::add::run_add, "Vector add");

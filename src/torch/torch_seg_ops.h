@@ -25,6 +25,16 @@ namespace asc {
 
 namespace seg_ops {
 
+/**
+ * @brief Segmented scan of input vector given a boolean flag vector
+ * representation the segment starts. Uses only AIV cores.
+ *
+ * @param x Input data vector.
+ * @param f Input boolean/mask flag vector. `f_i = 1` means a segment start at
+ * index `i`.
+ * @param S Tiling parameter. Typical values: 32, 64, 128.
+ * @return Segmented scan of (x, f).
+ */
 at::Tensor run_seg_scan_vec(const at::Tensor &x, const at::Tensor &f, int S) {
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();
@@ -54,6 +64,16 @@ at::Tensor run_seg_scan_vec(const at::Tensor &x, const at::Tensor &f, int S) {
   return z;
 }
 
+/**
+ * @brief Segmented sum of input vector given a boolean flag vector
+ * representation the segment starts.
+ *
+ * @param x Input data vector.
+ * @param f Input boolean/mask flag vector. `f_i = 1` means a segment start at
+ * index `i`.
+ * @param S Tiling parameter. Typical values: 32, 64, 128.
+ * @return Segmented sum of (x, f). Output length is `sum(f == 1)`.
+ */
 at::Tensor run_seg_sum(const at::Tensor &x, const at::Tensor &f, int S) {
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();
@@ -76,6 +96,15 @@ at::Tensor run_seg_sum(const at::Tensor &x, const at::Tensor &f, int S) {
   return z;
 }
 
+/**
+ * @brief Internal undocumented method.
+ *
+ * @param x Input data vector.
+ * @param f Input boolean/mask flag vector. `f_i = 1` means a segment start at
+ * index `i`.
+ * @param diff Vector differences.
+ * @return Not documented.
+ */
 at::Tensor run_seg_scan_mc_revert(const at::Tensor &x, const at::Tensor &f,
                                   const at::Tensor &diff) {
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
@@ -111,6 +140,16 @@ at::Tensor run_seg_scan_mc_revert(const at::Tensor &x, const at::Tensor &f,
   return z;
 }
 
+/**
+ * @brief Segmented scan of input vector given a boolean flag vector
+ * representation the segment starts.
+ *
+ * @param x Input data vector.
+ * @param f Input boolean/mask flag vector. `f_i = 1` means a segment start at
+ * index `i`.
+ * @param S Tiling parameter. Typical values: 32, 64, 128.
+ * @return Segmented scan of (x, f).
+ */
 at::Tensor run_seg_scan(const at::Tensor &x, const at::Tensor &f, int S) {
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();

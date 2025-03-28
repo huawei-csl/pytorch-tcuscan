@@ -45,7 +45,7 @@ extern "C" __global__ __aicore__ void compress_fp16(GM_ADDR x, GM_ADDR mask,
  *
  * @param vec_in Input data vector
  * @param mask Input mask vector
- * @param pos Input mask vector
+ * @param pos Input position vector
  * @param vec_out Output vector
  * @param workspace Pointer to workspace.
  * @param tilingGm Pointer to tiling structure.
@@ -101,7 +101,7 @@ extern "C" __global__ __aicore__ void compress_fp32(GM_ADDR x, GM_ADDR mask,
  *
  * @param vec_in Input data vector
  * @param mask Input mask vector
- * @param pos Input mask vector
+ * @param pos Input position vector
  * @param vec_out Output vector
  * @param workspace Pointer to workspace.
  * @param tilingGm Pointer to tiling structure.

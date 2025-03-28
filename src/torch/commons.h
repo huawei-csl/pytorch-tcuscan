@@ -36,6 +36,12 @@ at::Tensor alloc_workspace(uint32_t user_workspace_size, at::Device device) {
   return workspace_tensor;
 }
 
+/**
+ * @brief Returns number of bytes of given torch tensor.
+ *
+ * @param x Input torch tensor.
+ * @return Number of bytes required for each element of `x`.
+ */
 size_t byte_size(const at::Tensor &x) {
   const auto dtype = x.options().dtype();
 

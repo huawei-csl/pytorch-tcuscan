@@ -25,6 +25,15 @@ namespace asc {
 
 namespace gather {
 
+/**
+ * @brief Multi-core gather of input 1D vector.
+ *
+ * @param values Input 1D vector.
+ * @param idxs Input indices. Pre-condition: all indices are in-bounds of
+ * `values`.
+ * @param tile_len Tile length.
+ * @return Gathered values.
+ */
 at::Tensor run_mc_gather(const at::Tensor &values, const at::Tensor &idxs,
                          const uint32_t tile_len) {
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
@@ -54,6 +63,14 @@ at::Tensor run_mc_gather(const at::Tensor &values, const at::Tensor &idxs,
   return z;
 }
 
+/**
+ * @brief Special CSR gather method for SpMV.
+ *
+ * @param values Input 1D vector.
+ * @param cols Input 1D vector of indices for `x`.
+ * @param x Input vector
+ * @return z[i] = values[i] * x[cols[i]] for i in range(len(cols)).
+ */
 at::Tensor run_csr_gather(const at::Tensor &values, const at::Tensor &cols,
                           const at::Tensor &x) {
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
@@ -91,6 +108,14 @@ at::Tensor run_csr_gather(const at::Tensor &values, const at::Tensor &cols,
   return z;
 }
 
+/**
+ * @brief Special gather for SpmV.
+ *
+ * @param values Input 1D vector.
+ * @param idxs Input 1D indices vector.
+ * @param tile_len Tile length.
+ * @return Special gather for SpMV.
+ */
 at::Tensor run_gather_spmv(const at::Tensor &values, const at::Tensor &idxs,
                            const uint32_t tile_len) {
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);

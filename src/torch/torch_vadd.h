@@ -20,6 +20,12 @@ namespace asc {
 
 namespace add {
 
+/**
+ * @brief Torch wrapper for vector add kernel.
+ * @param x Input tensor.
+ * @param y Input tensor.
+ * @return Returns element-wise addition, i.e., x+y.
+ */
 at::Tensor run_add(const at::Tensor &x, const at::Tensor &y) {
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Tensor z = at::empty_like(x);

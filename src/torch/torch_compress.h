@@ -24,6 +24,14 @@ namespace asc {
 
 namespace compress {
 
+/**
+ * @brief Parallel vector compaction / compress.
+ *
+ * @param x Input data 1D vector.
+ * @param mask Input boolean mask vector.
+ * @param S Tiling parameter. Typical values: 32, 64, 128.
+ * @return The subvector of `x`: `x[f == 1]`. Output length is `sum(f == 1)`.
+ */
 at::Tensor run_compress(const at::Tensor &x, const at::Tensor &mask, int S) {
   const auto ascendc_platform =
       platform_ascendc::PlatformAscendCManager::GetInstance(SOC_VERSION);
@@ -78,15 +86,26 @@ at::Tensor run_compress(const at::Tensor &x, const at::Tensor &mask, int S) {
   return z;
 }
 
+/**
+ * @brief Run the compress kernel with positions. Kernel also takes a position
+ * vector on the input which is an output of inclusive scan on the binary input
+ * mask.
+ *
+ * @param x Input data 1D vector.
+ * @param mask Input boolean mask vector.
+ * @param pos Input position vector.
+ * @param S Tiling parameter. Typical values: 32, 64, 128.
+ * @return The subvector of `x`: `x[f == 1]`. Output length is `sum(f == 1)`.
+ */
 at::Tensor run_compress_pos(const at::Tensor &x, const at::Tensor &mask,
-                            const at::Tensor &pos, int s) {
+                            const at::Tensor &pos, int S) {
   const auto ascendc_platform =
       platform_ascendc::PlatformAscendCManager::GetInstance(SOC_VERSION);
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();
   const auto dtype = x.options().dtype();
 
-  const uint32_t matmul_size = static_cast<uint32_t>(s);
+  const uint32_t matmul_size = static_cast<uint32_t>(S);
   const uint32_t totalLength = x.numel();
 
   const uint32_t tile_elems = matmul_size * matmul_size;
