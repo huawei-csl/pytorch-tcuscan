@@ -10,36 +10,30 @@
 
 
 import random
+
 import numpy as np
 import pytest
-from scipy.sparse import random as sp_random
-import torch
 import torch_npu  # noqa
+from scipy import sparse
 
 import tcuscan_ops
+import torch
 
 random.seed(42)
 torch.manual_seed(42)
 np.random.seed(42)
 
 torch.npu.config.allow_internal_format = False
-_n_rows = [256, 512, 1024, 2048, 4096, 8192, 16384]
-_densities = [0.01, 0.001, 0.0001]
-_matrices = {}
-for density in _densities:
-    _matrices[density] = {}
-    for n in _n_rows:
-        _matrices[density][n] = sp_random(
-            n - 1,
-            n - 1,
-            density=density,
-            format="csr",
-            dtype=np.float32,
-        )
 
 
 def _test_tcuscan_gather_spmv(n: int, s: int, density: float):
-    B = _matrices[density][n]
+    B = sparse.random(
+        n - 1,
+        n - 1,
+        density=density,
+        format="csr",
+        dtype=np.float32,
+    )
     values = (B.data).astype(np.float32)
     indexes = (B.indptr).astype(np.uint32)
 
@@ -56,26 +50,15 @@ def _test_tcuscan_gather_spmv(n: int, s: int, density: float):
 
     actual = tcuscan_ops.run_gather_spmv(values_npu, indexes_npu, s)
     torch.npu.synchronize()
-    assert actual.shape == expected.shape, "Output shape does not match expected shape."
 
+    assert actual.shape == expected.shape, "Output shape does not match expected shape."
     assert actual.dtype == expected.dtype, "Output dtype does not match expected dtype"
 
-    actual_cpu = actual.cpu()
-    error_indices = []
-    for i in range(expected.shape[0]):
-        if np.abs(actual_cpu[i] - expected[i]) > 1e-3:
-            error_indices.append(i)
-    assert len(error_indices) == 0, "\n".join(
-        [f"Error for size n={n}, occured at:"]
-        + [
-            f"index i = {i}: value = {actual_cpu[i]:.4f}, expected = {expected[i]:.4f}"
-            for i in error_indices
-        ]
-    )
+    assert np.allclose(actual.cpu(), expected, atol=1e-3)
 
 
-@pytest.mark.parametrize("n", _n_rows)
+@pytest.mark.parametrize("n", [256, 512, 1024, 2048, 4096, 8192, 16384])
 @pytest.mark.parametrize("s", [128, 256])
-@pytest.mark.parametrize("density", _densities)
+@pytest.mark.parametrize("density", [0.01, 0.001, 0.0001])
 def test_tcuscan_gather_spmv(n: int, s: int, density: float):
     _test_tcuscan_gather_spmv(n, s, density)
