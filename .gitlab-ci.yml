@@ -81,6 +81,15 @@ pages:
     paths:
       - public
 
+build_spmv_eigen:
+  stage: baselines
+  dependencies: []
+  before_script:
+    - export DEBIAN_FRONTEND=noninteractive
+    - apt-get update && apt-get install -y libeigen3-dev
+  script:
+    - cd scripts/baselines/eigen-spmv-cpu
+    - make compile
 
 build:
   tags:
@@ -212,23 +221,15 @@ test_spmv:
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_spmv
 
 # Uncomment to run all tests in a single run
-.unit_test:
+unit_test:
   tags:
     - baremetal
   stage: test_all
-  needs: ["test_vadd", "test_compress", "test_csr_gather", "test_diff", "test_mcscan", "test_seg_scan_single_core", "test_segmented_sum"]
   dependencies: []
   script:
     - make setup_ci
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make build test
-
-
-build_spmv_eigen:
-  stage: baselines
-  dependencies: []
-  before_script:
-    - export DEBIAN_FRONTEND=noninteractive
-    - apt-get update && apt-get install -y libeigen3-dev
-  script:
-    - cd scripts/baselines/eigen-spmv-cpu
-    - make compile
+  rules:
+    - if: '$CI_RUN_LONG_TESTS == "1"'
+    - when: manual
+      allow_failure: true
