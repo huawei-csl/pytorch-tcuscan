@@ -1,15 +1,14 @@
+.PHONY: compile run clean
 
+EXECUTABLE=spmv_sparsesuite
+SS_MATRIX:=Bova/rma10/rma10.mtx
+SPARSE_SUITE_HOME:=${HOME}/.ssgetpy/MM
 
-SRC:=example
-EXECUTABLE=spmv_${SRC}
-FILENAME:=Williams/pdb1HYS/pdb1HYS.mtx
-BASE:=${HOME}/.ssgetpy/MM/
-
-compile:
-	g++ -O3 -Wall -I /scratch/gsorrentino/tcuscan/baseline/pytorch-tcuscan/scripts/baselines/eigen-spmv-cpu/eigen/eigen-master/ ${SRC}.cpp -o ${EXECUTABLE}
+compile: clean
+	mkdir build && cd build && cmake .. && make
 
 run: compile
-	./${EXECUTABLE} ${BASE}${FILENAME}
+	./build/${EXECUTABLE} ${SPARSE_SUITE_HOME}/${SS_MATRIX}
 
 clean:
-	rm ${EXECUTABLE}
+	rm -rf build ${EXECUTABLE}

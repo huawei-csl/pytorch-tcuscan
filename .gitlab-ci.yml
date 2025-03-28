@@ -8,6 +8,7 @@ default:
 
 stages:
    - linter
+   - baselines
    - build
    - tests
    - test_all
@@ -220,3 +221,14 @@ test_spmv:
   script:
     - make setup_ci
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make build test
+
+
+build_spmv_eigen:
+  stage: baselines
+  dependencies: []
+  before_script:
+    - export DEBIAN_FRONTEND=noninteractive
+    - apt-get update && apt-get install -y libeigen3-dev
+  script:
+    - cd scripts/baselines/eigen-spmv-cpu
+    - make compile

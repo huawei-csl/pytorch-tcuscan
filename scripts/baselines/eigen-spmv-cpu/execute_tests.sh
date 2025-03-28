@@ -1,8 +1,10 @@
 #!/bin/bash
-BASE=/scratch/gsorrentino/.ssgetpy/MM/
-cd build || exit
-make run FILENAME=${BASE}Williams/pdb1HYS/pdb1HYS.mtx
-make run FILENAME=${BASE}Williams/mc2depi/mc2depi.mtx
-make run FILENAME=${BASE}Williams/mac_econ_fwd500/mac_econ_fwd500.mtx
-make run FILENAME=${BASE}Sandia/ASIC_680k/ASIC_680k.mtx
-make run FILENAME=${BASE}Freescale/circuit5M/circuit5M.mtx
+
+BASE=/scratch/gsorrentino/.ssgetpy/MM
+
+./build/spmv_sparsesuite ${BASE}/Williams/pdb1HYS/pdb1HYS.mtx
+./build/spmv_sparsesuite ${BASE}/Williams/cant/cant.mtx
+./build/spmv_sparsesuite ${BASE}/Bova/rma10/rma10.mtx
+./build/spmv_sparsesuite ${BASE}/QCD/conf5_4-8x8-05/conf5_4-8x8-05.mtx
+./build/spmv_sparsesuite ${BASE}/QCD/conf5_4-8x8-10/conf5_4-8x8-10.mtx
+./build/spmv_sparsesuite ${BASE}/Andrianov/mip1/mip1.mtx

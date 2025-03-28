@@ -1,3 +1,11 @@
+/**
+ * @file sparsesuite.cpp
+ * @brief SpMV using Eigen's SparseMatrix<T, RowMajor> container.
+ * @date 2025-03-28
+ *
+ * @copyright Copyright (c) 2025
+ *
+ */
 #include <Eigen/Sparse>
 #include <chrono>
 #include <fstream>
@@ -7,6 +15,13 @@ using namespace Eigen;
 
 using SparseMatrixRowMajor = SparseMatrix<float, RowMajor>;
 
+/**
+ * @brief Read a sparser matrix from Sparse Suite .mtx file
+ *
+ * @param mtxpath File path to sparse matrix in mtx format.
+ * @param mat Eigen sparse matrix in row-major layout.
+ * @return Status code.
+ */
 int read_mtx(const std::string& mtxpath, SparseMatrixRowMajor& mat) {
   std::ifstream fin(mtxpath);
   if (!fin.is_open()) {
@@ -40,6 +55,13 @@ int read_mtx(const std::string& mtxpath, SparseMatrixRowMajor& mat) {
   return 0;
 }
 
+/**
+ * @brief Read a Sparse Suite Matrix and run SpMv on a random vector.
+ *
+ * @param argc Number of input arguments.
+ * @param argv List of input arguments.
+ * @return Status code
+ */
 int main(int argc, char* argv[]) {
   if (argc < 2) {
     std::cerr << "Usage: " << argv[0] << " <matrixpath>" << std::endl;
@@ -47,8 +69,10 @@ int main(int argc, char* argv[]) {
   }
   int n_execs = 10;
   std::string matrixfile = argv[1];
+  std::cout << "Handling matrix: " << matrixfile << std::endl;
 
   SparseMatrixRowMajor mat;
+  std::cout << "Reading matrix: " << matrixfile << std::endl;
 
   if (read_mtx(matrixfile, mat) != 0) {
     std::cerr << "Error reading matrix from file!" << std::endl;
