@@ -121,9 +121,9 @@ class KernelGatherSpmv {
       const uint32_t es_diff = (end - start + 1);
 
       if (es_diff < value_tile_size_) {
-        HandleSingleTile(idx_lt, output_gm, start, es_diff, tile_len_);
+        HandleSingleTile(idx_lt, output_gm, start, end, tile_len_);
       } else {
-        HandleMultipleTiles(idx_lt, output_gm, start, end, tile_len_, false);
+        HandleMultipleTiles(idx_lt, output_gm, start, end, tile_len_);
       }
     }
   }
@@ -152,18 +152,18 @@ class KernelGatherSpmv {
 
     if (i < idx_lt.GetSize()) {
       output_gm = output_gm + i;
-      uint32_t start = idx_lt.GetValue(i);
-      uint32_t end = idx_lt.GetValue(tile_len_ - 1);
-      uint32_t es_diff = (end - start + 1);
+      const uint32_t start = idx_lt.GetValue(i);
+      const uint32_t end = idx_lt.GetValue(tile_len_ - 1);
+      const uint32_t es_diff = (end - start + 1);
 
       if (es_diff < value_tile_size_) {
         idx_q_.FreeTensor<uint32_t>(idx_lt);
         const uint32_t partial_tile = tile_len_ - i;
         copy::CopyGmToVec(idx_q_, global_idx_[output_gm], partial_tile);
         LocalTensor<uint32_t> sub_idx_lt = idx_q_.DeQue<uint32_t>();
-        HandleSingleTile(sub_idx_lt, output_gm, start, es_diff, partial_tile);
+        HandleSingleTile(sub_idx_lt, output_gm, start, end, partial_tile);
       } else {
-        HandleMultipleTiles(idx_lt, output_gm, start, end, tile_len_, true);
+        HandleMultipleTiles(idx_lt, output_gm, start, end, tile_len_);
       }
     }
   }
@@ -181,15 +181,16 @@ class KernelGatherSpmv {
    */
 
   __aicore__ inline void HandleSingleTile(LocalTensor<uint32_t> &idx_lt,
-                                          uint32_t output_gm, uint32_t offset,
-                                          uint32_t es_diff, uint32_t tile_len) {
+                                          uint32_t output_gm, uint32_t start,
+                                          uint32_t end, uint32_t tile_len) {
+    const uint32_t es_diff = end - start + 1;
     LocalTensor<DataType> z_lt = output_q_.AllocTensor<DataType>();
 
-    copy::CopyGmToVec(values_q_gather_, global_values_[offset - 1], es_diff);
+    copy::CopyGmToVec(values_q_gather_, global_values_[start - 1], es_diff);
     LocalTensor<DataType> sync_fetched_values =
         values_q_gather_.DeQue<DataType>();
     GatherWithOffset<uint32_t, DataType>(z_lt, idx_lt, sync_fetched_values,
-                                         offset, tile_len);
+                                         start, tile_len);
     values_q_gather_.FreeTensor<DataType>(sync_fetched_values);
     output_q_.EnQue<DataType>(z_lt);
     idx_q_.FreeTensor<uint32_t>(idx_lt);
@@ -208,15 +209,12 @@ class KernelGatherSpmv {
    * @param start first value of the idx_array
    * @param end Last value of the idx_array
    * @param tile_len remaining size to be processed
-   * @param partial_handle this is true if the current index tile has been
-   * partially handled before entering this function. For example, to handle 0
-   * indexes
+
    *
    */
   __aicore__ inline void HandleMultipleTiles(LocalTensor<uint32_t> &idx_lt,
                                              uint32_t output_gm, uint32_t start,
-                                             uint32_t end, uint32_t tile_len,
-                                             bool partial_handle) {
+                                             uint32_t end, uint32_t tile_len) {
     uint32_t new_start = start;
 
     uint32_t subtile_size = 0;
@@ -226,7 +224,7 @@ class KernelGatherSpmv {
     uint64_t gathered_size = 0;
     uint32_t gathered_count = 0;
 
-    if (partial_handle) {
+    if (start != idx_lt.GetValue(0)) {
       gathered_count = output_gm;
     }
     LocalTensor<DataType> z_lt = output_q_.AllocTensor<DataType>();
