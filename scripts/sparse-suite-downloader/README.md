@@ -1,6 +1,7 @@
 ## Download sparse suite matrices
 
 ```bash
+export SPARSE_SUITE_HOME=/scratch/TCUSCAN/sparse-suite-matrices/ssgetpy-downloaded-matrices/
 make
 ```
 
