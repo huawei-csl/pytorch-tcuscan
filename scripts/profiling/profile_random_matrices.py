@@ -17,8 +17,7 @@ from typing import Optional
 import numpy as np
 import torch
 import torch.nn.functional as F
-import scipy
-from scipy.sparse import random
+from scipy.sparse import random, csr_matrix
 
 
 def power_law_rvs(shape, exponent=2.0):
@@ -271,7 +270,7 @@ def copy_benchmark(device: Device, x: torch.Tensor, s: int) -> float:
 
 def baseline_spmv(
     device: Device,
-    B: scipy.sparse._csr.csr_matrix,
+    B: csr_matrix,
     s: int,
 ):
     """

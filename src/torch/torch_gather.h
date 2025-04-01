@@ -126,7 +126,6 @@ at::Tensor run_gather_spmv(const at::Tensor &values, const at::Tensor &idxs,
 
   uint32_t values_len = values.numel();
   uint32_t idx_len = idxs.numel();
-
   const at::Tensor z =
       at::empty({idx_len},
                 at::TensorOptions().dtype(values.scalar_type()).device(device));
@@ -142,7 +141,6 @@ at::Tensor run_gather_spmv(const at::Tensor &values, const at::Tensor &idxs,
    const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
   aclrtFree(tiling_device);
   aclrtSynchronizeStream(acl_stream);
-
   return z;
 }
 }  // namespace gather

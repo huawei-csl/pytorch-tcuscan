@@ -1,7 +1,7 @@
 .PHONY: all clean setup_ci setup_once setup_once_aarch64 build test profile
 
 DENSITY?=0.001
-LOCAL_SPARSE_MATRIX_NAME?='Boeing/bcsstk35/bcsstk35'
+LOCAL_SPARSE_MATRIX_NAME?='Williams/pdb1HYS/pdb1HYS'
 BASE_SPARSE_MATRIX_PATH?=${HOME}/.ssgetpy/MM/
 FULL_SPARSE_MATRIX_PATH=${BASE_SPARSE_MATRIX_PATH}${LOCAL_SPARSE_MATRIX_NAME}
 PROFILING_SCRIPTS_PATH=scripts/profiling/
@@ -53,7 +53,7 @@ test:
 	python3 -m pytest tests/
 
 test_%:
-	python3 -m pytest tests/test_$*.py
+	python3 -m pytest tests/test_$*.py -v
 
 ###
 # Profiling kernels
@@ -263,3 +263,12 @@ profile_fp32_gather_spmv:
 
 profile_fp16_spmv:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_random_matrices.py --bench spmv --dtype fp16 --prob Uniform --num_cores 20 --s 128 --density 0.001
+
+profile_fp16_spmv_real:
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_sparse_matrices.py --bench spmv --s 128  --matrixpath ${BASE_SPARSE_MATRIX_PATH}/Williams/pdb1HYS/pdb1HYS --dtype fp16
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_sparse_matrices.py --bench spmv --s 128  --matrixpath ${BASE_SPARSE_MATRIX_PATH}/Bova/rma10/rma10 --dtype fp16
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_sparse_matrices.py --bench spmv --s 128  --matrixpath ${BASE_SPARSE_MATRIX_PATH}/QCD/conf5_4-8x8-05/conf5_4-8x8-05 --dtype fp16
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_sparse_matrices.py --bench spmv --s 128  --matrixpath ${BASE_SPARSE_MATRIX_PATH}/QCD/conf5_4-8x8-10/conf5_4-8x8-10 --dtype fp16
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_sparse_matrices.py --bench spmv --s 128  --matrixpath ${BASE_SPARSE_MATRIX_PATH}/Andrianov/mip1/mip1 --dtype fp16
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_sparse_matrices.py --bench spmv --s 128  --matrixpath ${BASE_SPARSE_MATRIX_PATH}/Williams/cant/cant --dtype fp16
+

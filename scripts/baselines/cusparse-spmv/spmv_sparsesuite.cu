@@ -155,15 +155,6 @@ int main(int argc, char *argv[]) {
   size_t bufferSize = 0;
   void *dBuffer = NULL;
 
-  // Y = alpha * A * x
-  // The function cusparseSpMV_bufferSize() returns the size of the
-  // workspace needed by cusparseSpMV_preprocess() and cusparseSpMV()
-  CHECK_CUSPARSE(cusparseSpMV_bufferSize(
-      handle, CUSPARSE_OPERATION_NON_TRANSPOSE, &alpha, matA, vecX, &beta, vecY,
-      CUDA_R_32F, CUSPARSE_SPMV_ALG_DEFAULT, &bufferSize));
-  // workspace allocation
-  CHECK_CUDA(cudaMalloc(&dBuffer, bufferSize));
-
   cudaEvent_t start, stop;
   CHECK_CUDA(cudaEventCreate(&start));
   CHECK_CUDA(cudaEventCreate(&stop));
@@ -174,6 +165,14 @@ int main(int argc, char *argv[]) {
               << std::endl;
     CHECK_CUDA(cudaMemset(d_y, 0, M * sizeof(float)));
     CHECK_CUDA(cudaEventRecord(start, 0));
+    // Y = alpha * A * x
+    // The function cusparseSpMV_bufferSize() returns the size of the
+    // workspace needed by cusparseSpMV_preprocess() and cusparseSpMV()
+    CHECK_CUSPARSE(cusparseSpMV_bufferSize(
+        handle, CUSPARSE_OPERATION_NON_TRANSPOSE, &alpha, matA, vecX, &beta,
+        vecY, CUDA_R_32F, CUSPARSE_SPMV_ALG_DEFAULT, &bufferSize));
+    // workspace allocation
+    CHECK_CUDA(cudaMalloc(&dBuffer, bufferSize));
     CHECK_CUSPARSE(cusparseSpMV(handle, CUSPARSE_OPERATION_NON_TRANSPOSE,
                                 &alpha, matA, vecX, &beta, vecY, CUDA_R_32F,
                                 CUSPARSE_SPMV_ALG_DEFAULT, dBuffer));

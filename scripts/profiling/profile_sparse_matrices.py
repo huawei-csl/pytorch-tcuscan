@@ -13,7 +13,6 @@ import types
 import typing
 from dataclasses import dataclass
 from functools import partial
-
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -47,7 +46,7 @@ def convert_to_segments(fullpath):
     f = np.zeros(B.nnz + 1)
     # The last value of the row_ptr should not be in f.
     f[B.indptr] = 1
-    return x, f[:-1]
+    return x, f[:-1], B
 
 
 file_handler = logging.FileHandler(filename="torch_profiler.log")
@@ -160,11 +159,12 @@ def _run_benchmark(
     # before each kernel call to make sure that the L2 cache
     # doesn't contain any input data before the run
     # Copied from https://github.com/triton-lang/triton/blob/v2.1.0/python/triton/testing.py#L110
-    cache_size = 256 * 1024 * 1024
-    cache = torch.ones(cache_size, dtype=torch.int8, device=device.str)
+
+    # cache_size = 256 * 1024 * 1024
+    # cache = torch.ones(cache_size, dtype=torch.int8, device=device.str)
 
     for i in range(benchmark_iters):
-        cache.zero_()
+        # cache.zero_()
         device.sync()
         start_events[i].record()
         fn()
@@ -280,6 +280,24 @@ def baseline_diff_benchmark(device: Device, x: torch.Tensor) -> float:
     return _run_benchmark(device, run_diff)
 
 
+def baseline_spmv(device: Device, B: csr_matrix, s: int):
+    rng = np.random.default_rng(seed=42)
+    vals = torch.from_numpy((B.data).astype(np.float16))
+    idx = torch.from_numpy((B.indptr).astype(np.uint32))
+    cols = torch.from_numpy((B.indices).astype(np.uint32))
+    vector = torch.from_numpy(rng.uniform(1, 9, len(idx) - 1).astype(np.float16))
+    vals_npu = vals.npu()
+    idx_npu = idx.npu()
+    col_npu = cols.npu()
+    vec_npu = vector.npu()
+    torch.npu.synchronize()
+
+    def run_spmv():
+        _ = tcuscan_ops.run_spmv(vals_npu, idx_npu, col_npu, vec_npu, s)
+
+    return _run_benchmark(device, run_spmv)
+
+
 def benchmark(
     device: Device,
     op_name: str,
@@ -316,7 +334,14 @@ if __name__ == "__main__":
 
     parser.add_argument(
         "--bench",
-        choices=["seg_scan_sc", "compress", "mcscan", "diff", "vec_seg_scan_sc"],
+        choices=[
+            "seg_scan_sc",
+            "compress",
+            "mcscan",
+            "diff",
+            "vec_seg_scan_sc",
+            "spmv",
+        ],
     )
     parser.add_argument("--dtype", choices=["int8", "fp16", "int16", "fp32"])
     parser.add_argument("--s", type=int, default=64, required=False)
@@ -326,7 +351,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     fullpath = args.matrixpath
-    my_x, my_f = convert_to_segments(fullpath)
+    my_x, my_f, B = convert_to_segments(fullpath)
     my_x = torch.Tensor(my_x)
     my_f = torch.Tensor(my_f)
 
@@ -388,6 +413,19 @@ if __name__ == "__main__":
         my_f = pad_to_multiple(my_f, s)
         benchmark(
             device, "diff", dtype, partial(baseline_diff_benchmark, x=my_x), bench_name
+        )
+    elif bench == "spmv" and dtype in ["fp16"]:
+        bench_name = fullpath.split("/")[-1]
+        benchmark(
+            device,
+            f"spmv_{s}",
+            dtype,
+            partial(
+                baseline_spmv,
+                B=B,
+                s=s,
+            ),
+            bench_name,
         )
     else:
         raise RuntimeError(
