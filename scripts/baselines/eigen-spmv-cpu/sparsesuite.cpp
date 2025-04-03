@@ -45,7 +45,7 @@ int read_mtx(const std::string& mtxpath, SparseMatrixRowMajor& mat) {
         float value;
         fin >> row >> col >> value;
         // Adjust for zero-indexing
-        mat.insert(row - 1, col - 1) = value;
+        mat.coeffRef(row - 1, col - 1) = value;
       }
       break;
     }
