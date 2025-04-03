@@ -1,0 +1,47 @@
+name: baseline-mkl
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - _libgcc_mutex=0.1=main
+  - _openmp_mutex=5.1=1_gnu
+  - blas=1.1=openblas
+  - bzip2=1.0.8=h5eee18b_6
+  - ca-certificates=2025.2.25=h06a4308_0
+  - expat=2.6.4=h6a678d5_0
+  - icu=73.1=h6a678d5_0
+  - intel-openmp=2025.0.0=h06a4308_1171
+  - ld_impl_linux-64=2.40=h12ee557_0
+  - libffi=3.4.4=h6a678d5_1
+  - libgcc=14.2.0=h767d61c_2
+  - libgcc-ng=14.2.0=h69a702a_2
+  - libgfortran=14.2.0=h69a702a_2
+  - libgfortran-ng=14.2.0=h69a702a_2
+  - libgfortran5=14.2.0=hf1ad2bd_2
+  - libgomp=14.2.0=h767d61c_2
+  - libhwloc=2.11.2=default_h0d58e46_1001
+  - libopenblas=0.3.29=pthreads_h94d23a6_0
+  - libstdcxx=14.2.0=h8f9b012_2
+  - libstdcxx-ng=11.2.0=h1234567_1
+  - libuuid=1.41.5=h5eee18b_0
+  - libxml2=2.13.5=hfdd30dd_0
+  - mkl=2025.0.0=hacee8c2_941
+  - ncurses=6.4=h6a678d5_0
+  - numpy=2.0.1=py312h2809609_1
+  - numpy-base=2.0.1=py312he1a6c75_1
+  - openblas=0.3.29=pthreads_h6ec200e_0
+  - openssl=3.4.1=h7b32b05_0
+  - pip=25.0=py312h06a4308_0
+  - python=3.12.9=h5148396_0
+  - readline=8.2=h5eee18b_0
+  - scipy=1.15.2=py312h210a465_1
+  - setuptools=75.8.0=py312h06a4308_0
+  - sparse_dot_mkl=0.9.8=pyha955bf4_0
+  - sqlite=3.45.3=h5eee18b_0
+  - tbb=2022.1.0=h4ce085d_0
+  - tbb-devel=2022.1.0=h1f99690_0
+  - tk=8.6.14=h39e8969_0
+  - tzdata=2025a=h04d1e81_0
+  - wheel=0.45.1=py312h06a4308_0
+  - xz=5.6.4=h5eee18b_1
+  - zlib=1.2.13=h5eee18b_1
