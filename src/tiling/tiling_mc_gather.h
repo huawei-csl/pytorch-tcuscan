@@ -17,7 +17,9 @@ struct McGatherTiling {
   /// @brief Number of blocks.
   uint32_t num_blocks;
   /// @brief Total number of input elements.
-  uint32_t num_elems;
+  uint32_t val_len;
+  /// @brief Total number of input indices.
+  uint32_t idx_len;
   /// @brief Tiling length.
   uint32_t tile_len;
 };

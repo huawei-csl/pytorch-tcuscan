@@ -49,7 +49,7 @@ at::Tensor run_mc_gather(const at::Tensor &values, const at::Tensor &idxs,
       {idx_len}, at::TensorOptions().dtype(at::kFloat).device(device));
   const at::Tensor workspace_tensor = alloc_workspace(0, device);
 
-  const McGatherTiling tiling{blockDim, idx_len, tileLen};
+  const McGatherTiling tiling{blockDim, values_len, idx_len, tileLen};
   uint8_t *tiling_device = allocCopyTiling(tiling);
 
   ACLRT_LAUNCH_KERNEL(mc_gather)

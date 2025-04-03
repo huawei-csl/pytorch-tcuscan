@@ -24,7 +24,7 @@ np.random.seed(42)
 
 torch.npu.config.allow_internal_format = False
 
-_MULTIPLIER = [1, 2, 3, 5, 8, 9, 12, 16, 20, 24, 40, 50]
+_MULTIPLIER = [1, 2, 3, 5, 8, 9, 12, 16, 20, 25]
 
 
 def _test_tcuscan_mcgather(s: int, nnz: int, idx_len: int):
@@ -62,9 +62,10 @@ def _test_tcuscan_mcgather(s: int, nnz: int, idx_len: int):
     ), f"Error gather mc ({expected.dtype}). s={s}"
 
 
+@pytest.mark.parametrize("offset", [0, 7, 11, 17])
 @pytest.mark.parametrize("multiplier", _MULTIPLIER)
 @pytest.mark.parametrize("s", [64, 128, 256, 512])
-def test_tcuscan_mc_gather(multiplier: int, s: int):
+def test_tcuscan_mc_gather(offset: int, multiplier: int, s: int):
     nnz = multiplier * 20 * s * s
-    idx_len = s * s
+    idx_len = s * s - offset
     _test_tcuscan_mcgather(s, nnz, idx_len)

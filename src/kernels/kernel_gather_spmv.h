@@ -307,14 +307,17 @@ class KernelGatherSpmv {
     Duplicate<uint32_t>(threshold_up_lt, threshold_up, this_tile_len);
     Duplicate<uint32_t>(threshold_down_lt, threshold_down, this_tile_len);
 
-    LocalTensor<uint32_t> mask_up_lt = mask_up_buf_.Get<uint32_t>();
-    LocalTensor<uint32_t> mask_down_lt = mask_down_buf_.Get<uint32_t>();
-    LocalTensor<uint32_t> mask_lt = mask_buf_.Get<uint32_t>();
+    LocalTensor<uint8_t> mask_up_lt = mask_up_buf_.Get<uint8_t>();
+    LocalTensor<uint8_t> mask_down_lt = mask_down_buf_.Get<uint8_t>();
+    LocalTensor<uint8_t> mask_lt = mask_buf_.Get<uint8_t>();
 
     if (this_tile_len < tile_len_) {
-      Duplicate<uint32_t>(mask_up_lt, 0, tile_len_);
-      Duplicate<uint32_t>(mask_down_lt, 0, tile_len_);
-      Duplicate<uint32_t>(mask_lt, 0, tile_len_);
+      Duplicate<uint16_t>(mask_up_lt.template ReinterpretCast<uint16_t>(), 0,
+                          tile_len_);
+      Duplicate<uint16_t>(mask_down_lt.template ReinterpretCast<uint16_t>(), 0,
+                          tile_len_);
+      Duplicate<uint16_t>(mask_lt.template ReinterpretCast<uint16_t>(), 0,
+                          tile_len_);
     }
 
     Compare(mask_up_lt, idx_lt.template ReinterpretCast<float>(),
@@ -327,8 +330,9 @@ class KernelGatherSpmv {
 
     And(mask_lt, mask_up_lt, mask_down_lt, this_tile_len);
     LocalTensor<uint32_t> gathered_idx_lt = gathered_mask_buff_.Get<uint32_t>();
-    GatherMask(gathered_idx_lt, idx_lt, mask_lt, true, this_tile_len,
-               {1, 1, 8, 8}, gathered_size);
+    GatherMask(gathered_idx_lt, idx_lt,
+               mask_lt.template ReinterpretCast<uint32_t>(), true,
+               this_tile_len, {1, 1, 8, 8}, gathered_size);
 
     return gathered_idx_lt;
   }

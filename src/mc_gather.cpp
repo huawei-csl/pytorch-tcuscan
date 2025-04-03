@@ -26,6 +26,6 @@ extern "C" __global__ __aicore__ void mc_gather(GM_ADDR values_in,
   McGatherTiling tiling;
   tiling::GetTilingData(&tiling, tiling_gm);
 
-  run_mc_gather(values_in, indexes_in, z_out, tiling.num_elems,
+  run_mc_gather(values_in, indexes_in, z_out, tiling.idx_len, tiling.val_len,
                 tiling.tile_len);
 }
