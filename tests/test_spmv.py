@@ -35,10 +35,7 @@ def uniform_rvs(shape):
 
 
 def _test_tcuscan_spmv(nnr: int, s: int, density: float):
-    rng = np.random.default_rng()
-    NPU_DEVICE = "npu:1"
-    torch.npu.config.allow_internal_format = False
-    torch.npu.set_device(NPU_DEVICE)
+    rng = np.random.default_rng(seed=42)
 
     B = random(
         nnr - 1,

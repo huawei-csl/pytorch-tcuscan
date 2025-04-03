@@ -131,7 +131,7 @@ at::Tensor run_gather_spmv(const at::Tensor &values, const at::Tensor &idxs,
                 at::TensorOptions().dtype(values.scalar_type()).device(device));
   const at::Tensor workspace_tensor = alloc_workspace(0, device);
 
-  const GatherSpmvTiling tiling{blockDim, idx_len, tileLen};
+  const GatherSpmvTiling tiling{blockDim, values_len, idx_len, tileLen};
   uint8_t *tiling_device = allocCopyTiling(tiling);
 
   ACLRT_LAUNCH_KERNEL(gather_spmv)

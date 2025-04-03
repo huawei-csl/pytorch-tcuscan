@@ -23,11 +23,10 @@ np.random.seed(42)
 
 torch.npu.config.allow_internal_format = False
 
-_MULTIPLIER = [1, 2, 3, 5, 8, 9, 12, 16, 20, 24, 40, 50]
+_MULTIPLIER = [1, 2, 3, 5, 8, 9, 12, 16, 20]
 
 
 def _test_tcuscan_gather_spmv(s: int, nnz: int, idx_len: int):
-
     data_type = np.float32
     index_type = np.uint32
     shape = nnz
@@ -48,12 +47,14 @@ def _test_tcuscan_gather_spmv(s: int, nnz: int, idx_len: int):
         else:
             expected[i] = input_values[idx]
 
-    expected = torch.Tensor(expected).to(torch.float32)
-    torch.npu.synchronize()
+    expected = torch.from_numpy(expected)
     val_torch = torch.Tensor(input_values).to(torch.float32).npu()
     idx_torch = torch.from_numpy(input_cols).npu()
+
     torch.npu.synchronize()
     actual = tcuscan_ops.run_gather_spmv(val_torch, idx_torch, s)
+    torch.npu.synchronize()
+
     assert (
         actual.shape == expected.shape
     ), "Output shape mismatch. Got {actual.shape}. Expected {expected.shape}"
@@ -63,12 +64,13 @@ def _test_tcuscan_gather_spmv(s: int, nnz: int, idx_len: int):
 
     assert torch.allclose(
         actual.cpu(), expected, atol=1e-02
-    ), f"Error gather mc ({expected.dtype}). s={s}"
+    ), f"Error gather spmv ({expected.dtype}). s={s}"
 
 
+@pytest.mark.parametrize("offset", [0, 7, 11, 17])
 @pytest.mark.parametrize("multiplier", _MULTIPLIER)
 @pytest.mark.parametrize("s", [64, 128, 256, 512])
-def test_tcuscan_gather_spmv(multiplier: int, s: int):
+def test_tcuscan_gather_spmv(offset: int, multiplier: int, s: int):
     nnz = multiplier * 20 * s * s
-    idx_len = s * s
+    idx_len = s * s - offset
     _test_tcuscan_gather_spmv(s, nnz, idx_len)

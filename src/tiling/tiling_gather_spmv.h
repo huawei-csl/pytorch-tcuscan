@@ -11,12 +11,14 @@
 
 #pragma pack(push, 8)
 /**
- * @brief Vector GatherSPMV kernel tiling parameter structure.
+ * @brief Vector gather_spmv kernel tiling parameter structure.
  */
 struct GatherSpmvTiling {
   /// @brief Number of blocks.
   uint32_t blockDim;
   /// @brief Total number of input elements.
+  uint32_t val_len;
+  /// @brief Total number of input indices.
   uint32_t idx_len;
   /// @brief Tiling length.
   uint32_t tile_len;
