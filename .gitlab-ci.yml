@@ -86,10 +86,10 @@ build_spmv_eigen:
   dependencies: []
   before_script:
     - export DEBIAN_FRONTEND=noninteractive
-    - apt-get update && apt-get install -y libeigen3-dev
+    - apt-get update && apt-get install -y libeigen3-dev git-core
   script:
     - cd scripts/baselines/eigen-spmv-cpu
-    - make compile
+    - export GIT_SSL_NO_VERIFY=1 && make compile
 
 build:
   tags:

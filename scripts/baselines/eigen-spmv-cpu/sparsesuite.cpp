@@ -8,52 +8,14 @@
  */
 #include <Eigen/Sparse>
 #include <chrono>
+#include <fast_matrix_market/app/Eigen.hpp>
 #include <fstream>
 #include <iostream>
 #include <sstream>
+
 using namespace Eigen;
 
 using SparseMatrixRowMajor = SparseMatrix<float, RowMajor>;
-
-/**
- * @brief Read a sparser matrix from Sparse Suite .mtx file
- *
- * @param mtxpath File path to sparse matrix in mtx format.
- * @param mat Eigen sparse matrix in row-major layout.
- * @return Status code.
- */
-int read_mtx(const std::string& mtxpath, SparseMatrixRowMajor& mat) {
-  std::ifstream fin(mtxpath);
-  if (!fin.is_open()) {
-    std::cerr << "Error opening file: " << mtxpath << std::endl;
-    return -1;
-  }
-
-  std::string line;
-  while (std::getline(fin, line)) {
-    if (line[0] == '%')
-      continue;
-    else {
-      std::stringstream ss(line);
-      int M, N, L;
-      ss >> M >> N >> L;
-
-      mat.resize(M, N);
-
-      for (int l = 0; l < L; ++l) {
-        int row, col;
-        float value;
-        fin >> row >> col >> value;
-        // Adjust for zero-indexing
-        mat.coeffRef(row - 1, col - 1) = value;
-      }
-      break;
-    }
-  }
-
-  fin.close();
-  return 0;
-}
 
 /**
  * @brief Read a Sparse Suite Matrix and run SpMv on a random vector.
@@ -71,13 +33,12 @@ int main(int argc, char* argv[]) {
   std::string matrixfile = argv[1];
   std::cout << "Handling matrix: " << matrixfile << std::endl;
 
-  SparseMatrixRowMajor mat;
   std::cout << "Reading matrix: " << matrixfile << std::endl;
 
-  if (read_mtx(matrixfile, mat) != 0) {
-    std::cerr << "Error reading matrix from file!" << std::endl;
-    return 1;
-  }
+  std::ifstream mtx_file(matrixfile);
+
+  SparseMatrixRowMajor mat;
+  fast_matrix_market::read_matrix_market_eigen(mtx_file, mat);
 
   std::cout << "Matrix loaded successfully!" << std::endl;
   std::cout << "Matrix size: " << mat.rows() << " x " << mat.cols()
