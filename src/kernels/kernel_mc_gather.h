@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Huawei Technologies Co., Ltd. 2024. All rights reserved.
+ * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
  *
  * @file kernel_mc_gather.h
  * @brief Kernel implementing a Vector mc_gather kernel operation.
@@ -14,17 +14,18 @@ using namespace kernel_utils;
 
 /**
  * @brief Performs a multi-core AIV gather operation given an 1D vector
-    `values_in` and an 1D indices vector `idx_in` that returns
-* @tparam DataType The data type of the tensor elements that must be gathered.
-
+`values_in` and an 1D indices vector `idx_in` that returns
+ * @tparam DataType The data type of the tensor elements that must be gathered.
+ * @tparam ValueTileSize (default: 32768) represents the maximum size handled by
+the LocalBuffer that contains fetched values. Assumption: given an index_tile of
+size tile_len,
 
     z_out = values_in[x for x in idx_in] (in numpy notation)
 
     The output vector has length `len(idx_in)`
-
  *
  */
-template <typename DataType>
+template <typename DataType, uint32_t ValueTileSize = 32768>
 class KernelMcGather {
   constexpr static uint32_t BUFFER_NUM = 1;
 
@@ -53,11 +54,6 @@ class KernelMcGather {
    * @param [in] values_in  Pointer to input values vector.
    * @param [in] idx_in Pointer to input column indices vector.
    * @param [in] z_out Pointer to output z vector.
-   *
-   * value_tile_size_ = 32768 represents the maximum size handled by the
-   * LocalBuffer that contains fetched values. Assumption: given an index_tile
-   * of size s,
-   *
    */
   __aicore__ inline void Init(GM_ADDR values_in, GM_ADDR idx_in,
                               GM_ADDR z_out) {
@@ -67,9 +63,10 @@ class KernelMcGather {
     global_z_.SetGlobalBuffer((__gm__ DataType *)z_out, idx_in_len_);
 
     pipe.InitBuffer(values_q_gather_, BUFFER_NUM,
-                    value_tile_size_ * sizeof(DataType));
+                    ValueTileSize * sizeof(DataType));
     pipe.InitBuffer(idx_q_, BUFFER_NUM, tile_len_ * sizeof(uint32_t));
     pipe.InitBuffer(output_q_, BUFFER_NUM, tile_len_ * sizeof(DataType));
+
     pipe.InitBuffer(idx_buf_, tile_len_ * sizeof(uint32_t));
     pipe.InitBuffer(threshold_up_buf_, tile_len_ * sizeof(uint32_t));
     pipe.InitBuffer(threshold_down_buf_, tile_len_ * sizeof(uint32_t));
@@ -113,38 +110,25 @@ class KernelMcGather {
    */
   __aicore__ inline void ProcessTile(uint32_t output_gm,
                                      uint32_t this_tile_len) {
-    LocalTensor<uint32_t> idx_lt = idx_q_.DeQue<uint32_t>();
-    const uint32_t start = idx_lt.GetValue(0);
-    const uint32_t end = idx_lt.GetValue(this_tile_len - 1);
-    const uint32_t es_diff = (end - start + 1);
-
-    if (es_diff < value_tile_size_) {
-      HandleSingleTile(idx_lt, output_gm, start, end, this_tile_len);
-    } else {
-      HandleMultipleTiles(idx_lt, output_gm, start, end, this_tile_len);
-    }
-    idx_q_.FreeTensor<uint32_t>(idx_lt);
+    HandleMultipleTiles(output_gm, this_tile_len);
   }
 
   /**
-   * @brief Handle a single tile case, avoiding any masking as the whole
-   * gather will fit the LocalTensor value_tile_size_
+   * @brief Handle a single tile.
    *
-   *
-   * @tparam T The data type of the tensor elements.
-   * @param idx_lt The input tensor whose elements are to be filtered.
+   * @param idx_lt The input indices tensor.
    * @param output_gm Output GM index to be written with gathered values
-   * @param start first value of the idx_array
-   * @param end Last value of the idx_array
-   * @param this_tile_len the length of the current tile (always the
+   * @param start Index to start reading values from `values_in` GM array.
+   * @param end Last index of reading `values_in` GM entries.
+   * @param this_tile_len current tile length of `idx_in` (always the
    * same as tile_len_, except possibly for the last tile)
    */
-
   __aicore__ inline void HandleSingleTile(LocalTensor<uint32_t> &idx_lt,
                                           uint32_t output_gm, uint32_t start,
                                           uint32_t end,
                                           uint32_t this_tile_len) {
     const uint32_t es_diff = end - start + 1;
+
     LocalTensor<DataType> z_lt = output_q_.AllocTensor<DataType>();
 
     copy::CopyGmToVec(values_q_gather_, global_values_[start], es_diff);
@@ -161,57 +145,50 @@ class KernelMcGather {
    * tile_len_ computed through masking, and a final subtile, possibly smaller
    * than tile_len_
    *
-   * @param [in] idx_lt The input tensor whose elements are to be filtered.
    * @param [out] output_gm Output GM index to be written with gathered values
-   * @param [in] start first value of the idx_array
-   * @param [in] end Last value of the idx_array
    * @param [in] this_tile_len the length of the current tile (always the
    * same as tile_len_, except possibly for the last tile)
    */
-  __aicore__ inline void HandleMultipleTiles(LocalTensor<uint32_t> &idx_lt,
-                                             uint32_t output_gm, uint32_t start,
-                                             uint32_t end,
+  __aicore__ inline void HandleMultipleTiles(uint32_t output_gm,
                                              uint32_t this_tile_len) {
+    LocalTensor<uint32_t> idx_lt = idx_q_.DeQue<uint32_t>();
+
+    const uint32_t start = idx_lt.GetValue(0);
+    const uint32_t end = idx_lt.GetValue(this_tile_len - 1);
+
     uint32_t new_start = start;
-    uint64_t gathered_size = 0;
     uint32_t gathered_count = 0;
 
-    while (end - new_start >= value_tile_size_) {
-      LocalTensor<DataType> z_lt = output_q_.AllocTensor<DataType>();
+    while (end - new_start >= ValueTileSize) {
       const uint32_t threshold_down = idx_lt.GetValue(gathered_count) - 1;
-      const uint32_t threshold_up = threshold_down + value_tile_size_;
+      const uint32_t threshold_up = threshold_down + ValueTileSize;
+      uint64_t gathered_size = 0;
 
       // Filter Indexes -> find idx subtile
       LocalTensor<uint32_t> gathered_idx_lt = FilterTileInterval(
           idx_lt, threshold_up, threshold_down, gathered_size, this_tile_len);
+
       new_start = gathered_idx_lt.GetValue(0);
       const uint32_t subtile_size = static_cast<uint32_t>(gathered_size);
       const uint32_t local_end = gathered_idx_lt.GetValue(subtile_size - 1);
 
-      copy::CopyGmToVec(values_q_gather_, global_values_[new_start],
-                        local_end - new_start + 1);
-
-      LocalTensor<DataType> fetched_values = values_q_gather_.DeQue<DataType>();
-      // Gather values using idx subtile
-      GatherWithOffset<DataType>(z_lt, gathered_idx_lt, fetched_values,
-                                 new_start, subtile_size);
-
-      // Write the output
-      output_q_.EnQue<DataType>(z_lt);
-      copy::CopyVecToGm(global_z_[output_gm], output_q_, subtile_size);
+      HandleSingleTile(gathered_idx_lt, output_gm, new_start, local_end,
+                       subtile_size);
 
       // Update Addresses and prepare next operation
-      values_q_gather_.FreeTensor<DataType>(fetched_values);
       output_gm = output_gm + subtile_size;
       gathered_count += gathered_size;
       new_start = idx_lt.GetValue(gathered_count);
       gathered_mask_buff_.FreeTensor<uint32_t>(gathered_idx_lt);
     }
     idx_q_.FreeTensor<uint32_t>(idx_lt);
+
     const uint32_t partial_tile_len = this_tile_len - gathered_count;
     copy::CopyGmToVec(idx_q_, global_idx_[output_gm], partial_tile_len);
     LocalTensor<uint32_t> sub_idx_lt = idx_q_.DeQue<uint32_t>();
     HandleSingleTile(sub_idx_lt, output_gm, new_start, end, partial_tile_len);
+
+    idx_q_.FreeTensor<uint32_t>(sub_idx_lt);
   }
 
   /**
@@ -342,7 +319,6 @@ class KernelMcGather {
   const uint32_t tile_len_;
   const uint32_t num_tiles_idx_;
   const uint32_t max_num_tiles_per_block_idx_;
-  constexpr static uint32_t value_tile_size_ = 32768;
 };
 
 /**

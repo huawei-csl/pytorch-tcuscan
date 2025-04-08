@@ -27,6 +27,15 @@ NPU_DEVICE = os.environ.get("NPU_DEVICE", "npu:1")
 torch.npu.config.allow_internal_format = False
 torch.npu.set_device(NPU_DEVICE)
 
+DEVICE = os.environ.get("DEVICE_TYPE", "npu")
+if DEVICE == "npu":
+    import torch_npu  # noqa
+
+    NPU_DEVICE = "npu:1"
+    torch.npu.config.allow_internal_format = False
+    torch.npu.set_device(NPU_DEVICE)
+    assert torch.npu.is_available()
+
 _MULTIPLIER = [1, 2, 3, 5, 8, 9, 12, 16, 20, 25]
 
 
