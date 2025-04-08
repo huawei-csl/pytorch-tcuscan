@@ -9,6 +9,32 @@ import ssgetpy
 
 SS_HOME = os.environ.get("SPARSE_SUITE_HOME", f"{os.getenv('HOME')}/.ssgetpy/")
 
+_SPARSE_SUITE_MATRIX_IDS = [
+    1599,
+    369,
+    2380,
+    1385,
+    2377,
+    2379,
+    2276,
+    1362,
+    1353,
+    2442,
+    2443,
+    1279,
+    2376,
+    544,
+    2373,
+    2374,
+    2375,
+    2378,
+    1321,
+    374,
+    1599,
+    1419,
+    1598,
+]
+
 
 def main():
 
@@ -21,7 +47,7 @@ def main():
     # Example 3: Download list of matrices by ids
     downloaded_mats = []
     print(f"Writing to {SS_HOME}")
-    for matrix_id in [2373, 2375, 374, 1598, 1599, 1385]:
+    for matrix_id in _SPARSE_SUITE_MATRIX_IDS:
         matrix = ssgetpy.fetch(matrix_id, location=SS_HOME)[0]
         print(f"Downloading SS Matrix: {matrix.name}")
         file_location, _ = matrix.download(extract=True, destpath=SS_HOME)

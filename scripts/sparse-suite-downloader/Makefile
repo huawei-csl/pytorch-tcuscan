@@ -1,8 +1,11 @@
 .PHONY: all clean
 
+
+SPARSE_SUITE_HOME=/scratch/TCUSCAN/sparse-suite-matrices/ssgetpy-downloaded-matrices/
+
 all:
 	pip install ssgetpy
-	python3 download-sparse-suite-matrices.py
+	export SPARSE_SUITE_HOME=${SPARSE_SUITE_HOME} && python3 download-sparse-suite-matrices.py
 
 
 clean:
