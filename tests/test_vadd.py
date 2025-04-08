@@ -8,6 +8,7 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # ===============================================================================
 
+import os
 import random
 
 import numpy as np
@@ -21,7 +22,9 @@ random.seed(42)
 torch.manual_seed(42)
 np.random.seed(42)
 
+NPU_DEVICE = os.environ.get("NPU_DEVICE", "npu:1")
 torch.npu.config.allow_internal_format = False
+torch.npu.set_device(NPU_DEVICE)
 
 VEC_LENS = [
     256,

@@ -95,6 +95,8 @@ build:
   tags:
     - baremetal
   stage: build
+  before_script:
+    - echo "Override script. Do not mutate pip config."
   script:
     - make setup_ci
     - make build
@@ -108,6 +110,8 @@ build:
 .test_config: &test_config
   tags:
     - baremetal
+  before_script:
+    - echo "Override script. Do not mutate pip config."
   stage: tests
   needs: [build]
   dependencies: [build]
@@ -226,6 +230,8 @@ unit_test:
     - baremetal
   stage: test_all
   dependencies: []
+  before_script:
+    - echo "Override script. Do not mutate pip config."
   script:
     - make setup_ci
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make build test

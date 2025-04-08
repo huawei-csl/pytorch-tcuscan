@@ -8,6 +8,7 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # ===============================================================================
 
+import os
 from math import ceil
 
 import pytest
@@ -16,8 +17,9 @@ import torch_npu  # noqa
 import tcuscan_ops
 import torch
 
+NPU_DEVICE = os.environ.get("NPU_DEVICE", "npu:1")
 torch.npu.config.allow_internal_format = False
-
+torch.npu.set_device(NPU_DEVICE)
 
 _CSR_GATHER_SIZES = [
     16 * 1024,

@@ -8,13 +8,19 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # ===============================================================================
 
-import pytest
-import torch
-import torch_npu  # noqa
+import os
 
-from scipy.sparse import random
 import numpy as np
+import pytest
+import torch_npu  # noqa
+from scipy.sparse import random
+
 import tcuscan_ops
+import torch
+
+NPU_DEVICE = os.environ.get("NPU_DEVICE", "npu:1")
+torch.npu.config.allow_internal_format = False
+torch.npu.set_device(NPU_DEVICE)
 
 _NROW = [
     1024 * 1,
