@@ -36,7 +36,7 @@ if DEVICE == "npu":
     torch.npu.set_device(NPU_DEVICE)
     assert torch.npu.is_available()
 
-_MULTIPLIER = [1, 2, 3, 5, 8, 9, 12, 16, 20, 25]
+_MULTIPLIER = [1, 2, 4, 5, 10, 15, 20, 25, 30, 45, 60]
 
 
 def _test_tcuscan_mcgather(s: int, nnz: int, idx_len: int):

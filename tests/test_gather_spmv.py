@@ -22,16 +22,17 @@ random.seed(42)
 torch.manual_seed(42)
 np.random.seed(42)
 
-NPU_DEVICE = os.environ.get("NPU_DEVICE", "npu:1")
+NPU_DEVICE = os.environ.get("NPU_DEVICE", "npu:0")
 torch.npu.config.allow_internal_format = False
 torch.npu.set_device(NPU_DEVICE)
 
-_MULTIPLIER = [1, 2, 3, 5, 8, 9, 12, 16, 20]
+_MULTIPLIER = [1, 2, 4, 5, 10, 15, 20, 25, 30, 45, 60]
 
 
 def _test_tcuscan_gather_spmv(s: int, nnz: int, idx_len: int):
     data_type = np.float32
     index_type = np.uint32
+
     shape = nnz
     cols_id_shape = idx_len
 

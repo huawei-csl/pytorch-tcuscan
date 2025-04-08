@@ -234,26 +234,28 @@ class KernelMcGather {
 
     LocalTensor<uint8_t> mask_up_lt = mask_up_buf_.Get<uint8_t>();
     LocalTensor<uint8_t> mask_down_lt = mask_down_buf_.Get<uint8_t>();
-    LocalTensor<uint8_t> mask_lt = mask_buf_.Get<uint8_t>();
+    LocalTensor<uint16_t> mask_lt = mask_buf_.Get<uint16_t>();
 
     if (this_tile_len < tile_len_) {
       Duplicate<uint16_t>(mask_up_lt.template ReinterpretCast<uint16_t>(), 0,
                           tile_len_);
       Duplicate<uint16_t>(mask_down_lt.template ReinterpretCast<uint16_t>(), 0,
                           tile_len_);
-      Duplicate<uint16_t>(mask_lt.template ReinterpretCast<uint16_t>(), 0,
-                          tile_len_);
+      Duplicate<uint16_t>(mask_lt, 0, tile_len_);
     }
 
     Compare(mask_up_lt, idx_lt.template ReinterpretCast<float>(),
             threshold_up_lt.template ReinterpretCast<float>(), CMPMODE::LT,
-            this_tile_len);
+            tile_len_);  // Compares needs to handle the whole tile_len_. The
+                         // AND takes care of partial tiles.
 
     Compare(mask_down_lt, idx_lt.template ReinterpretCast<float>(),
             threshold_down_lt.template ReinterpretCast<float>(), CMPMODE::GT,
-            this_tile_len);
+            tile_len_);  /// Compares needs to handle the whole tile_len_. The
+                         /// AND takes care of partial tiles.
 
-    And(mask_lt, mask_up_lt, mask_down_lt, this_tile_len);
+    And(mask_lt, mask_up_lt.template ReinterpretCast<uint16_t>(),
+        mask_down_lt.template ReinterpretCast<uint16_t>(), this_tile_len);
     LocalTensor<uint32_t> gathered_idx_lt = gathered_mask_buff_.Get<uint32_t>();
     GatherMask(gathered_idx_lt, idx_lt,
                mask_lt.template ReinterpretCast<uint32_t>(), true,

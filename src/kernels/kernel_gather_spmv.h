@@ -130,8 +130,8 @@ class KernelGatherSpmv {
       } else {
         HandleMultipleTiles(idx_lt, output_gm, start, end, this_tile_len);
       }
+      idx_q_.FreeTensor<uint32_t>(idx_lt);
     }
-    idx_q_.FreeTensor<uint32_t>(idx_lt);
   }
 
   /**
@@ -171,8 +171,10 @@ class KernelGatherSpmv {
         copy::CopyGmToVec(idx_q_, global_idx_[output_gm], partial_tile_len);
         LocalTensor<uint32_t> sub_idx_lt = idx_q_.DeQue<uint32_t>();
         HandleSingleTile(sub_idx_lt, output_gm, start, end, partial_tile_len);
+        idx_q_.FreeTensor<uint32_t>(sub_idx_lt);
       } else {
         HandleMultipleTiles(idx_lt, output_gm, start, end, this_tile_len);
+        idx_q_.FreeTensor<uint32_t>(idx_lt);
       }
     }
   }
@@ -196,7 +198,6 @@ class KernelGatherSpmv {
                                           uint32_t this_tile_len) {
     const uint32_t es_diff = end - start + 1;
     LocalTensor<DataType> z_lt = output_q_.AllocTensor<DataType>();
-
     copy::CopyGmToVec(values_q_gather_, global_values_[start - 1], es_diff);
     LocalTensor<DataType> sync_fetched_values =
         values_q_gather_.DeQue<DataType>();
@@ -230,31 +231,23 @@ class KernelGatherSpmv {
     uint32_t new_start = start;
     uint64_t gathered_size = 0;
     uint32_t gathered_count = 0;
-
     if (start != idx_lt.GetValue(0)) {
       gathered_count = output_gm;
     }
 
     while (end - new_start >= value_tile_size_) {
-      LocalTensor<DataType> z_lt = output_q_.AllocTensor<DataType>();
       const uint32_t threshold_down = idx_lt.GetValue(gathered_count) - 1;
       const uint32_t threshold_up = threshold_down + value_tile_size_;
 
       LocalTensor<uint32_t> gathered_idx_lt = FilterTileInterval(
           idx_lt, threshold_up, threshold_down, gathered_size, this_tile_len);
-      new_start = gathered_idx_lt.GetValue(0);
+
       const uint32_t subtile_size = static_cast<uint32_t>(gathered_size);
+      new_start = gathered_idx_lt.GetValue(0);
       const uint32_t local_end = gathered_idx_lt.GetValue(subtile_size - 1);
-      copy::CopyGmToVec(values_q_gather_, global_values_[new_start - 1],
-                        local_end - new_start + 1);
+      HandleSingleTile(gathered_idx_lt, output_gm, new_start, local_end,
+                       subtile_size);
 
-      LocalTensor<DataType> fetched_values = values_q_gather_.DeQue<DataType>();
-      GatherWithOffset<DataType>(z_lt, gathered_idx_lt, fetched_values,
-                                 new_start, subtile_size);
-      output_q_.EnQue<DataType>(z_lt);
-      copy::CopyVecToGm(global_z_[output_gm], output_q_, subtile_size);
-
-      values_q_gather_.FreeTensor<DataType>(fetched_values);
       output_gm = output_gm + subtile_size;
       gathered_count += gathered_size;
       new_start = idx_lt.GetValue(gathered_count);
@@ -265,6 +258,7 @@ class KernelGatherSpmv {
     copy::CopyGmToVec(idx_q_, global_idx_[output_gm], partial_tile_len);
     LocalTensor<uint32_t> sub_idx_lt = idx_q_.DeQue<uint32_t>();
     HandleSingleTile(sub_idx_lt, output_gm, new_start, end, partial_tile_len);
+    // idx_q_.FreeTensor<uint32_t>(sub_idx_lt);
   }
   /**
    * @brief Filters an input tensor based on a upper and lower threshold
@@ -309,26 +303,28 @@ class KernelGatherSpmv {
 
     LocalTensor<uint8_t> mask_up_lt = mask_up_buf_.Get<uint8_t>();
     LocalTensor<uint8_t> mask_down_lt = mask_down_buf_.Get<uint8_t>();
-    LocalTensor<uint8_t> mask_lt = mask_buf_.Get<uint8_t>();
+    LocalTensor<uint16_t> mask_lt = mask_buf_.Get<uint16_t>();
 
     if (this_tile_len < tile_len_) {
       Duplicate<uint16_t>(mask_up_lt.template ReinterpretCast<uint16_t>(), 0,
                           tile_len_);
       Duplicate<uint16_t>(mask_down_lt.template ReinterpretCast<uint16_t>(), 0,
                           tile_len_);
-      Duplicate<uint16_t>(mask_lt.template ReinterpretCast<uint16_t>(), 0,
-                          tile_len_);
+      Duplicate<uint16_t>(mask_lt, 0, tile_len_);
     }
 
     Compare(mask_up_lt, idx_lt.template ReinterpretCast<float>(),
             threshold_up_lt.template ReinterpretCast<float>(), CMPMODE::LT,
-            this_tile_len);
+            tile_len_);  // Compares needs to handle the whole tile_len_. The
+                         // AND takes care of partial tiles.
 
     Compare(mask_down_lt, idx_lt.template ReinterpretCast<float>(),
             threshold_down_lt.template ReinterpretCast<float>(), CMPMODE::GT,
-            this_tile_len);
+            tile_len_);  // Compares needs to handle the whole tile_len_. The
+                         // AND takes care of partial tiles.
 
-    And(mask_lt, mask_up_lt, mask_down_lt, this_tile_len);
+    And(mask_lt, mask_up_lt.template ReinterpretCast<uint16_t>(),
+        mask_down_lt.template ReinterpretCast<uint16_t>(), this_tile_len);
     LocalTensor<uint32_t> gathered_idx_lt = gathered_mask_buff_.Get<uint32_t>();
     GatherMask(gathered_idx_lt, idx_lt,
                mask_lt.template ReinterpretCast<uint32_t>(), true,
