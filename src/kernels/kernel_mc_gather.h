@@ -160,7 +160,7 @@ class KernelMcGather {
     uint32_t gathered_count = 0;
 
     while (end - new_start >= ValueTileSize) {
-      const uint32_t threshold_down = idx_lt.GetValue(gathered_count) - 1;
+      const uint32_t threshold_down = idx_lt.GetValue(gathered_count);
       const uint32_t threshold_up = threshold_down + ValueTileSize;
       uint64_t gathered_size = 0;
 
@@ -250,7 +250,7 @@ class KernelMcGather {
                          // AND takes care of partial tiles.
 
     Compare(mask_down_lt, idx_lt.template ReinterpretCast<float>(),
-            threshold_down_lt.template ReinterpretCast<float>(), CMPMODE::GT,
+            threshold_down_lt.template ReinterpretCast<float>(), CMPMODE::GE,
             tile_len_);  /// Compares needs to handle the whole tile_len_. The
                          /// AND takes care of partial tiles.
 
