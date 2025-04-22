@@ -2,7 +2,7 @@
 
 DENSITY?=0.001
 LOCAL_SPARSE_MATRIX_NAME?='Williams/pdb1HYS/pdb1HYS'
-BASE_SPARSE_MATRIX_PATH?=${HOME}/.ssgetpy/MM/
+BASE_SPARSE_MATRIX_PATH?=/scratch/TCUSCAN/sparse-suite-matrices/ssgetpy-downloaded-matrices/
 FULL_SPARSE_MATRIX_PATH=${BASE_SPARSE_MATRIX_PATH}${LOCAL_SPARSE_MATRIX_NAME}
 PROFILING_SCRIPTS_PATH=scripts/profiling/
 CONDA_ENV_NAME="pytorch_tcuscan"
@@ -139,15 +139,7 @@ profile_fp32_compress_real:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_sparse_matrices.py --bench compress --s 64  --matrixpath ${FULL_SPARSE_MATRIX_PATH} --dtype fp32
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_sparse_matrices.py --bench compress --s 128 --matrixpath ${FULL_SPARSE_MATRIX_PATH} --dtype fp32
 
-profile_mcscan_real:
-	python3 ${PROFILING_SCRIPTS_PATH}/profile_sparse_matrices.py --bench mcscan --s 32  --matrixpath ${FULL_SPARSE_MATRIX_PATH} --dtype fp16
-	python3 ${PROFILING_SCRIPTS_PATH}/profile_sparse_matrices.py --bench mcscan --s 64  --matrixpath ${FULL_SPARSE_MATRIX_PATH} --dtype fp16
-	python3 ${PROFILING_SCRIPTS_PATH}/profile_sparse_matrices.py --bench mcscan --s 128 --matrixpath ${FULL_SPARSE_MATRIX_PATH} --dtype fp16
-
 profile_fp16_diff_real:
-	python3 ${PROFILING_SCRIPTS_PATH}/profile_sparse_matrices.py --bench diff --matrixpath ${FULL_SPARSE_MATRIX_PATH} --dtype fp16
-
-profile_fp32_diff_real:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_sparse_matrices.py --bench diff --matrixpath ${FULL_SPARSE_MATRIX_PATH} --dtype fp16
 
 profile_fp32_revert_mcscan:
@@ -265,10 +257,43 @@ profile_fp16_spmv:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_random_matrices.py --bench spmv --dtype fp16 --prob Uniform --num_cores 20 --s 128 --density 0.001
 
 profile_fp16_spmv_real:
-	python3 ${PROFILING_SCRIPTS_PATH}/profile_sparse_matrices.py --bench spmv --s 128  --matrixpath ${BASE_SPARSE_MATRIX_PATH}/Williams/pdb1HYS/pdb1HYS --dtype fp16
-	python3 ${PROFILING_SCRIPTS_PATH}/profile_sparse_matrices.py --bench spmv --s 128  --matrixpath ${BASE_SPARSE_MATRIX_PATH}/Bova/rma10/rma10 --dtype fp16
-	python3 ${PROFILING_SCRIPTS_PATH}/profile_sparse_matrices.py --bench spmv --s 128  --matrixpath ${BASE_SPARSE_MATRIX_PATH}/QCD/conf5_4-8x8-05/conf5_4-8x8-05 --dtype fp16
-	python3 ${PROFILING_SCRIPTS_PATH}/profile_sparse_matrices.py --bench spmv --s 128  --matrixpath ${BASE_SPARSE_MATRIX_PATH}/QCD/conf5_4-8x8-10/conf5_4-8x8-10 --dtype fp16
-	python3 ${PROFILING_SCRIPTS_PATH}/profile_sparse_matrices.py --bench spmv --s 128  --matrixpath ${BASE_SPARSE_MATRIX_PATH}/Andrianov/mip1/mip1 --dtype fp16
-	python3 ${PROFILING_SCRIPTS_PATH}/profile_sparse_matrices.py --bench spmv --s 128  --matrixpath ${BASE_SPARSE_MATRIX_PATH}/Williams/cant/cant --dtype fp16
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_sparse_matrices.py --bench spmv --s 128  --matrixpath ${BASE_SPARSE_MATRIX_PATH}pdb1HYS/pdb1HYS --dtype fp16
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_sparse_matrices.py --bench spmv --s 128  --matrixpath ${BASE_SPARSE_MATRIX_PATH}rma10/rma10 --dtype fp16
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_sparse_matrices.py --bench spmv --s 128  --matrixpath ${BASE_SPARSE_MATRIX_PATH}conf5_4-8x8-05/conf5_4-8x8-05 --dtype fp16
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_sparse_matrices.py --bench spmv --s 128  --matrixpath ${BASE_SPARSE_MATRIX_PATH}conf5_4-8x8-10/conf5_4-8x8-10 --dtype fp16
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_sparse_matrices.py --bench spmv --s 128  --matrixpath ${BASE_SPARSE_MATRIX_PATH}mip1/mip1 --dtype fp16
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_sparse_matrices.py --bench spmv --s 128  --matrixpath ${BASE_SPARSE_MATRIX_PATH}cant/cant --dtype fp16
 
+profile_fp16_csr_gather_real:
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_sparse_matrices.py --bench csr_gather  --matrixpath ${BASE_SPARSE_MATRIX_PATH}pdb1HYS/pdb1HYS --dtype fp16
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_sparse_matrices.py --bench csr_gather  --matrixpath ${BASE_SPARSE_MATRIX_PATH}rma10/rma10 --dtype fp16
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_sparse_matrices.py --bench csr_gather  --matrixpath ${BASE_SPARSE_MATRIX_PATH}conf5_4-8x8-05/conf5_4-8x8-05 --dtype fp16
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_sparse_matrices.py --bench csr_gather  --matrixpath ${BASE_SPARSE_MATRIX_PATH}conf5_4-8x8-10/conf5_4-8x8-10 --dtype fp16
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_sparse_matrices.py --bench csr_gather  --matrixpath ${BASE_SPARSE_MATRIX_PATH}mip1/mip1 --dtype fp16
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_sparse_matrices.py --bench csr_gather  --matrixpath ${BASE_SPARSE_MATRIX_PATH}cant/cant --dtype fp16
+
+profile_mcscan_real:
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_sparse_matrices.py --bench mcscan --s 128  --matrixpath ${BASE_SPARSE_MATRIX_PATH}pdb1HYS/pdb1HYS --dtype fp16
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_sparse_matrices.py --bench mcscan --s 128  --matrixpath ${BASE_SPARSE_MATRIX_PATH}rma10/rma10 --dtype fp16
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_sparse_matrices.py --bench mcscan --s 128  --matrixpath ${BASE_SPARSE_MATRIX_PATH}conf5_4-8x8-05/conf5_4-8x8-05 --dtype fp16
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_sparse_matrices.py --bench mcscan --s 128  --matrixpath ${BASE_SPARSE_MATRIX_PATH}conf5_4-8x8-10/conf5_4-8x8-10 --dtype fp16
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_sparse_matrices.py --bench mcscan --s 128  --matrixpath ${BASE_SPARSE_MATRIX_PATH}mip1/mip1 --dtype fp16
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_sparse_matrices.py --bench mcscan --s 128  --matrixpath ${BASE_SPARSE_MATRIX_PATH}cant/cant --dtype fp16
+
+profile_fp32_gather_spmv_real:
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_sparse_matrices.py --bench gather_spmv --s 128  --matrixpath ${BASE_SPARSE_MATRIX_PATH}pdb1HYS/pdb1HYS --dtype fp32
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_sparse_matrices.py --bench gather_spmv --s 128  --matrixpath ${BASE_SPARSE_MATRIX_PATH}rma10/rma10 --dtype fp32
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_sparse_matrices.py --bench gather_spmv --s 128  --matrixpath ${BASE_SPARSE_MATRIX_PATH}conf5_4-8x8-05/conf5_4-8x8-05 --dtype fp32
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_sparse_matrices.py --bench gather_spmv --s 128  --matrixpath ${BASE_SPARSE_MATRIX_PATH}conf5_4-8x8-10/conf5_4-8x8-10 --dtype fp32
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_sparse_matrices.py --bench gather_spmv --s 128  --matrixpath ${BASE_SPARSE_MATRIX_PATH}mip1/mip1 --dtype fp32
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_sparse_matrices.py --bench gather_spmv --s 128  --matrixpath ${BASE_SPARSE_MATRIX_PATH}cant/cant --dtype fp32
+
+profile_fp32_diff_real:
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_sparse_matrices.py --bench diff --matrixpath ${BASE_SPARSE_MATRIX_PATH}pdb1HYS/pdb1HYS --dtype fp32
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_sparse_matrices.py --bench diff --matrixpath ${BASE_SPARSE_MATRIX_PATH}rma10/rma10 --dtype fp32
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_sparse_matrices.py --bench diff --matrixpath ${BASE_SPARSE_MATRIX_PATH}conf5_4-8x8-05/conf5_4-8x8-05 --dtype fp32
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_sparse_matrices.py --bench diff --matrixpath ${BASE_SPARSE_MATRIX_PATH}conf5_4-8x8-10/conf5_4-8x8-10 --dtype fp32
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_sparse_matrices.py --bench diff --matrixpath ${BASE_SPARSE_MATRIX_PATH}mip1/mip1 --dtype fp32
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_sparse_matrices.py --bench diff --matrixpath ${BASE_SPARSE_MATRIX_PATH}cant/cant --dtype fp32
+
+breakdown_spmv: profile_fp16_spmv_real profile_fp16_csr_gather_real profile_mcscan_real profile_fp32_gather_spmv_real profile_fp32_diff_real

@@ -53,40 +53,6 @@ file_handler = logging.FileHandler(filename="torch_profiler.log")
 stdout_handler = logging.StreamHandler(stream=sys.stdout)
 handlers = [file_handler, stdout_handler]
 
-# _MULTIPLIER = [1, 2, 3, 5, 8, 9, 12, 16, 24, 32]
-_MULTIPLIER = [
-    1,
-    2,
-    3,
-    4,
-    5,
-    6,
-    7,
-    8,
-    9,
-    10,
-    11,
-    12,
-    13,
-    14,
-    15,
-    16,
-    24,
-    32,
-    44,
-    56,
-    68,
-    80,
-    100,
-    120,
-    140,
-    160,
-    180,
-    200,
-    500,
-    1000,
-]
-
 logging.basicConfig(
     level=logging.INFO,
     format="[%(asctime)s] {%(filename)s:%(lineno)d} %(levelname)s - %(message)s",
@@ -242,19 +208,21 @@ def compress_benchmark(device: Device, x: torch.Tensor, f: torch.Tensor, s: int)
     return _run_benchmark(device, run_compress)
 
 
-def mcscan_benchmark(device: Device, x: torch.Tensor, s: int) -> float:
+def mcscan_benchmark(device: Device, B: csr_matrix, s: int) -> float:
     """
     Benchmark TCUSCAN multi-core scan kernel.
 
     Args:
         device: Device to run benchmark on.
-        x: Input value tensor
+        B: Input CSR Matrix
         s: Matrix size tiling parameter.
 
     Returns:
         Average time in microseconds.
     """
-    x_npu = x.npu()
+
+    vals = torch.from_numpy((B.data).astype(np.float16))
+    x_npu = vals.npu()
 
     def run_scan() -> None:
         _ = tcuscan_ops.run_scan_multi_core(x_npu, s)
@@ -262,7 +230,7 @@ def mcscan_benchmark(device: Device, x: torch.Tensor, s: int) -> float:
     return _run_benchmark(device, run_scan)
 
 
-def baseline_diff_benchmark(device: Device, x: torch.Tensor) -> float:
+def baseline_diff_benchmark(device: Device, B: csr_matrix) -> float:
     """
     Benchmark vector diff kernel with torch.
 
@@ -273,14 +241,27 @@ def baseline_diff_benchmark(device: Device, x: torch.Tensor) -> float:
     Returns:
         Average time in microseconds.
     """
+    vals = torch.from_numpy((B.data).astype(np.float32))
+    vals_npu = vals.npu()
 
     def run_diff() -> None:
-        _ = torch.diff(x)
+        _ = torch.diff(vals_npu)
 
     return _run_benchmark(device, run_diff)
 
 
-def baseline_spmv(device: Device, B: csr_matrix, s: int):
+def spmv_benchmark(device: Device, B: csr_matrix, s: int):
+    """
+    Benchmark TCUSCAN SpMV kernel.
+
+    Args:
+        device: Device to run benchmark on.
+        B: Input CSR Matrix
+        s: Matrix size tiling parameter.
+
+    Returns:
+        Average time in microseconds.
+    """
     rng = np.random.default_rng(seed=42)
     vals = torch.from_numpy((B.data).astype(np.float16))
     idx = torch.from_numpy((B.indptr).astype(np.uint32))
@@ -296,6 +277,56 @@ def baseline_spmv(device: Device, B: csr_matrix, s: int):
         _ = tcuscan_ops.run_spmv(vals_npu, idx_npu, col_npu, vec_npu, s)
 
     return _run_benchmark(device, run_spmv)
+
+
+def csr_gather_benchmark(device: Device, B: csr_matrix):
+    """
+    Benchmark TCUSCAN multi-core csr_gather kernel.
+
+    Args:
+        device: Device to run benchmark on.
+        B: Input CSR Matrix
+
+    Returns:
+        Average time in microseconds.
+    """
+
+    rng = np.random.default_rng(seed=42)
+    vals = torch.from_numpy((B.data).astype(np.float16))
+    idx = torch.from_numpy((B.indptr).astype(np.uint32))
+    cols = torch.from_numpy((B.indices).astype(np.uint32))
+    vector = torch.from_numpy(rng.uniform(1, 9, len(idx) - 1).astype(np.float16))
+    vals_npu = vals.npu()
+    col_npu = cols.npu()
+    vec_npu = vector.npu()
+
+    def run_csr_gather():
+        _ = tcuscan_ops.run_csr_gather(vals_npu, col_npu, vec_npu)
+
+    return _run_benchmark(device, run_csr_gather)
+
+
+def gather_spmv_benchmark(device: Device, B: csr_matrix, s: int):
+    """
+    Benchmark TCUSCAN multi-core gather_spmv kernel.
+
+    Args:
+        device: Device to run benchmark on.
+        B: Input CSR Matrix
+        s: tile size for the vector gather spmv
+
+    Returns:
+        Average time in microseconds.
+    """
+    vals = torch.from_numpy((B.data).astype(np.float32))
+    idx = torch.from_numpy((B.indptr).astype(np.uint32))
+    vals_npu = vals.npu()
+    idx_npu = idx.npu()
+
+    def run_gather_spmv():
+        _ = tcuscan_ops.run_gather_spmv(vals_npu, idx_npu, s)
+
+    return _run_benchmark(device, run_gather_spmv)
 
 
 def benchmark(
@@ -341,6 +372,8 @@ if __name__ == "__main__":
             "diff",
             "vec_seg_scan_sc",
             "spmv",
+            "csr_gather",
+            "gather_spmv",
         ],
     )
     parser.add_argument("--dtype", choices=["int8", "fp16", "int16", "fp32"])
@@ -360,8 +393,6 @@ if __name__ == "__main__":
     max_size = args.max_size
     num_cores = args.num_cores
     s = args.s
-    my_x = pad_to_multiple(my_x, s)
-    my_f = pad_to_multiple(my_f, s)
     if DEVICE == "npu":
         device = Device(torch.npu, NPU_DEVICE)
     elif DEVICE == "cpu":
@@ -404,15 +435,13 @@ if __name__ == "__main__":
             device,
             f"mcscan_{s}",
             dtype,
-            partial(mcscan_benchmark, x=my_x, s=s),
+            partial(mcscan_benchmark, B=B, s=s),
             bench_name,
         )
     elif bench == "diff" and dtype in ["fp16", "fp32"]:
         bench_name = fullpath.split("/")[-1]
-        my_x = pad_to_multiple(my_x, s)
-        my_f = pad_to_multiple(my_f, s)
         benchmark(
-            device, "diff", dtype, partial(baseline_diff_benchmark, x=my_x), bench_name
+            device, "diff", dtype, partial(baseline_diff_benchmark, B=B), bench_name
         )
     elif bench == "spmv" and dtype in ["fp16"]:
         bench_name = fullpath.split("/")[-1]
@@ -421,7 +450,32 @@ if __name__ == "__main__":
             f"spmv_{s}",
             dtype,
             partial(
-                baseline_spmv,
+                spmv_benchmark,
+                B=B,
+                s=s,
+            ),
+            bench_name,
+        )
+    elif bench == "csr_gather" and dtype in ["fp16"]:
+        bench_name = fullpath.split("/")[-1]
+        benchmark(
+            device,
+            "csr_gather",
+            dtype,
+            partial(
+                csr_gather_benchmark,
+                B=B,
+            ),
+            bench_name,
+        )
+    elif bench == "gather_spmv" and dtype in ["fp32"]:
+        bench_name = fullpath.split("/")[-1]
+        benchmark(
+            device,
+            f"gather_spmv_{s}",
+            dtype,
+            partial(
+                gather_spmv_benchmark,
                 B=B,
                 s=s,
             ),
