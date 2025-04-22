@@ -1,9 +1,9 @@
 #!/bin/bash
-
+export OMP_NUM_THREADS=32
 # You must download the sparse suite matrices first using `sparse-suite-downloader`.
 BASE=/scratch/TCUSCAN/sparse-suite-matrices/ssgetpy-downloaded-matrices
 EXECUTABLE=run.py
-CONDA_ENV=baseline-mkl
+CONDA_ENV=mkl_env
 
 # ID: 2373
 conda run -n ${CONDA_ENV} python3 ${EXECUTABLE} ${BASE}/pdb1HYS/pdb1HYS.mtx

@@ -1,0 +1,5 @@
+#!/bin/bash
+
+export THREADS_TO_USE=32
+export OMP_NUM_THREADS=${THREADS_TO_USE}
+export MKL_NUM_THREADS=${THREADS_TO_USE}
