@@ -15,7 +15,9 @@
 #include "../tiling/tiling_scan_single_core.h"
 #include "aclrtlaunch_scan_batch.h"
 #include "aclrtlaunch_scan_multi_core_fp16.h"
+#include "aclrtlaunch_scan_multi_core_fp16_no_l2.h"
 #include "aclrtlaunch_scan_multi_core_int8.h"
+#include "aclrtlaunch_scan_multi_core_int8_no_l2.h"
 #include "aclrtlaunch_scan_single_core_fp16.h"
 #include "aclrtlaunch_scan_single_core_int8.h"
 #include "commons.h"
@@ -168,6 +170,73 @@ at::Tensor run_scan_multi_core(const at::Tensor &x, int S) {
         alloc_workspace(user_workspace_size, device);
 
     ACLRT_LAUNCH_KERNEL(scan_multi_core_int8)
+    (blockDim, acl_stream, const_cast<void *>(x.storage().data()),
+     const_cast<void *>(z.storage().data()),
+     const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
+  }
+
+  aclrtFree(tiling_device);
+  aclrtSynchronizeStream(acl_stream);
+
+  return z;
+}
+
+/**
+ * @brief Returns the prefix sum (scan) of a 1D vector `x` without L2 splitting
+ * optimization.
+ *
+ * @param x Input 1D vector.
+ * @param S Tiling parameter. Typical values 32, 64, 128.
+ * @return The prefix sum of `x`
+ */
+at::Tensor run_scan_multi_core_no_l2(const at::Tensor &x, int S) {
+  const auto ascendc_platform =
+      platform_ascendc::PlatformAscendCManager::GetInstance(SOC_VERSION);
+  auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
+  const at::Device device = x.options().device();
+  const auto dtype = x.options().dtype();
+  const auto dtype_out =
+      dtype == torch::kHalf ? torch::kFloat32 : torch::kInt32;
+
+  const uint32_t matmul_size = static_cast<uint32_t>(S);
+  const uint32_t totalLength = x.numel();
+
+  // Output is always 32-bits (float or int32_t)
+  const at::Tensor z = at::empty(
+      {totalLength}, at::TensorOptions().dtype(dtype_out).device(device));
+
+  const uint32_t tile_elems = matmul_size * matmul_size;
+  const size_t num_tiles = host_utils::CeilDiv(totalLength, tile_elems);
+
+  uint32_t blockDim = ascendc_platform->GetCoreNum() / 2;
+  while (num_tiles % blockDim != 0) {
+    blockDim--;
+  }
+  if (blockDim <= 1) {
+    blockDim = 1;
+  }
+
+  const MultiCoreScanTiling tiling{blockDim, totalLength, matmul_size};
+  uint8_t *tiling_device = allocCopyTiling(tiling);
+
+  if (dtype == torch::kHalf) {
+    const uint32_t user_workspace_size =
+        workspace::mc_scan::GetWorkspaceSize<int16_t>(
+            tiling.num_elems, tiling.matmul_size, tiling.num_blocks);
+    const at::Tensor workspace_tensor =
+        alloc_workspace(user_workspace_size, device);
+    ACLRT_LAUNCH_KERNEL(scan_multi_core_fp16_no_l2)
+    (blockDim, acl_stream, const_cast<void *>(x.storage().data()),
+     const_cast<void *>(z.storage().data()),
+     const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
+  } else {
+    const uint32_t user_workspace_size =
+        workspace::mc_scan::GetWorkspaceSize<int8_t>(
+            tiling.num_elems, tiling.matmul_size, tiling.num_blocks);
+    const at::Tensor workspace_tensor =
+        alloc_workspace(user_workspace_size, device);
+
+    ACLRT_LAUNCH_KERNEL(scan_multi_core_int8_no_l2)
     (blockDim, acl_stream, const_cast<void *>(x.storage().data()),
      const_cast<void *>(z.storage().data()),
      const_cast<void *>(workspace_tensor.storage().data()), tiling_device);

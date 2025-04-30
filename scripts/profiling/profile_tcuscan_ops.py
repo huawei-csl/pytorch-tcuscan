@@ -17,8 +17,9 @@ from math import ceil
 from typing import Optional, Tuple
 
 import numpy as np
-import torch
 import torch.nn.functional as F
+
+import torch
 
 
 def pad_to_multiple(x: torch.Tensor, s: int):
@@ -413,6 +414,24 @@ def mcscan_benchmark(
     return _run_benchmark(device, run_scan), size
 
 
+def mcscan_no_l2_benchmark(
+    device: Device, size: int, dtype: torch.dtype, s: int
+) -> Tuple[float, int]:
+    if dtype == torch.float16:
+        x = torch.rand(size, device=device.str, dtype=dtype)
+    elif dtype == torch.int8:
+        x = torch.randint(
+            0, torch.iinfo(dtype).max, (size,), device=device.str, dtype=dtype
+        )
+    else:
+        raise RuntimeError(f"dtype {dtype} is not supported in TCUSCAN scan operator")
+
+    def run_scan_no_l2() -> None:
+        _ = tcuscan_ops.run_scan_multi_core_no_l2(x, s)
+
+    return _run_benchmark(device, run_scan_no_l2), size
+
+
 def seg_scan_mc_revert_benchmark(
     device: Device, size: int, dtype: torch.dtype, segm_density: float
 ) -> Tuple[float, int]:
@@ -523,6 +542,7 @@ if __name__ == "__main__":  # noqa
             "csr_gather",
             "seg_scan_sc",
             "mcscan",
+            "mcscan_no_l2",
             "compress",
             "segmented_sum",
             "custom_copy",
@@ -694,6 +714,16 @@ if __name__ == "__main__":  # noqa
             f"mcscan_{s}",
             dtype,
             partial(mcscan_benchmark, dtype=tdtype, s=s),
+            sizes,
+            density,
+        )
+    elif bench == "mcscan_no_l2" and dtype in ["fp16", "int8"]:
+        tdtype = STR_TO_DTYPE[dtype]
+        benchmark(
+            device,
+            f"mcscan_no_l2_{s}",
+            dtype,
+            partial(mcscan_no_l2_benchmark, dtype=tdtype, s=s),
             sizes,
             density,
         )

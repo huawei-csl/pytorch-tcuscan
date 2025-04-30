@@ -32,6 +32,8 @@ PYBIND11_MODULE(tcuscan_ops, m) {
   m.def("run_seg_scan", &asc::seg_ops::run_seg_scan, "Segmented Scan");
   m.def("run_scan_multi_core", &asc::scan::run_scan_multi_core,
         "Multi-core Scan");
+  m.def("run_scan_multi_core_no_l2", &asc::scan::run_scan_multi_core_no_l2,
+        "Multi-core Scan (no L2 cache optimization)");
   m.def("run_csr_gather", &asc::gather::run_csr_gather, "CSR gather");
   m.def("run_compress", &asc::compress::run_compress, "Compaction/compress");
   m.def("run_compress_pos", &asc::compress::run_compress_pos,
