@@ -14,6 +14,7 @@
 #include "torch/torch_copy.h"
 #include "torch/torch_diff.h"
 #include "torch/torch_gather.h"
+#include "torch/torch_matmul_cce.h"
 #include "torch/torch_scan.h"
 #include "torch/torch_seg_ops.h"
 #include "torch/torch_sort.h"
@@ -58,4 +59,7 @@ PYBIND11_MODULE(tcuscan_ops, m) {
         "Vector Multi Core Gather SPMV");
   m.def("run_radix_sort", &asc::sort::run_radix_sort,
         "Radix sort using cube units");
+  m.def("run_matmul_cce", &asc::matmul::matmul_cce,
+        "Matrix multiplication CCE kernel (B dimensions must be a multiple of "
+        "512)");
 }

@@ -231,6 +231,12 @@ test_spmv:
     - make setup_ci
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_spmv
 
+test_matmul_cce:
+  <<: *test_config
+  script:
+    - make setup_ci
+    - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_matmul_cce
+
 # Uncomment to run all tests in a single run
 unit_test:
   tags:

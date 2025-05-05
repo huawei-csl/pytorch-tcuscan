@@ -42,6 +42,7 @@ ascendc_library(kernels SHARED
     src/gather_spmv.cpp
     src/split.cpp
     src/mc_gather.cpp
+    src/matmul_cce.cpp
 )
 
 ascendc_compile_definitions(kernels PRIVATE

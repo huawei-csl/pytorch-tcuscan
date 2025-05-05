@@ -1,0 +1,67 @@
+/**
+ * @file torch_matmul_cce.h
+ * @brief Torch wrapper for MatMul CCE kernel.
+ * @date 2025-03-27
+ *
+ * Copied from
+ * https://open.codehub.huawei.com/innersource/self_spec_infer_G/ascendc-samples
+ *
+ * @copyright Copyright Huawei (c) 2025
+ */
+#pragma once
+
+#include <pybind11/pybind11.h>
+#include <torch/extension.h>
+
+#include "../tiling/tiling_matmul_cce.h"
+#include "acl/acl.h"
+#include "aclrtlaunch_matmul_cce.h"
+#include "commons.h"
+#include "tiling/platform/platform_ascendc.h"
+#include "torch_npu/csrc/core/npu/NPUStream.h"
+#include "workspace.h"
+
+namespace asc {
+
+namespace matmul {
+
+using namespace torch::indexing;
+
+/**
+ * @brief Matrix multiplication CCE kernel.
+ *
+ * @param a Input left matrix A.
+ * @param b Input right matrix B.
+ * @return at::Tensor Matrix product C=AB.
+ */
+at::Tensor matmul_cce(at::Tensor a, at::Tensor b) {
+  uint32_t M = a.sizes()[0];
+  uint32_t N = b.sizes()[0];  // b is passed as transposed
+  uint32_t K = a.sizes()[1];  // == b.sizes()[1]
+  const at::Device device = a.options().device();
+
+  at::Tensor c = at::empty({M, N}, a.options());
+  uint8_t *a_ptr = reinterpret_cast<uint8_t *>(a.storage().data_ptr().get());
+  uint8_t *b_ptr = reinterpret_cast<uint8_t *>(b.storage().data_ptr().get());
+  uint8_t *c_ptr = reinterpret_cast<uint8_t *>(c.storage().data_ptr().get());
+  uint32_t blockDim = 20;  // 910B4, 20 cube cores
+
+  auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
+
+  MatMulCCETiling tiling{M, N, K};
+  uint8_t *tiling_device = allocCopyTiling(tiling);
+
+  const at::Tensor workspace_tensor = alloc_workspace(0, device);
+
+  ACLRT_LAUNCH_KERNEL(matmul_cce)
+  (blockDim, acl_stream, a_ptr, b_ptr, c_ptr,
+   const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
+  aclrtSynchronizeStream(acl_stream);
+  aclrtFree(tiling_device);
+
+  return c.index({Slice({None, M}), "..."});
+}
+
+}  // namespace matmul
+
+}  // namespace asc
