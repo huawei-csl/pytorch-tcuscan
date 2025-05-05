@@ -66,8 +66,8 @@ def _test_tcuscan_gather_spmv(s: int, nnz: int, idx_len: int):
         actual.dtype == expected.dtype
     ), f"Output dtype mismatch. Got {actual.dtype}. Expected {expected.dtype}"
 
-    assert torch.allclose(
-        actual.cpu(), expected, atol=1e-02
+    assert torch.equal(
+        actual.cpu(), expected
     ), f"Error gather spmv ({expected.dtype}). s={s}"
 
 

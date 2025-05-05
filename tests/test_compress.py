@@ -38,7 +38,7 @@ def _test_compress(vec_len: int, s: int, dtype: torch.dtype):
     actual = tcuscan_compress(x, mask, s)
 
     assert len(expected) == len(actual)
-    assert torch.allclose(expected, actual)
+    assert torch.equal(expected, actual)
 
 
 @pytest.mark.parametrize("vec_len", get_lengths(s=32, max_iters=12))

@@ -54,7 +54,7 @@ def _test_split_ind(vec_len: int, s: int, dtype: torch.dtype = torch.int16):
 
     expected_right_part = torch.masked_select(x, mask == 0)
     num_tail = len(expected_right_part)
-    assert torch.allclose(expected_right_part, z[-num_tail:])
+    assert torch.equal(expected_right_part, z[-num_tail:])
 
 
 def test_tcuscan_split_ind_int16_s32():

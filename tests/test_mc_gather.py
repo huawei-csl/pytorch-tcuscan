@@ -69,8 +69,8 @@ def _test_tcuscan_mcgather(s: int, nnz: int, idx_len: int):
         actual.dtype == expected.dtype
     ), f"Output dtype mismatch. Got {actual.dtype}. Expected {expected.dtype}"
 
-    assert torch.allclose(
-        actual.cpu(), expected, atol=1e-02
+    assert torch.equal(
+        actual.cpu(), expected
     ), f"Error gather mc ({expected.dtype}). s={s}"
 
 

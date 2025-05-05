@@ -57,7 +57,7 @@ def _test_tcuscan_gather_spmv(n: int, s: int, density: float):
     assert actual.shape == expected.shape, "Output shape does not match expected shape."
     assert actual.dtype == expected.dtype, "Output dtype does not match expected dtype"
 
-    assert np.allclose(actual.cpu(), expected, atol=1e-3)
+    assert torch.equal(actual.cpu(), expected)
 
 
 @pytest.mark.parametrize("n", [256, 512, 1024, 2048, 4096, 8192, 16384])

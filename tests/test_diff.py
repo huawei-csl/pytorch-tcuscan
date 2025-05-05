@@ -57,7 +57,7 @@ def _test_tcuscan_diff(length: int, dtype: torch.dtype):
     cpuout = torch.diff(x_cpu).npu()
 
     assert output.shape == cpuout.shape, "Output shape does not match expected shape."
-    assert torch.allclose(output, cpuout)
+    assert torch.equal(output, cpuout)
 
 
 @pytest.mark.parametrize("length", _DIFF_SIZES)

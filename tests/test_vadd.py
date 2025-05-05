@@ -55,4 +55,4 @@ def test_vadd(vec_len: int):
     cpuout = torch.add(x, y).npu()
 
     assert output.shape == cpuout.shape, "Output shape does not match expected shape."
-    assert torch.allclose(output, cpuout)
+    assert torch.equal(output, cpuout)

@@ -55,7 +55,7 @@ def _test_tcuscan_copy(length: int, dtype: torch.dtype, s: int):
     cpuout = torch.clone(x).npu()
 
     assert output.shape == cpuout.shape, "Output shape does not match expected shape."
-    assert torch.allclose(output, cpuout)
+    assert torch.equal(output, cpuout)
 
 
 @pytest.mark.parametrize("length", _COPY_SIZES)

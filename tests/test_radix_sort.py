@@ -72,7 +72,7 @@ def _test_sort(vec_len: int, dtype: torch.dtype, s: int):
         actual_indices
     ), f"Indices size must agree. Expected: {len(expected_indices)}. Actual: {actual_indices}"
 
-    assert torch.allclose(expected, actual), "Output must be sorted"
+    assert torch.equal(expected, actual), "Output must be sorted"
 
 
 @pytest.mark.parametrize("vec_len", _SORT_SIZES)

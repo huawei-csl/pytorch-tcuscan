@@ -67,7 +67,7 @@ def _test_tcuscan_csr_gather(col_len, x_len):
     torch.npu.synchronize()
 
     assert actual.shape == expected.shape, "Output shape does not match expected shape."
-    assert torch.allclose(actual.float(), expected.float())
+    assert torch.equal(actual.float(), expected.float())
 
 
 @pytest.mark.parametrize("col_len", _CSR_GATHER_SIZES)

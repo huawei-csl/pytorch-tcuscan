@@ -40,7 +40,7 @@ def _test_compress_pos(vec_len: int, s: int, dtype: torch.dtype):
         len(actual) == pos[-1]
     ), "Compress output size must equal number of ones in mask"
     assert len(expected) == len(actual)
-    assert torch.allclose(expected, actual)
+    assert torch.equal(expected, actual)
 
 
 @pytest.mark.parametrize("vec_len", get_lengths(s=32, max_iters=12))
