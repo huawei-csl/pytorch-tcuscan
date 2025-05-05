@@ -18,9 +18,9 @@
 struct MatMulCCETiling {
   /// @brief Number of rows of A.
   uint32_t M;
-  /// @brief Number of columns of A or rows of B.
-  uint32_t N;
   /// @brief Number of columns of B.
+  uint32_t N;
+  /// @brief Number of columns of A (and rows of B).
   uint32_t K;
 };
 #pragma pack(pop)
