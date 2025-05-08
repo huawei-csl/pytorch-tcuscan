@@ -10,9 +10,11 @@
 #include <pybind11/pybind11.h>
 #include <torch/extension.h>
 
+#include "../tiling/tiling_row_scan.h"
 #include "../tiling/tiling_scan_batch.h"
 #include "../tiling/tiling_scan_multi_core.h"
 #include "../tiling/tiling_scan_single_core.h"
+#include "aclrtlaunch_row_scan_fp16.h"
 #include "aclrtlaunch_scan_batch.h"
 #include "aclrtlaunch_scan_multi_core_fp16.h"
 #include "aclrtlaunch_scan_multi_core_fp16_no_l2.h"
@@ -240,6 +242,60 @@ at::Tensor run_scan_multi_core_no_l2(const at::Tensor &x, int S) {
     (blockDim, acl_stream, const_cast<void *>(x.storage().data()),
      const_cast<void *>(z.storage().data()),
      const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
+  }
+
+  aclrtFree(tiling_device);
+  aclrtSynchronizeStream(acl_stream);
+
+  return z;
+}
+
+/**
+ * @brief Returns the prefix sum (scan) of each block of length S of an 1D
+ * vector `x`.
+ *
+ * @param x Input 1D vector.
+ * @param S Tiling parameter. Typical values 32, 64, 128.
+ * @return The prefix sum of each concecutive block of `x` (block length S).
+ */
+at::Tensor run_row_scan(const at::Tensor &x, int S) {
+  const auto ascendc_platform =
+      platform_ascendc::PlatformAscendCManager::GetInstance(SOC_VERSION);
+  auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
+  const at::Device device = x.options().device();
+  const auto dtype = x.options().dtype();
+  const auto dtype_out =
+      dtype == torch::kHalf ? torch::kFloat32 : torch::kInt32;
+
+  const uint32_t matmul_size = static_cast<uint32_t>(S);
+  const uint32_t M = x.size(0);
+
+  // Output is always 32-bits (float or int32_t)
+  const at::Tensor z =
+      at::empty({M * S}, at::TensorOptions().dtype(dtype_out).device(device));
+
+  const uint32_t tile_elems = matmul_size * matmul_size;
+  const size_t num_tiles = M;
+
+  uint32_t blockDim = ascendc_platform->GetCoreNum() / 2;
+  while (num_tiles % blockDim != 0) {
+    blockDim--;
+  }
+  if (blockDim <= 1) {
+    blockDim = 1;
+  }
+
+  const RowScanTiling tiling{M * matmul_size, matmul_size};
+  uint8_t *tiling_device = allocCopyTiling(tiling);
+
+  if (dtype == torch::kHalf) {
+    const at::Tensor workspace_tensor = alloc_workspace(0, device);
+    ACLRT_LAUNCH_KERNEL(row_scan_fp16)
+    (blockDim, acl_stream, const_cast<void *>(x.storage().data()),
+     const_cast<void *>(z.storage().data()),
+     const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
+  } else {
+    /* Unsupported*/
   }
 
   aclrtFree(tiling_device);

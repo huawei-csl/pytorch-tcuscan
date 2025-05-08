@@ -43,6 +43,7 @@ ascendc_library(kernels SHARED
     src/split.cpp
     src/mc_gather.cpp
     src/matmul_cce.cpp
+    src/row_scan.cpp
 )
 
 ascendc_compile_definitions(kernels PRIVATE

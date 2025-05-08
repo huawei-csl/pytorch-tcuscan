@@ -195,6 +195,18 @@ def clone_benchmark(device: Device, size: int, dtype: torch.dtype) -> Tuple[floa
     return _run_benchmark(device, run_clone), size
 
 
+def cast_benchmark(device: Device, size: int, dtype: torch.dtype) -> Tuple[float, int]:
+    if dtype in {torch.float16}:
+        x = torch.rand(size, device=device.str, dtype=dtype)
+    else:
+        raise ValueError("Cast benchmark only supports fp16 for now")
+
+    def run_cast() -> None:
+        _ = x.to(torch.float32)
+
+    return _run_benchmark(device, run_cast), size
+
+
 def diff_benchmark(device: Device, size: int, dtype=torch.dtype) -> Tuple[float, int]:
     x = torch.rand(size, device=device.str, dtype=dtype)
 
@@ -432,6 +444,40 @@ def mcscan_no_l2_benchmark(
     return _run_benchmark(device, run_scan_no_l2), size
 
 
+def row_scan_benchmark(
+    device: Device, size: int, dtype: torch.dtype, s: int
+) -> Tuple[float, int]:
+    if dtype == torch.float16:
+        x = torch.rand(size, device=device.str, dtype=dtype)
+    else:
+        raise RuntimeError(
+            f"dtype {dtype} is not supported in TCUSCAN row_scan operator"
+        )
+
+    def run_row_scan() -> None:
+        _ = tcuscan_ops.run_row_scan(x.reshape(-1, s), s)
+
+    return _run_benchmark(device, run_row_scan), size
+
+
+def row_scan_cce_benchmark(
+    device: Device, size: int, dtype: torch.dtype, s: int
+) -> Tuple[float, int]:
+    if dtype == torch.float16:
+        x = torch.rand(size, device=device.str, dtype=dtype)
+    else:
+        raise RuntimeError(
+            f"dtype {dtype} is not supported in TCUSCAN row_scan operator"
+        )
+
+    U_s = torch.tril(torch.ones((s, s), dtype=dtype)).npu()
+
+    def run_row_scan_cce() -> None:
+        _ = tcuscan_ops.run_matmul_cce(x.reshape(-1, s), U_s)
+
+    return _run_benchmark(device, run_row_scan_cce), size
+
+
 def seg_scan_mc_revert_benchmark(
     device: Device, size: int, dtype: torch.dtype, segm_density: float
 ) -> Tuple[float, int]:
@@ -554,6 +600,9 @@ if __name__ == "__main__":  # noqa
             "gather_spmv",
             "sort",
             "radix_sort",
+            "row_scan",
+            "row_scan_cce",
+            "cast",
         ],
     )
     parser.add_argument("--dtype", choices=["int8", "fp16", "int16", "int32", "fp32"])
@@ -605,6 +654,16 @@ if __name__ == "__main__":  # noqa
             "copy",
             dtype,
             partial(clone_benchmark, dtype=tdtype),
+            sizes,
+            density,
+        )
+    elif bench == "cast" and dtype in ["fp16"]:
+        tdtype = STR_TO_DTYPE[dtype]
+        benchmark(
+            device,
+            "cast",
+            dtype,
+            partial(cast_benchmark, dtype=tdtype),
             sizes,
             density,
         )
@@ -724,6 +783,26 @@ if __name__ == "__main__":  # noqa
             f"mcscan_no_l2_{s}",
             dtype,
             partial(mcscan_no_l2_benchmark, dtype=tdtype, s=s),
+            sizes,
+            density,
+        )
+    elif bench == "row_scan" and dtype in ["fp16"]:
+        tdtype = STR_TO_DTYPE[dtype]
+        benchmark(
+            device,
+            f"row_scan_{s}",
+            dtype,
+            partial(row_scan_benchmark, dtype=tdtype, s=s),
+            sizes,
+            density,
+        )
+    elif bench == "row_scan_cce" and dtype in ["fp16"]:
+        tdtype = STR_TO_DTYPE[dtype]
+        benchmark(
+            device,
+            "row_scan_cce_512",
+            dtype,
+            partial(row_scan_cce_benchmark, dtype=tdtype, s=512),
             sizes,
             density,
         )

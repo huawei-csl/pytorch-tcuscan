@@ -62,4 +62,6 @@ PYBIND11_MODULE(tcuscan_ops, m) {
   m.def("run_matmul_cce", &asc::matmul::matmul_cce,
         "Matrix multiplication CCE kernel (B dimensions must be a multiple of "
         "512)");
+  m.def("run_row_scan", &asc::scan::run_row_scan,
+        "Matrix multiplication row scan kernel");
 }
