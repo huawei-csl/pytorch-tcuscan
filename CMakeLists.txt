@@ -44,6 +44,7 @@ ascendc_library(kernels SHARED
     src/mc_gather.cpp
     src/matmul_cce.cpp
     src/row_scan.cpp
+    src/gen_lower.cpp
 )
 
 ascendc_compile_definitions(kernels PRIVATE

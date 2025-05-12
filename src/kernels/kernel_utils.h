@@ -1421,6 +1421,20 @@ __aicore__ inline void Swap(DataT &v1, DataT &v2) {
   v1 = v2;
   v2 = tmp;
 }
+
+/**
+ * @brief Calculates minimum of two numbers.
+ *
+ * @tparam T Data type of the values.
+ * @param [in] v1 First value.
+ * @param [in] v2 Second value.
+ * @return Smaller value.
+ */
+template <typename T>
+__aicore__ inline T Min(T v1, T v2) {
+  return v1 <= v2 ? v1 : v2;
+}
+
 }  // namespace scalar
 
 namespace tiling {

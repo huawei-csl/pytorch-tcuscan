@@ -14,6 +14,7 @@
 #include "torch/torch_copy.h"
 #include "torch/torch_diff.h"
 #include "torch/torch_gather.h"
+#include "torch/torch_gen_lower.h"
 #include "torch/torch_matmul_cce.h"
 #include "torch/torch_scan.h"
 #include "torch/torch_seg_ops.h"
@@ -64,4 +65,6 @@ PYBIND11_MODULE(tcuscan_ops, m) {
         "512)");
   m.def("run_row_scan", &asc::scan::run_row_scan,
         "Matrix multiplication row scan kernel");
+  m.def("run_gen_lower", &asc::gen::run_gen_lower,
+        "Generate lower triangular matrix");
 }

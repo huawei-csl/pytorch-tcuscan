@@ -128,6 +128,12 @@ test_copy:
     - make setup_ci
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_copy
 
+test_gen_lower:
+  <<: *test_config
+  script:
+    - make setup_ci
+    - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_gen_lower
+
 test_csr_gather:
   <<: *test_config
   script:
