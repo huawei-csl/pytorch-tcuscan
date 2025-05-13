@@ -1107,6 +1107,16 @@ __aicore__ inline void ScalarWaitForVec() {
 namespace reduce {
 
 /**
+ * @brief It is true if `DataType` is supported for the AscendC ReduceSum
+ * instruction.
+ *
+ * @tparam DataType Data type to check.
+ */
+template <typename DataType>
+constexpr bool IsAscendReduceSumSupported =
+    std::is_same<DataType, half>::value || std::is_same<DataType, float>::value;
+
+/**
  * @brief Reduce a tensor to a smaller tensor.
  *
  * The function takes the `src` tensor, divides it into parts of

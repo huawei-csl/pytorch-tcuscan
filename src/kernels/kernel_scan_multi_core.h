@@ -29,7 +29,7 @@ using namespace kernel_utils;
 template <typename InputT>
 class KernelReduceTiles {
   using IntermediateT = half;
-  using AccT = kernel_utils::cube_unit::CubeOutType_t<InputT>;
+  using AccT = cube_unit::CubeOutType_t<InputT>;
 
  public:
   /**
@@ -90,19 +90,29 @@ class KernelReduceTiles {
     if (num_tiles_to_process == 0) return;
 
     const LocalTensor<AccT> input_lt = vec_tile_q_.Get<AccT>();
-    LoadToAccT(input_lt, 0);
 
-    const LocalTensor<AccT> red1_lt = red1_buf_.Get<AccT>();
-    reduce::ReduceVecAdd<true /*AllocateAcc*/, AccT>(red1_lt, input_lt);
+    AccT sum = 0;
 
-    for (uint32_t tile_idx = 1; tile_idx < num_tiles_to_process; tile_idx++) {
-      LoadToAccT(input_lt, tile_idx);
-      reduce::ReduceVecAdd<false /*AllocateAcc*/, AccT>(red1_lt, input_lt);
+    if constexpr (reduce::IsAscendReduceSumSupported<AccT>) {
+      for (uint32_t tile_idx = 0; tile_idx < num_tiles_to_process; tile_idx++) {
+        LoadToAccT(input_lt, tile_idx);
+        ReduceSum(input_lt, input_lt, input_lt, tile_size_);
+
+        sum += AscendC::GetAccVal<AccT>();
+      }
+    } else {
+      LoadToAccT(input_lt, 0);
+      const LocalTensor<AccT> red1_lt = red1_buf_.Get<AccT>();
+      reduce::ReduceVecAdd<true /*AllocateAcc*/, AccT>(red1_lt, input_lt);
+
+      for (uint32_t tile_idx = 1; tile_idx < num_tiles_to_process; tile_idx++) {
+        LoadToAccT(input_lt, tile_idx);
+        reduce::ReduceVecAdd<false /*AllocateAcc*/, AccT>(red1_lt, input_lt);
+      }
+      const LocalTensor<AccT> red2_lt = red2_buf_.Get<AccT>();
+      reduce::ReduceVecAdd<true /*AllocateAcc*/, AccT>(red2_lt, red1_lt);
+      sum = reduce::ReduceScalarAdd<AccT>(red2_lt, red2_lt.GetSize());
     }
-
-    const LocalTensor<AccT> red2_lt = red2_buf_.Get<AccT>();
-    reduce::ReduceVecAdd<true /*AllocateAcc*/, AccT>(red2_lt, red1_lt);
-    const AccT sum = reduce::ReduceScalarAdd<AccT>(red2_lt, red2_lt.GetSize());
     copy::CopyScalarToGm(global_output_[GetBlockIdx()], res_q_, sum);
   }
 
@@ -265,8 +275,7 @@ class KernelCompleteRows {
     uint32_t global_offset =
         GetBlockIdx() * tile_size_ * max_num_tiles_per_block_;
     const uint32_t num_tiles_to_process =
-        kernel_utils::scalar::GetWorkDistribution(vec_len_, tile_size_,
-                                                  block_num_);
+        scalar::GetWorkDistribution(vec_len_, tile_size_, block_num_);
 
     for (uint32_t tile_idx = 0; tile_idx < num_tiles_to_process; tile_idx++) {
       copy::CopyGmToVec(vec_tile_q_, global_input_rows_[global_offset]);
@@ -399,8 +408,8 @@ template <typename InputT, bool IsInclusive = true>
 __aicore__ inline void run_scan_multi_core_kernel(
     GM_ADDR input_vec, GM_ADDR upper_triangular, GM_ADDR output_vec,
     GM_ADDR workspace, uint32_t vec_len, uint32_t matmul_size,
-    kernel_utils::cube_unit::CubeOutType_t<InputT> starting_value = 0) {
-  using OutputT = kernel_utils::cube_unit::CubeOutType_t<InputT>;
+    cube_unit::CubeOutType_t<InputT> starting_value = 0) {
+  using OutputT = cube_unit::CubeOutType_t<InputT>;
 
   const uint32_t align_size = matmul_size * matmul_size;
   const uint32_t padded_vec_len_c = scalar::AlignUp(vec_len, align_size);
