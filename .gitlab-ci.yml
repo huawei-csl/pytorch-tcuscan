@@ -249,6 +249,12 @@ test_row_scan:
     - make setup_ci
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_row_scan
 
+test_reduce_tiles:
+  <<: *test_config
+  script:
+    - make setup_ci
+    - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_reduce_tiles
+
 # Uncomment to run all tests in a single run
 unit_test:
   tags:

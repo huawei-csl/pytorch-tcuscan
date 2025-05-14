@@ -16,6 +16,7 @@
 #include "torch/torch_gather.h"
 #include "torch/torch_gen_lower.h"
 #include "torch/torch_matmul_cce.h"
+#include "torch/torch_reduce.h"
 #include "torch/torch_scan.h"
 #include "torch/torch_seg_ops.h"
 #include "torch/torch_sort.h"
@@ -67,4 +68,6 @@ PYBIND11_MODULE(tcuscan_ops, m) {
         "Matrix multiplication row scan kernel");
   m.def("run_gen_lower", &asc::gen::run_gen_lower,
         "Generate lower triangular matrix");
+  m.def("run_reduce_tiles", &asc::reduce::run_reduce_tiles,
+        "Sum-reduce over tiles");
 }

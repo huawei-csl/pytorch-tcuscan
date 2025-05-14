@@ -45,6 +45,7 @@ ascendc_library(kernels SHARED
     src/matmul_cce.cpp
     src/row_scan.cpp
     src/gen_lower.cpp
+    src/reduce_tiles.cpp
 )
 
 ascendc_compile_definitions(kernels PRIVATE
