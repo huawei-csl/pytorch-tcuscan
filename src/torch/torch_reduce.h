@@ -42,10 +42,8 @@ at::Tensor run_reduce_tiles(const at::Tensor &x, int tile_len, int block_num) {
   const uint32_t block_dim = static_cast<uint32_t>(block_num);
   const uint32_t total_len = x.numel();
 
-  const uint32_t output_len = host_utils::AlignUp(block_num, 8);
-
   const at::Tensor z = at::empty(
-      {output_len}, at::TensorOptions().dtype(dtype_out).device(device));
+      {block_num}, at::TensorOptions().dtype(dtype_out).device(device));
 
   const ReduceTilesTiling tiling{total_len, s};
   uint8_t *tiling_device = allocCopyTiling(tiling);

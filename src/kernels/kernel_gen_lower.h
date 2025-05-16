@@ -59,6 +59,9 @@ class KernelGenerateLower {
    *
    */
   __aicore__ inline void Process() {
+    if (GetBlockIdx() >= block_num_) {
+      return;
+    }
     const LocalTensor<DuplicateT> lt = vec_buf_.Get<DuplicateT>();
     uint32_t lt_offset = 0;
     Duplicate(lt, static_cast<DuplicateT>(0), lt.GetSize());
