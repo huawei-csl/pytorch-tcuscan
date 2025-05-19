@@ -17,10 +17,10 @@ using namespace kernel_utils;
  * @brief Performs add-reduce operation on input tiles.
  *
  * Divides an input vector into tiles of size `tile_size` and reduces each of
- * them separately using addition operation. Writes the results to the output
- * vector. Because of the alignment constraints, each result scalar is
- * represented by a 32 bytes vector, where the first `sizeof(AccT)`
- * bytes is the actual result and the rest are dummy padding data.
+ * them separately using addition operation. Because of the UB alignment
+ * constraints, each result scalar is represented by a 32 bytes vector, where
+ * the first `sizeof(AccT)` bytes is the actual result and the rest are dummy
+ * padding data.
  *
  * @tparam InputT Data type of the input vector.
  * @tparam AccT Data type of the accumulator and output vectors.

@@ -46,6 +46,7 @@ ascendc_library(kernels SHARED
     src/row_scan.cpp
     src/gen_lower.cpp
     src/reduce_tiles.cpp
+    src/complete_rows.cpp
 )
 
 ascendc_compile_definitions(kernels PRIVATE

@@ -12,7 +12,6 @@ random.seed(42)
 torch.manual_seed(42)
 np.random.seed(42)
 
-# Ascend 910B specifics
 NUM_BLOCKS = 20
 
 NPU_DEVICE = os.environ.get("NPU_DEVICE", "npu:1")
