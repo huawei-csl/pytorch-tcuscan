@@ -43,8 +43,9 @@ class KernelCompleteRows {
                                        uint32_t tile_height, uint32_t vec_len)
       : block_num_(GetBlockNum() * GetTaskRation()),
         tile_width_(tile_width),
-        tile_height_(tile_height),
-        tile_size_(scalar::Min(tile_width_ * tile_height_, MAX_TILE_SIZE)),
+        tile_height_(scalar::Min(tile_height,
+                                 scalar::CeilDiv(MAX_TILE_SIZE, tile_width_))),
+        tile_size_(tile_width_ * tile_height_),
         sums_len_(block_num_),
         vec_len_(vec_len),
         output_real_elems_(IsInclusive ? vec_len_ : vec_len_ - 1),
@@ -54,6 +55,12 @@ class KernelCompleteRows {
         std::is_same_v<T, half> || std::is_same_v<T, int16_t> ||
         std::is_same_v<T, float> || std::is_same_v<T, int32_t>;
     static_assert(IS_DT_SUPPORTED, "Unsupported data type.");
+    ASCENDC_ASSERT((MAX_TILE_SIZE % tile_width_ == 0), {
+      KERNEL_LOG(KERNEL_ERROR,
+                 "MAX_TILE_SIZE (8192) must be "
+                 "divisible by the input tile width (%d)",
+                 tile_width_);
+    });
   }
 
   /**

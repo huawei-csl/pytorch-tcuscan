@@ -17,6 +17,37 @@ torch.npu.config.allow_internal_format = False
 torch.npu.set_device(NPU_DEVICE)
 
 
+def ref_complete_rows(x, sums, tile_len: int, num_blocks: int):
+    "Reference implementation of `KernelCompleteRows` AscendC kernel."
+    vec_len = len(x)
+
+    prefix_sums = torch.cumsum(
+        torch.concat([torch.zeros(1, dtype=x.dtype).npu(), sums[:-1]]), dim=-1
+    )
+
+    assert sums.numel() == num_blocks
+    assert prefix_sums.numel() == num_blocks
+
+    assert (
+        vec_len % num_blocks == 0
+    ), "Input vector length must be divisble by the number of blocks."
+
+    block_len = vec_len // num_blocks
+    tile_width = tile_len
+    tile_height = block_len // tile_width
+    expected = torch.clone(x)
+    for b in range(num_blocks):
+        block_offset = b * block_len
+        acc = prefix_sums[b]
+        for h in range(tile_height):
+            expected[
+                block_offset + h * tile_width : block_offset + (h + 1) * tile_width
+            ] += acc
+            acc = expected[block_offset + (h + 1) * tile_width - 1]
+
+    return expected.flatten()
+
+
 def _test_complete_rows(
     vec_len: int, tile_len: int, num_blocks: int, dtype: torch.dtype
 ):
@@ -30,30 +61,12 @@ def _test_complete_rows(
     else:
         assert False, "Unsupported dtype for reduce_tiles. Got {dtype}."
 
+    # Sum-reductions per block
     sums = torch.sum(x.reshape(num_blocks, -1), dim=1, dtype=out_dtype).flatten()
-    prefix_sums = torch.cumsum(
-        torch.concat([torch.zeros(1, dtype=out_dtype).npu(), sums[:-1]]), dim=-1
-    )
-
-    assert (
-        vec_len % num_blocks == 0
-    ), "Input vector length must be divisble by the number of blocks."
-
-    expected = x.reshape(num_blocks, -1) + prefix_sums[:, torch.newaxis]
-    expected = expected.flatten()
+    expected = ref_complete_rows(x, sums, tile_len, num_blocks)
     torch.npu.synchronize()
     actual = tcuscan_ops.run_complete_rows(x, sums, tile_len, tile_len)
     torch.npu.synchronize()
-
-    offset = tile_len * tile_len
-    print(f"input    : {x[:offset]}")
-    print(f"sums     : {sums}")
-    print(f"prefix_sums     : {prefix_sums}")
-    print("*" * 40)
-    print(f"expected : {expected}")
-    print(f"actual   : {actual}")
-    print(f"actual-input   : {actual-x}")
-    print(f"expected-input   : {expected-x}")
 
     assert expected.dtype == actual.dtype
     assert expected.shape == actual.shape
@@ -62,9 +75,9 @@ def _test_complete_rows(
     ), f"Returned tensor does not match the expected tensor. sums: {sums}"
 
 
-@pytest.mark.parametrize("num_blocks", [20, 40])
-@pytest.mark.parametrize("tile_len", [16])  # Fails for 32, 128
-@pytest.mark.parametrize("multiplier", [1])
+@pytest.mark.parametrize("num_blocks", [2, 10, 20, 40])
+@pytest.mark.parametrize("tile_len", [32, 128, 512])  # Fails for 32, 128
+@pytest.mark.parametrize("multiplier", [3])
 def test_tcuscan_complete_rows_fp32(num_blocks: int, tile_len: int, multiplier: int):
     _test_complete_rows(
         num_blocks * tile_len * tile_len * multiplier,
