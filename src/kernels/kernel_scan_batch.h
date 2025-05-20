@@ -7,7 +7,7 @@
 #pragma once
 
 #include "ascendc_kernel_operator.h"
-#include "kernel_scan_multi_core.h"
+#include "kernel_row_scan.h"
 #include "kernel_utils.h"
 
 using namespace AscendC;

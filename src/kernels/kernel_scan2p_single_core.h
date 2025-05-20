@@ -42,10 +42,10 @@ class KernelScan2PSingleCore {
         num_matrix_tiles_(vec_len_ / (M_ * K_)) {
     static_assert(kernel_utils::cube_unit::IsCubeSupported<T1>,
                   "Unsupported input Cube dtype in first parameter. Please "
-                  "use half or int8_t.");
+                  "use half.");
     static_assert(kernel_utils::cube_unit::IsCubeSupported<T2>,
                   "Unsupported input Cube dtype in second parameter. "
-                  "Please use half or int8_t.");
+                  "Please use int8_t.");
 
 #ifdef ASCEND_CPU_DEBUG
     ASCENDC_ASSERT(matmul_k_size % kernel_utils::GetFractlK<T1> == 0, {

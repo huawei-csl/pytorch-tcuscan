@@ -128,11 +128,11 @@ class KernelReduceTiles {
       const LocalTensor<IntermediateT> intermediate_lt =
           vec_tile_intermediate_buf_.Get<IntermediateT>();
       Cast(intermediate_lt, input_lt, RoundMode::CAST_NONE, tile_size_);
-      if constexpr (std::is_same_v<AccT, float>) {
-        Cast(dst_lt, intermediate_lt, RoundMode::CAST_NONE, tile_size_);
-      } else {
-        Cast(dst_lt, intermediate_lt, RoundMode::CAST_RINT, tile_size_);
-      }
+
+      constexpr auto cast_mode = std::is_same_v<AccT, float>
+                                     ? RoundMode::CAST_NONE
+                                     : RoundMode::CAST_RINT;
+      Cast(dst_lt, intermediate_lt, cast_mode, tile_size_);
     } else {
       Cast(dst_lt, input_lt, RoundMode::CAST_NONE, tile_size_);
     }

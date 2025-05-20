@@ -374,8 +374,8 @@ inline __aicore__ void run_matmul_cce(GM_ADDR x, GM_ADDR y, GM_ADDR z, int M,
 #else  // __DAV_C220_VEC__
 
 // Stub for vector compile path
-__aicore__ void run_matmul_cce(GM_ADDR a, GM_ADDR b, GM_ADDR c, int M, int N,
-                               int K) {
+inline __aicore__ void run_matmul_cce(GM_ADDR a, GM_ADDR b, GM_ADDR c, int M,
+                                      int N, int K) {
   pipe_barrier(PIPE_ALL);
 }
 

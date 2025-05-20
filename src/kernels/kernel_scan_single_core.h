@@ -177,7 +177,7 @@ class KernelCompleteRows {
         tile_height_(tile_height),
         vec_len_(vec_len),
         tile_size_(tile_width * tile_height),
-        num_tiles_((vec_len_ + tile_size_ - 1) / tile_size_) {}
+        num_tiles_(scalar::CeilDiv(vec_len_, tile_size_)) {}
 
   /**
    * @brief Initialize global and local memory structures.

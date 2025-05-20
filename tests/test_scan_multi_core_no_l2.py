@@ -46,7 +46,7 @@ def _test_dtype(vec_len: int, s: int, dtype: torch.dtype):
 
 @pytest.mark.parametrize("vec_len", get_lengths(s=16, max_iters=16))
 @pytest.mark.parametrize("s", [32, 64, 128])
-@pytest.mark.parametrize("dtype", [torch.int8, torch.float16])
+@pytest.mark.parametrize("dtype", [torch.int8, torch.float16], ids=str)
 def test_mcscan(vec_len: int, s: int, dtype: torch.dtype):
     _test_dtype(vec_len, s, dtype)
 

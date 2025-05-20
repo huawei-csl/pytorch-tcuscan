@@ -41,6 +41,6 @@ def _test_tcuscan_gen_lower(matrix_size: int, dtype: torch.dtype):
 
 
 @pytest.mark.parametrize("matrix_size", [32, 64, 128, 256, 512, 1024])
-@pytest.mark.parametrize("dtype", [torch.int8, torch.half])
+@pytest.mark.parametrize("dtype", [torch.int8, torch.half], ids=str)
 def test_tcuscan_gen_lower(matrix_size: int, dtype: torch.dtype):
     _test_tcuscan_gen_lower(matrix_size, dtype)
