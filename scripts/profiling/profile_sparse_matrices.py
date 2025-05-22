@@ -13,14 +13,15 @@ import types
 import typing
 from dataclasses import dataclass
 from functools import partial
+
 import numpy as np
-import torch
 import torch.nn.functional as F
 import torch_npu  # noqa
 from scipy.io import mmread
 from scipy.sparse import csr_matrix
 
 import tcuscan_ops
+import torch
 
 
 def pad_to_multiple(x: torch.Tensor, s: int):
@@ -162,7 +163,7 @@ def segmented_scan_single_core_benchmark(
     def run_seg_scan_single_core() -> None:
         _ = tcuscan_ops.run_seg_scan(x_npu, f_npu, s)
 
-    return _run_benchmark(device, run_seg_scan_single_core)
+    return _run_benchmark(device, run_seg_scan_single_core), len(x_npu)
 
 
 def vec_segmented_scan_single_core_benchmark(
@@ -183,7 +184,7 @@ def vec_segmented_scan_single_core_benchmark(
     def run_vec_seg_scan_single_core() -> None:
         _ = tcuscan_ops.run_seg_scan_vec(x_npu, f_npu, s)
 
-    return _run_benchmark(device, run_vec_seg_scan_single_core)
+    return _run_benchmark(device, run_vec_seg_scan_single_core), len(x_npu)
 
 
 def compress_benchmark(device: Device, x: torch.Tensor, f: torch.Tensor, s: int):
@@ -205,7 +206,7 @@ def compress_benchmark(device: Device, x: torch.Tensor, f: torch.Tensor, s: int)
     def run_compress() -> None:
         _ = tcuscan_ops.run_compress(x_npu, f_npu, s)
 
-    return _run_benchmark(device, run_compress)
+    return _run_benchmark(device, run_compress), len(x)
 
 
 def mcscan_benchmark(device: Device, B: csr_matrix, s: int) -> float:
@@ -227,7 +228,7 @@ def mcscan_benchmark(device: Device, B: csr_matrix, s: int) -> float:
     def run_scan() -> None:
         _ = tcuscan_ops.run_scan_multi_core(x_npu, s)
 
-    return _run_benchmark(device, run_scan)
+    return _run_benchmark(device, run_scan), len(vals)
 
 
 def baseline_diff_benchmark(device: Device, B: csr_matrix) -> float:
@@ -247,7 +248,7 @@ def baseline_diff_benchmark(device: Device, B: csr_matrix) -> float:
     def run_diff() -> None:
         _ = torch.diff(vals_npu)
 
-    return _run_benchmark(device, run_diff)
+    return _run_benchmark(device, run_diff), len(vals)
 
 
 def spmv_benchmark(device: Device, B: csr_matrix, s: int):
@@ -276,7 +277,7 @@ def spmv_benchmark(device: Device, B: csr_matrix, s: int):
     def run_spmv():
         _ = tcuscan_ops.run_spmv(vals_npu, idx_npu, col_npu, vec_npu, s)
 
-    return _run_benchmark(device, run_spmv)
+    return _run_benchmark(device, run_spmv), len(vals)
 
 
 def csr_gather_benchmark(device: Device, B: csr_matrix):
@@ -303,7 +304,7 @@ def csr_gather_benchmark(device: Device, B: csr_matrix):
     def run_csr_gather():
         _ = tcuscan_ops.run_csr_gather(vals_npu, col_npu, vec_npu)
 
-    return _run_benchmark(device, run_csr_gather)
+    return _run_benchmark(device, run_csr_gather), len(vals)
 
 
 def gather_spmv_benchmark(device: Device, B: csr_matrix, s: int):
@@ -326,7 +327,7 @@ def gather_spmv_benchmark(device: Device, B: csr_matrix, s: int):
     def run_gather_spmv():
         _ = tcuscan_ops.run_gather_spmv(vals_npu, idx_npu, s)
 
-    return _run_benchmark(device, run_gather_spmv)
+    return _run_benchmark(device, run_gather_spmv), len(vals)
 
 
 def benchmark(
@@ -348,13 +349,13 @@ def benchmark(
     """
     filename = f"bench_results_{op_name}_{dtype}_{benchname}.csv"
     with open(filename, "w", encoding="UTF-8") as fd:
-        fd.write("benchname,operator,dtype,time_us\n")
+        fd.write("benchname,operator,dtype,nnz,time_us\n")
 
         logger.info(
             f"Benchmark: {benchname}, OP:{op_name}, dtype: {dtype}, device: {device.str}"
         )
-        time = fn(device)
-        fd.write(f"{benchname},{op_name},{dtype},{time:.2f}\n")
+        time, nnz = fn(device)
+        fd.write(f"{benchname},{op_name},{dtype},{nnz},{time:.2f}\n")
 
 
 if __name__ == "__main__":

@@ -31,41 +31,47 @@
       exit(EXIT_FAILURE);                                               \
     }                                                                   \
   }
-
-int read_mtx(const std::string mtxpath, std::vector<int> &row_ptr,
-             std::vector<int> &col_idx, std::vector<float> &vals) {
+int read_mtx_no_zeros(const std::string mtxpath, std::vector<int> &row_ptr,
+                      std::vector<int> &col_idx, std::vector<float> &vals) {
   std::ifstream fin(mtxpath);
   if (!fin.is_open()) {
     std::cerr << "Cannot open file " << mtxpath << std::endl;
     return -1;
   }
+
   while (fin.peek() == '%') fin.ignore(2048, '\n');
 
   int M, N, L;
   fin >> M >> N >> L;
-  col_idx.resize(L);
-  vals.resize(L);
-  row_ptr.assign(M + 1, 0);
-  int prev_row = -1;
-  for (int l = 0; l < L; l++) {
+
+  std::vector<std::vector<int>> temp_cols(M);
+  std::vector<std::vector<float>> temp_vals(M);
+
+  for (int l = 0; l < L; ++l) {
     int m, n;
     float data;
     fin >> m >> n >> data;
-    int row = m - 1;
-    int col = n - 1;
-    col_idx[l] = col;
-    vals[l] = data;
-    if (row != prev_row) {
-      for (int r = prev_row + 1; r <= row; r++) {
-        row_ptr[r] = l;
-      }
-      prev_row = row;
+    if (data != 0.0f) {
+      int row = m - 1;
+      int col = n - 1;
+      temp_cols[row].push_back(col);
+      temp_vals[row].push_back(data);
     }
   }
-  for (int r = prev_row + 1; r <= M; r++) {
-    row_ptr[r] = L;
-  }
+
   fin.close();
+
+  row_ptr.clear();
+  col_idx.clear();
+  vals.clear();
+
+  row_ptr.push_back(0);
+  for (int i = 0; i < M; ++i) {
+    col_idx.insert(col_idx.end(), temp_cols[i].begin(), temp_cols[i].end());
+    vals.insert(vals.end(), temp_vals[i].begin(), temp_vals[i].end());
+    row_ptr.push_back(static_cast<int>(col_idx.size()));
+  }
+
   return N;
 }
 
@@ -190,7 +196,7 @@ int main(int argc, char *argv[]) {
   if (!csv_file.is_open()) {
     std::cerr << "Error opening CSV file!" << std::endl;
   } else {
-    csv_file << matrix_name << "," << averageTime << std::endl;
+    csv_file << matrix_name << "," << averageTime << "," << nnz << std::endl;
     csv_file.close();
   }
   CHECK_CUDA(
