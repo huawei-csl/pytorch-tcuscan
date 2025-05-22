@@ -537,6 +537,18 @@ def topk_benchmark(device: Device, size: int, dtype: torch.dtype, k: int) -> flo
     return _run_benchmark(device, run_topk), k
 
 
+def gen_lower_benchmark(
+    device: Device, size: int, dtype: torch.dtype
+) -> Tuple[float, int]:
+
+    x = torch.zeros(1).npu()
+
+    def run_gen_lower() -> None:
+        _ = tcuscan_ops.run_gen_lower(size, x.device, dtype)
+
+    return _run_benchmark(device, run_gen_lower), size * size
+
+
 def benchmark(
     device: Device,
     op_name: str,
@@ -603,6 +615,7 @@ if __name__ == "__main__":  # noqa
             "row_scan",
             "row_scan_cce",
             "cast",
+            "gen_lower",
         ],
     )
     parser.add_argument("--dtype", choices=["int8", "fp16", "int16", "int32", "fp32"])
@@ -859,6 +872,20 @@ if __name__ == "__main__":  # noqa
             f"radix_sort_{s}",
             dtype,
             partial(radix_sort_benchmark, dtype=tdtype, s=s),
+            sizes,
+            density,
+        )
+    elif bench == "gen_lower" and dtype in ["int8", "fp16"]:
+        tdtype = STR_TO_DTYPE[dtype]
+
+        # Square matrices of interest for scans.
+        sizes = [16, 32, 64, 96, 128] + list(range(256, 2049, 128))
+
+        benchmark(
+            device,
+            "gen_lower",
+            dtype,
+            partial(gen_lower_benchmark, dtype=tdtype),
             sizes,
             density,
         )
