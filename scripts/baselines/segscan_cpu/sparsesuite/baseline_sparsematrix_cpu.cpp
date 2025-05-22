@@ -26,7 +26,7 @@ int read_mtx(std::string mtxpath, std::vector<float> *x, std::vector<int> *f) {
 
   fin >> M >> N >> L;
   x->resize(L);
-  f->resize(L, 0);  // Inizializza f con 0, lungo M
+  f->resize(L, 0);
   int old = -1;
   for (int l = 0; l < L; l++) {
     int m, n;
