@@ -42,13 +42,15 @@ at::Tensor run_scan_single_core(const at::Tensor &x, int S) {
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();
   const auto dtype = x.options().dtype();
+  const auto dtype_out =
+      dtype == torch::kHalf ? torch::kFloat32 : torch::kInt32;
 
   const uint32_t matmul_size = static_cast<uint32_t>(S);
   const uint32_t totalLength = x.numel();
 
   // Outuput is always 32-bits (float or int32_t)
   const at::Tensor z = at::empty(
-      {totalLength}, at::TensorOptions().dtype(at::kFloat).device(device));
+      {totalLength}, at::TensorOptions().dtype(dtype_out).device(device));
 
   const SingleCoreScanTiling tiling{totalLength, matmul_size};
   uint8_t *tiling_device = allocCopyTiling(tiling);
@@ -91,14 +93,16 @@ at::Tensor run_scan_batch(const at::Tensor &x, int S) {
   const at::Device device = x.options().device();
   const auto dtype = x.options().dtype();
   const uint32_t block_size = x.size(0);  // For tiling/cube core parallelism
+  const auto dtype_out =
+      dtype == torch::kHalf ? torch::kFloat32 : torch::kInt32;
 
   const uint32_t matmul_size = static_cast<uint32_t>(S);
   const uint32_t batch_size = x.size(0);
   const uint32_t vec_len = x.size(1);
-  // Outuput is always 32-bits (float or int32_t)
+
   const at::Tensor z =
       at::empty({batch_size, vec_len},
-                at::TensorOptions().dtype(at::kFloat).device(device));
+                at::TensorOptions().dtype(dtype_out).device(device));
   // Workspace is **always** required, even if it is an empty tensor
   const at::Tensor workspace_tensor = alloc_workspace(0, device);
 
@@ -136,7 +140,6 @@ at::Tensor run_scan_multi_core(const at::Tensor &x, int S) {
   const uint32_t matmul_size = static_cast<uint32_t>(S);
   const uint32_t totalLength = x.numel();
 
-  // Output is always 32-bits (float or int32_t)
   const at::Tensor z = at::empty(
       {totalLength}, at::TensorOptions().dtype(dtype_out).device(device));
 
@@ -203,7 +206,6 @@ at::Tensor run_scan_multi_core_no_l2(const at::Tensor &x, int S) {
   const uint32_t matmul_size = static_cast<uint32_t>(S);
   const uint32_t totalLength = x.numel();
 
-  // Output is always 32-bits (float or int32_t)
   const at::Tensor z = at::empty(
       {totalLength}, at::TensorOptions().dtype(dtype_out).device(device));
 
@@ -270,7 +272,6 @@ at::Tensor run_row_scan(const at::Tensor &x, int S) {
   const uint32_t matmul_size = static_cast<uint32_t>(S);
   const uint32_t M = x.size(0);
 
-  // Output is always 32-bits (float or int32_t)
   const at::Tensor z =
       at::empty({M * S}, at::TensorOptions().dtype(dtype_out).device(device));
 
