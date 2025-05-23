@@ -8,6 +8,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
+#include <sstream>
 #include <vector>
 
 // Use this macro to check the cuda_error code
@@ -35,7 +36,6 @@ int read_mtx_no_zeros(const std::string mtxpath, std::vector<int> &row_ptr,
                       std::vector<int> &col_idx, std::vector<float> &vals) {
   std::ifstream fin(mtxpath);
   if (!fin.is_open()) {
-    std::cerr << "Cannot open file " << mtxpath << std::endl;
     return -1;
   }
 
@@ -49,13 +49,25 @@ int read_mtx_no_zeros(const std::string mtxpath, std::vector<int> &row_ptr,
 
   for (int l = 0; l < L; ++l) {
     int m, n;
-    float data;
-    fin >> m >> n >> data;
-    if (data != 0.0f) {
+    float real_val = 1.0f;
+
+    std::string line;
+    std::getline(fin >> std::ws, line);
+    std::istringstream iss(line);
+
+    if (!(iss >> m >> n)) {
+      continue;
+    }
+
+    if (!(iss >> real_val)) {
+      real_val = 1;
+    }
+
+    if (real_val != 0.0f) {
       int row = m - 1;
       int col = n - 1;
       temp_cols[row].push_back(col);
-      temp_vals[row].push_back(data);
+      temp_vals[row].push_back(real_val);
     }
   }
 
@@ -136,20 +148,17 @@ int main(int argc, char *argv[]) {
   // using multiple host threads and multiple GPUs.
   cusparseHandle_t handle;
   CHECK_CUSPARSE(cusparseCreate(&handle));
-
   // CuSparse works with matrix and vector descriptors. This function
   // initializes the matrix descriptor in CSR
   cusparseSpMatDescr_t matA;
   CHECK_CUSPARSE(cusparseCreateCsr(
       &matA, M, N, nnz, d_csrRowPtr, d_csrColInd, d_csrVal, CUSPARSE_INDEX_32I,
       CUSPARSE_INDEX_32I, CUSPARSE_INDEX_BASE_ZERO, CUDA_R_32F));
-
   // CuSparse works with matrix and vector descriptors. This function
   // initializes the vector descriptors for Vec and Output
   cusparseDnVecDescr_t vecX, vecY;
   CHECK_CUSPARSE(cusparseCreateDnVec(&vecX, N, d_x, CUDA_R_32F));
   CHECK_CUSPARSE(cusparseCreateDnVec(&vecY, M, d_y, CUDA_R_32F));
-
   // CuSparase allows to define some parameters
   // The Operation is Y = alpha * A(mxn) X(nx1) + beta(Y)
   // alpha = constant multiplied to every product - 1 in our case
@@ -171,13 +180,9 @@ int main(int argc, char *argv[]) {
               << std::endl;
     CHECK_CUDA(cudaMemset(d_y, 0, M * sizeof(float)));
     CHECK_CUDA(cudaEventRecord(start, 0));
-    // Y = alpha * A * x
-    // The function cusparseSpMV_bufferSize() returns the size of the
-    // workspace needed by cusparseSpMV_preprocess() and cusparseSpMV()
     CHECK_CUSPARSE(cusparseSpMV_bufferSize(
         handle, CUSPARSE_OPERATION_NON_TRANSPOSE, &alpha, matA, vecX, &beta,
         vecY, CUDA_R_32F, CUSPARSE_SPMV_ALG_DEFAULT, &bufferSize));
-    // workspace allocation
     CHECK_CUDA(cudaMalloc(&dBuffer, bufferSize));
     CHECK_CUSPARSE(cusparseSpMV(handle, CUSPARSE_OPERATION_NON_TRANSPOSE,
                                 &alpha, matA, vecX, &beta, vecY, CUDA_R_32F,
