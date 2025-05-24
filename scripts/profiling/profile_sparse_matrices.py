@@ -67,7 +67,7 @@ STR_TO_DTYPE = {"fp16": torch.float16, "int16": torch.int16, "int8": torch.int8}
 
 DEVICE = os.environ.get("DEVICE_TYPE", "npu")
 
-NPU_DEVICE = "npu:0"
+NPU_DEVICE = "npu:1"
 torch.npu.config.allow_internal_format = False
 torch.npu.set_device(NPU_DEVICE)
 assert torch.npu.is_available()
