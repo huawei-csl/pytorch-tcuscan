@@ -1445,6 +1445,25 @@ __aicore__ inline T Min(T v1, T v2) {
   return v1 <= v2 ? v1 : v2;
 }
 
+/**
+ * @brief Rounds an integral value down to the nearest multiple of a given
+ * alignment.
+ *
+ * @tparam T Integral data type of the length.
+ * @param [in] length Input length.
+ * @param [in] alignment Alignment to use.
+ * @return Aligned value.
+ */
+template <typename T,
+          typename std::enable_if<std::is_integral<T>::value, int>::type = 0>
+__aicore__ inline T AlignDown(T length, uint32_t alignment) {
+  const T tail = length % alignment;
+  if (tail > 0) {
+    return length - tail;
+  }
+  return length;
+}
+
 }  // namespace scalar
 
 namespace tiling {

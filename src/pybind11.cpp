@@ -16,6 +16,7 @@
 #include "torch/torch_gather.h"
 #include "torch/torch_gen_lower.h"
 #include "torch/torch_matmul_cce.h"
+#include "torch/torch_pad.h"
 #include "torch/torch_reduce.h"
 #include "torch/torch_scan.h"
 #include "torch/torch_seg_ops.h"
@@ -72,4 +73,6 @@ PYBIND11_MODULE(tcuscan_ops, m) {
         "Sum-reduce over tiles");
   m.def("run_complete_rows", &asc::reduce::run_complete_rows,
         "Down-sweep (second) phase of MCSCAN");
+  m.def("run_simple_pad", &asc::pad::run_simple_pad,
+        "Padding of an input tensor from length vec_len up to align_len");
 }

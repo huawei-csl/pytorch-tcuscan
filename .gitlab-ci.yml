@@ -261,6 +261,12 @@ test_complete_rows:
     - make setup_ci
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_complete_rows
 
+test_simple_pad:
+  <<: *test_config
+  script:
+    - make setup_ci
+    - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_simple_pad
+
 # Uncomment to run all tests in a single run
 unit_test:
   tags:
