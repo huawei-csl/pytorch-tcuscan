@@ -10,10 +10,12 @@
 #include <pybind11/pybind11.h>
 #include <torch/extension.h>
 
+#include "../tiling/tiling_block_scan.h"
 #include "../tiling/tiling_row_scan.h"
 #include "../tiling/tiling_scan_batch.h"
 #include "../tiling/tiling_scan_multi_core.h"
 #include "../tiling/tiling_scan_single_core.h"
+#include "aclrtlaunch_block_scan_fp16.h"
 #include "aclrtlaunch_row_scan_fp16.h"
 #include "aclrtlaunch_scan_batch.h"
 #include "aclrtlaunch_scan_multi_core_fp16.h"
@@ -293,6 +295,70 @@ at::Tensor run_row_scan(const at::Tensor &x, int S) {
     const at::Tensor workspace_tensor = alloc_workspace(0, device);
     ACLRT_LAUNCH_KERNEL(row_scan_fp16)
     (blockDim, acl_stream, const_cast<void *>(x.storage().data()),
+     const_cast<void *>(z.storage().data()),
+     const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
+  } else {
+    /* Unsupported*/
+  }
+
+  aclrtFree(tiling_device);
+  aclrtSynchronizeStream(acl_stream);
+
+  return z;
+}
+
+/**
+ * @brief Returns the prefix sum (scan) of each block of length S^2 of an 1D
+ * vector `x`.
+ *
+ * @param x Input 1D vector.
+ * @param S Tiling parameter. Typical values 32, 64, 128.
+ * @return The prefix sum of each concecutive block of `x` (block length S^2).
+ */
+at::Tensor run_block_scan(const at::Tensor &x, int S) {
+  const auto ascendc_platform =
+      platform_ascendc::PlatformAscendCManager::GetInstance(SOC_VERSION);
+  auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
+  const at::Device device = x.options().device();
+  const auto dtype = x.options().dtype();
+  const auto dtype_out =
+      dtype == torch::kHalf ? torch::kFloat32 : torch::kInt32;
+
+  const uint32_t s = static_cast<uint32_t>(S);
+  const uint32_t total_len = x.numel();
+
+  const at::Tensor z = at::empty(
+      {total_len}, at::TensorOptions().dtype(dtype_out).device(device));
+
+  const uint32_t tile_elems = s * s;
+  const size_t num_tiles = host_utils::CeilDiv(total_len, tile_elems);
+
+  uint32_t blockDim = ascendc_platform->GetCoreNum() / 2;
+  while (num_tiles % blockDim != 0) {
+    blockDim--;
+  }
+  if (blockDim <= 1) {
+    blockDim = 1;
+  }
+
+  const BlockScanTiling tiling{total_len, s};
+  uint8_t *tiling_device = allocCopyTiling(tiling);
+
+  const at::Tensor upper =
+      torch::triu(torch::ones({s, s}, at::TensorOptions().dtype(dtype)))
+          .to(device);
+
+  const at::Tensor lower =
+      torch::tril(torch::ones({s, s}, at::TensorOptions().dtype(dtype)),
+                  -1 /* diagonal */)
+          .to(device);
+
+  if (dtype == torch::kHalf) {
+    const at::Tensor workspace_tensor = alloc_workspace(0, device);
+    ACLRT_LAUNCH_KERNEL(block_scan_fp16)
+    (blockDim, acl_stream, const_cast<void *>(x.storage().data()),
+     const_cast<void *>(upper.storage().data()),
+     const_cast<void *>(lower.storage().data()),
      const_cast<void *>(z.storage().data()),
      const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
   } else {

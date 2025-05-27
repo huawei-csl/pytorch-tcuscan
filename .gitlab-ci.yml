@@ -267,6 +267,13 @@ test_simple_pad:
     - make setup_ci
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_simple_pad
 
+test_block_scan:
+  <<: *test_config
+  script:
+    - make setup_ci
+    - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_block_scan
+
+
 # Uncomment to run all tests in a single run
 unit_test:
   tags:

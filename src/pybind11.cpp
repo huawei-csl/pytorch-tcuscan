@@ -73,6 +73,8 @@ PYBIND11_MODULE(tcuscan_ops, m) {
         "Sum-reduce over tiles");
   m.def("run_complete_rows", &asc::reduce::run_complete_rows,
         "Down-sweep (second) phase of MCSCAN");
+  m.def("run_block_scan", &asc::scan::run_block_scan,
+        "Block scan on blocks of length S^2");
   m.def("run_simple_pad", &asc::pad::run_simple_pad,
         "Padding of an input tensor from length vec_len up to align_len");
 }
