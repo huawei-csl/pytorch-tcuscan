@@ -460,6 +460,22 @@ def row_scan_benchmark(
     return _run_benchmark(device, run_row_scan), size
 
 
+def block_scan_benchmark(
+    device: Device, size: int, dtype: torch.dtype, s: int
+) -> Tuple[float, int]:
+    if dtype == torch.float16:
+        x = torch.rand(size, device=device.str, dtype=dtype)
+    else:
+        raise RuntimeError(
+            f"dtype {dtype} is not supported in TCUSCAN block_scan operator"
+        )
+
+    def run_block_scan() -> None:
+        _ = tcuscan_ops.run_block_scan(x.reshape(-1, s), s)
+
+    return _run_benchmark(device, run_block_scan), size
+
+
 def row_scan_cce_benchmark(
     device: Device, size: int, dtype: torch.dtype, s: int
 ) -> Tuple[float, int]:
@@ -616,6 +632,7 @@ if __name__ == "__main__":  # noqa
             "row_scan_cce",
             "cast",
             "gen_lower",
+            "block_scan",
         ],
     )
     parser.add_argument("--dtype", choices=["int8", "fp16", "int16", "int32", "fp32"])
@@ -806,6 +823,16 @@ if __name__ == "__main__":  # noqa
             f"row_scan_{s}",
             dtype,
             partial(row_scan_benchmark, dtype=tdtype, s=s),
+            sizes,
+            density,
+        )
+    elif bench == "block_scan" and dtype in ["fp16"]:
+        tdtype = STR_TO_DTYPE[dtype]
+        benchmark(
+            device,
+            f"block_scan_{s}",
+            dtype,
+            partial(block_scan_benchmark, dtype=tdtype, s=s),
             sizes,
             density,
         )
