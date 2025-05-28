@@ -30,7 +30,7 @@ def tcuscan_compress(x, mask, s: int):
 
 
 def _test_compress(vec_len: int, s: int, dtype: torch.dtype):
-    x = torch.randint(0, 2**7 - 1, (vec_len,)).to(dtype).npu()
+    x = torch.randint(0, 2**7 - 1, (vec_len,), dtype=dtype, device=NPU_DEVICE)
     mask = (torch.randn(vec_len) > 0).to(torch.int8).npu()
 
     expected = torch.masked_select(x, mask.to(torch.uint8))

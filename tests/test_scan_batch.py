@@ -29,12 +29,14 @@ def get_lengths_and_batch_sizes(s: int, multipliers: List[int], batch_sizes: Lis
 
 def _test_scan_batch_fp16(s: int, vec_len: int, batch_size: int):
 
-    x = torch.rand((batch_size, vec_len)).half().npu()
+    x = torch.rand((batch_size, vec_len), dtype=torch.float16, device=NPU_DEVICE)
 
+    torch.npu.synchronize()
     expected = torch.cumsum(x, dim=1, dtype=torch.float)
     torch.npu.synchronize()
     actual = tcuscan_ops.run_scan_batch(x, s)
     torch.npu.synchronize()
+
     assert torch.allclose(
         actual, expected, rtol=1e-03
     ), f"batch scan (fp16) wrong. s={s}, vec_len={vec_len}, batch_size= {batch_size}"

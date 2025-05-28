@@ -46,13 +46,14 @@ VEC_LENS = [
 
 @pytest.mark.parametrize("vec_len", VEC_LENS)
 def test_vadd(vec_len: int):
-    x = torch.rand(vec_len, device="cpu", dtype=torch.float16)
-    y = torch.rand(vec_len, device="cpu", dtype=torch.float16)
+    x = torch.rand(vec_len, device=NPU_DEVICE, dtype=torch.float16)
+    y = torch.rand(vec_len, device=NPU_DEVICE, dtype=torch.float16)
 
-    x_npu = x.npu()
-    y_npu = y.npu()
-    output = tcuscan_ops.run_add(x_npu, y_npu)
-    cpuout = torch.add(x, y).npu()
+    torch.npu.synchronize()
+    actual = tcuscan_ops.run_add(x, y)
+    torch.npu.synchronize()
+    expected = torch.add(x, y)
+    torch.npu.synchronize()
 
-    assert output.shape == cpuout.shape, "Output shape does not match expected shape."
-    assert torch.equal(output, cpuout)
+    assert actual.shape == expected.shape, "Output shape does not match expected shape."
+    assert torch.equal(actual, expected)

@@ -27,14 +27,15 @@ def get_lengths(s: int, max_iters: int):
 def _test_reduce_tiles(vec_len: int, s: int, dtype: torch.dtype):
     out_dtype = None
     if dtype == torch.float16:
-        x = 0.1 * torch.randn(vec_len).half().npu()
+        x = 0.1 * torch.randn(vec_len, dtype=dtype, device=NPU_DEVICE)
         out_dtype = torch.float32
     elif dtype == torch.int8:
-        x = torch.randint(-3, 3, size=(vec_len,), dtype=torch.int8).npu()
+        x = torch.randint(-3, 3, size=(vec_len,), dtype=torch.int8, device=NPU_DEVICE)
         out_dtype = torch.int32
     else:
         assert False, "Unsupported dtype for reduce_tiles. Got {dtype}."
 
+    torch.npu.synchronize()
     expected = torch.sum(x.reshape(NUM_BLOCKS, -1), dim=1, dtype=out_dtype).flatten()
     torch.npu.synchronize()
     actual = tcuscan_ops.run_reduce_tiles(x, s, NUM_BLOCKS)

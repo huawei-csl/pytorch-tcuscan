@@ -25,11 +25,14 @@ M_LIST = [NUM_CORES * 128 * 128 * i for i in range(1, 10)]
 
 def _test_row_scan(m: int, dtype: torch.dtype):
     S = 128
-    A = torch.ones(m, S, dtype=dtype).npu()
-    B = torch.tril(torch.ones((S, S), dtype=dtype)).npu()
+    A = torch.ones(m, S, dtype=dtype, device=NPU_DEVICE)
+    B = torch.tril(torch.ones((S, S), dtype=dtype, device=NPU_DEVICE))
 
+    torch.npu.synchronize()
     actual = tcuscan_ops.run_row_scan(A, S).half()
+    torch.npu.synchronize()
     expected = F.linear(A, B).flatten()
+    torch.npu.synchronize()
 
     assert actual.dtype == expected.dtype
     assert torch.allclose(

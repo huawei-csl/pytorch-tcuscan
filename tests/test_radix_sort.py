@@ -50,20 +50,21 @@ def get_sizes():
 
 def generate_random_int(dtype, vec_len):
     if dtype == torch.int16:
-        return (
-            torch.randint(torch.iinfo(dtype).min, torch.iinfo(dtype).max, (vec_len,))
-            .to(dtype)
-            .npu()
-        )
+        xmin = torch.iinfo(dtype).min
+        xmax = torch.iinfo(dtype).max
+        return torch.randint(xmin, xmax, (vec_len,), dtype=dtype, device=NPU_DEVICE)
     else:
-        return torch.rand((vec_len,), dtype=dtype).npu()
+        return torch.rand((vec_len,), dtype=dtype, device=NPU_DEVICE)
 
 
 def _test_sort(vec_len: int, dtype: torch.dtype, s: int):
     x = generate_random_int(dtype, vec_len)
 
+    torch.npu.synchronize()
     expected, expected_indices = torch.sort(x, dim=-1, descending=False)
+    torch.npu.synchronize()
     actual, actual_indices = tcuscan_ops.run_radix_sort(x, s)
+    torch.npu.synchronize()
 
     assert len(expected) == len(
         actual

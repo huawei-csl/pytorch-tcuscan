@@ -38,10 +38,12 @@ VEC_LENS = [
 
 def _test_split_ind(vec_len: int, s: int, dtype: torch.dtype = torch.int16):
     "Unit tests split_ind operator for given input length, s and dtype."
-    x = torch.randint(0, 2**7 - 1, (vec_len,)).to(dtype).npu()
+    x = torch.randint(0, 2**7 - 1, (vec_len,), dtype=dtype, device=NPU_DEVICE)
     mask = (torch.randn(vec_len) > 0).to(torch.int8).npu()
 
+    torch.npu.synchronize()
     z = tcuscan_ops.run_split(x, mask, s)
+    torch.npu.synchronize()
 
     assert len(z) == len(x), "Input and output vector dimensions must agree."
 

@@ -29,15 +29,15 @@ torch.npu.set_device(NPU_DEVICE)
 
 
 def _test_tcuscan_gen_lower(matrix_size: int, dtype: torch.dtype):
-    x = torch.tril(torch.ones((matrix_size, matrix_size), dtype=dtype))
-    x_npu = x.npu()
+    x = torch.tril(
+        torch.ones((matrix_size, matrix_size), dtype=dtype, device=NPU_DEVICE)
+    )
     torch.npu.synchronize()
-    output = tcuscan_ops.run_gen_lower(matrix_size, x_npu.device, dtype)
+    output = tcuscan_ops.run_gen_lower(matrix_size, x.device, dtype)
     torch.npu.synchronize()
-    output_cpu = output.cpu()
     torch.npu.synchronize()
-    assert output_cpu.shape == x.shape, "Output shape does not match expected shape."
-    assert torch.equal(output_cpu, x)
+    assert output.shape == x.shape, "Output shape does not match expected shape."
+    assert torch.equal(output, x)
 
 
 @pytest.mark.parametrize("matrix_size", [32, 64, 128, 256, 512, 1024])

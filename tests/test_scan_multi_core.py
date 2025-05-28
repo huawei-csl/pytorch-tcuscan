@@ -26,18 +26,20 @@ def get_lengths(s: int, max_iters: int):
 def _test_dtype(vec_len: int, s: int, dtype: torch.dtype):
     out_dtype = None
     if dtype == torch.float16:
-        x = torch.randn(vec_len).half().npu()
+        x = torch.randn(vec_len, dtype=dtype, device=NPU_DEVICE)
         out_dtype = torch.float32
     elif dtype == torch.int8:
-        x = torch.randint(0, 10, size=(vec_len,), dtype=torch.int8).npu()
+        x = torch.randint(0, 10, size=(vec_len,), dtype=dtype, device=NPU_DEVICE)
         out_dtype = torch.int32
     else:
         assert False, "Unsupported dtype for MCSCAN. Got {dtype}."
 
+    torch.npu.synchronize()
     expected = torch.cumsum(x, dim=-1, dtype=out_dtype)
     torch.npu.synchronize()
     actual = tcuscan_ops.run_scan_multi_core(x, s)
     torch.npu.synchronize()
+
     assert actual.dtype == expected.dtype
     # TODO: the allclose rtol threshold must be lowered. It fails 1 case with -1, 9 cases with -2
     assert torch.allclose(

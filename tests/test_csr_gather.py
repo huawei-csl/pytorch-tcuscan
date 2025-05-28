@@ -55,11 +55,11 @@ def ref_csr_gather(input_values, input_cols, input_x):
 
 
 def _test_tcuscan_csr_gather(col_len, x_len):
-    input_values = torch.randn(col_len).half().npu()
+    input_values = torch.randn(col_len, dtype=torch.float16, device=NPU_DEVICE)
     input_cols = torch.randint(
-        low=0, high=x_len, size=(col_len,), dtype=torch.int32
-    ).npu()
-    input_x = torch.randn(x_len).half().npu()
+        low=0, high=x_len, size=(col_len,), dtype=torch.int32, device=NPU_DEVICE
+    )
+    input_x = torch.randn(x_len, dtype=torch.float16, device=NPU_DEVICE)
 
     expected = ref_csr_gather(input_values, input_cols, input_x)
     torch.npu.synchronize()
