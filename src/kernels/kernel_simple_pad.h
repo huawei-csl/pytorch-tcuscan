@@ -29,8 +29,7 @@ class KernelSimplePad {
    * to.
    */
   __aicore__ inline KernelSimplePad(uint32_t vec_len, uint32_t align_len)
-      : vec_core_num_(GetBlockNum() * GetTaskRation()),
-        vec_len_(vec_len),
+      : vec_len_(vec_len),
         align_len_(align_len),
         tail_len_(vec_len % align_len_),
         pad_len_(align_len_ - tail_len_),
@@ -82,7 +81,6 @@ class KernelSimplePad {
   GlobalTensor<T> global_in_;
   GlobalTensor<T> global_out_;
 
-  const uint32_t vec_core_num_;
   const uint32_t vec_len_;
   const uint32_t align_len_;
   const uint32_t tail_len_;

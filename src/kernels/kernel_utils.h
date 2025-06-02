@@ -811,8 +811,11 @@ __aicore__ inline void CopyVecToGm(const GlobalTensor<DataType> &global,
                                    uint32_t num_elems = 0) {
   exec_mode::AssertIsAIV();
   LocalTensor<DataType> lt = q.template DeQue<DataType>();
-  if (!num_elems) num_elems = lt.GetSize();
-  if (num_elems % UB_ALIGNMENT == 0) {
+  if (!num_elems) {
+    num_elems = lt.GetSize();
+  }
+
+  if ((num_elems * sizeof(DataType)) % UB_ALIGNMENT == 0) {
     DataCopy(global, lt, num_elems);
   } else {
     DataCopyExtParams params;
@@ -1286,20 +1289,20 @@ namespace scalar {
  * @brief Rounds an integral value up to the nearest multiple of a given
  * alignment.
  *
- * @tparam T Data type of the value.
- * @param [in] value Input value.
+ * @tparam T Data type of the integral length.
+ * @param [in] length Input length.
  * @param [in] alignment Alignment to use.
- * @return Aligned value.
+ * @return Aligned length.
  */
 template <typename T,
           typename std::enable_if<std::is_integral<T>::value, int>::type = 0>
-__aicore__ inline T AlignUp(T value, uint32_t alignment) {
-  const T tail = value % alignment;
+__aicore__ inline T AlignUp(T length, uint32_t alignment) {
+  const T tail = length % alignment;
   if (!tail) {
-    return value;
+    return length;
   }
   const T padding = alignment - tail;
-  return value + padding;
+  return length + padding;
 }
 
 /**
@@ -1395,22 +1398,22 @@ __aicore__ inline uint32_t GetBatchDistribution(uint32_t batch_size,
 /**
  * @brief Reads a value from global memory.
  *
- * @tparam DataT Data type.
+ * @tparam T Data type.
  * @param [in] addr Address in GM.
  * @param [in] offset Offset.
  * @param [in] vec_len Size of the global buffer.
  * @return Result of division.
  */
-template <typename DataT>
-__aicore__ inline DataT GetGMValue(GM_ADDR addr, uint32_t offset,
-                                   uint32_t vec_len) {
+template <typename T>
+__aicore__ inline T GetGMValue(GM_ADDR addr, uint32_t offset,
+                               uint32_t vec_len) {
   ASCENDC_ASSERT(offset < vec_len, {
     KERNEL_LOG(KERNEL_ERROR,
                "GetGMValue is trying to access data out of bounds.");
   });
 
-  GlobalTensor<DataT> gt;
-  gt.SetGlobalBuffer((__gm__ DataT *)addr, vec_len);
+  GlobalTensor<T> gt;
+  gt.SetGlobalBuffer((__gm__ T *)addr, vec_len);
 
   data_cache::InvalidateLine(gt);
 

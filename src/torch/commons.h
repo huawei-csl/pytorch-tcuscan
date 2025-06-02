@@ -30,7 +30,7 @@ at::Tensor alloc_workspace(uint32_t user_workspace_size, at::Device device) {
   const uint32_t system_workspace_size =
       static_cast<uint32_t>(ascendc_platform->GetLibApiWorkSpaceSize());
   const uint32_t workspace_size = user_workspace_size + system_workspace_size;
-  const at::Tensor workspace_tensor = at::empty(
+  const at::Tensor workspace_tensor = at::zeros(
       {workspace_size}, at::TensorOptions().dtype(at::kByte).device(device));
 
   return workspace_tensor;

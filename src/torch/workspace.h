@@ -126,12 +126,8 @@ template <typename InputT>
 constexpr uint32_t GetWorkspaceSize(const SingleCoreScanTiling& tiling) {
   using OutputT = host_utils::CubeOutType_t<InputT>;
 
-  const uint32_t padded_input_len = host_utils::AlignUp(
-      tiling.num_elems, tiling.matmul_size * tiling.matmul_size);
-  const uint32_t padded_input_size = padded_input_len * sizeof(InputT);
-  const uint32_t padded_rowwise_size = padded_input_len * sizeof(OutputT);
-
-  const uint32_t total_size = padded_input_size + padded_rowwise_size;
+  const uint32_t total_size =
+      tiling.matmul_size * tiling.matmul_size * sizeof(OutputT);
   return total_size;
 }
 }  // namespace sc_scan
