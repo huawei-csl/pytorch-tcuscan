@@ -10,8 +10,10 @@
 #include <pybind11/pybind11.h>
 #include <torch/extension.h>
 
+#include "../tiling/tiling_complete_blocks.h"
 #include "../tiling/tiling_complete_rows.h"
 #include "../tiling/tiling_reduce_tiles.h"
+#include "aclrtlaunch_complete_blocks_fp32.h"
 #include "aclrtlaunch_complete_rows_fp32.h"
 #include "aclrtlaunch_complete_rows_int32.h"
 #include "aclrtlaunch_reduce_tiles_fp16.h"
@@ -113,6 +115,47 @@ at::Tensor run_complete_rows(const at::Tensor &x, const at::Tensor &sums,
     ACLRT_LAUNCH_KERNEL(complete_rows_fp32)
     (block_dim, acl_stream, const_cast<void *>(x.storage().data()),
      const_cast<void *>(sums.storage().data()),
+     const_cast<void *>(z.storage().data()),
+     const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
+  }
+
+  aclrtFree(tiling_device);
+  aclrtSynchronizeStream(acl_stream);
+
+  return z;
+}
+
+/**
+ * @brief Broadcast-adds the block-sums into each block on the second phase
+ * (down-sweep) of block scan.
+ *
+ * Assumption: input vector x is split into blocks.
+ *
+ * @param [in] x Input 1D vector.
+ * @param [in] block_size Length of the blocks used by `KernelBlockScan`
+ * kernel.
+ * @return Returns a vector where each i-th block of x has been added sims[i].
+ */
+at::Tensor run_complete_blocks(const at::Tensor &x, int block_size) {
+  auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
+  const at::Device device = x.options().device();
+  const auto dtype = x.options().dtype();
+  const auto dtype_out =
+      dtype == torch::kFloat32 ? torch::kFloat32 : torch::kInt32;
+
+  const uint32_t vec_len = x.numel();
+  const uint32_t tile_len = static_cast<uint32_t>(block_size);
+  const uint32_t block_dim = 1;
+  const at::Tensor z =
+      at::empty({vec_len}, at::TensorOptions().dtype(dtype_out).device(device));
+
+  const CompleteBlocksTiling tiling{vec_len, tile_len};
+  uint8_t *tiling_device = allocCopyTiling(tiling);
+
+  const at::Tensor workspace_tensor = alloc_workspace(0, device);
+  if (dtype == torch::kFloat) {
+    ACLRT_LAUNCH_KERNEL(complete_blocks_fp32)
+    (block_dim, acl_stream, const_cast<void *>(x.storage().data()),
      const_cast<void *>(z.storage().data()),
      const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
   }

@@ -47,6 +47,7 @@ ascendc_library(kernels SHARED
     src/gen_lower.cpp
     src/reduce_tiles.cpp
     src/complete_rows.cpp
+    src/complete_blocks.cpp
     src/block_scan.cpp
     src/simple_pad.cpp
 )
