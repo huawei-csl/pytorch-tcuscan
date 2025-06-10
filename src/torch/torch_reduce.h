@@ -132,30 +132,31 @@ at::Tensor run_complete_rows(const at::Tensor &x, const at::Tensor &sums,
  * Assumption: input vector x is split into blocks.
  *
  * @param [in] x Input 1D vector.
- * @param [in] block_size Length of the blocks used by `KernelBlockScan`
- * kernel.
- * @return Returns a vector where each i-th block of x has been added sims[i].
+ * @param [in] sums Tensor containing sum-reduction of consecutive blocks of x.
+ * @param [in] tile_length Length of kernel tiles to be used for performance
+ * optimization.
+ * @return Returns a vector where each i-th block of x has been added
+ * sum(sums[:i]).
  */
-at::Tensor run_complete_blocks(const at::Tensor &x, int block_size) {
+at::Tensor run_complete_blocks(const at::Tensor &x, const at::Tensor &sums,
+                               int tile_length) {
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();
   const auto dtype = x.options().dtype();
-  const auto dtype_out =
-      dtype == torch::kFloat32 ? torch::kFloat32 : torch::kInt32;
 
   const uint32_t vec_len = x.numel();
-  const uint32_t tile_len = static_cast<uint32_t>(block_size);
-  const uint32_t block_dim = 1;
-  const at::Tensor z =
-      at::empty({vec_len}, at::TensorOptions().dtype(dtype_out).device(device));
+  const uint32_t num_blocks = sums.numel();
+  const uint32_t tile_len = static_cast<uint32_t>(tile_length);
+  const at::Tensor z = at::empty_like(x);
 
-  const CompleteBlocksTiling tiling{vec_len, tile_len};
+  const CompleteBlocksTiling tiling{vec_len, num_blocks, tile_len};
   uint8_t *tiling_device = allocCopyTiling(tiling);
 
   const at::Tensor workspace_tensor = alloc_workspace(0, device);
   if (dtype == torch::kFloat) {
     ACLRT_LAUNCH_KERNEL(complete_blocks_fp32)
-    (block_dim, acl_stream, const_cast<void *>(x.storage().data()),
+    (num_blocks, acl_stream, const_cast<void *>(x.storage().data()),
+     const_cast<void *>(sums.storage().data()),
      const_cast<void *>(z.storage().data()),
      const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
   }

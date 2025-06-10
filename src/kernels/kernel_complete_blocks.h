@@ -2,7 +2,8 @@
  * Copyright (c) Huawei Technologies Co., Ltd. 2024-2025. All rights reserved.
  *
  * @file kernel_complete_blocks.h
- * @brief Kernel implementing a cube-only scan.
+ * @brief Kernel implementing the broadcast scalar-vector addition step of
+ * multi-core scans, known as down-sweep phase.
  */
 #pragma once
 
@@ -13,70 +14,163 @@ using namespace AscendC;
 using namespace kernel_utils;
 
 /**
- * @brief Transforms block scans into a complete inclusive scan.
+ * @brief Finish the scan operation based on block-wise partial scans and
+ * reduced blocks.
+ *
+ * This kernel takes outputs of `KernelBlockScan` and `KernelReduceTiles` and
+ * finishes calculating the entire scan of the vector.
+ *
+ * Because of the limited vector core's support for data types, the input data
+ * must be `half`, `int16_t`, `float` or `int32_t`.
+ *
+ * @tparam T Data type of the input and output vectors.
+ * @tparam IsInclusive Indicates whether the scan is inclusive or exclusive.
  */
+template <typename T, bool IsInclusive = true>
 class KernelCompleteBlocks {
+  constexpr static int32_t MIN_VEC_SIZE = UB_ALIGNMENT / sizeof(T);
+
  public:
   /**
    * @brief Class constructor.
    *
    * @param [in] vec_len Number of elements in an input vector.
-   * @param [in] tile_size Size of the block.
+   * @param [in] num_blocks Number of blocks by `KernelBlockScan`.
+   * @param [in] tile_len Length of kernel tiles.
    */
-  __aicore__ inline KernelCompleteBlocks(uint32_t vec_len, uint32_t tile_size)
-      : vec_len_(vec_len), tile_size_(tile_size) {}
+  __aicore__ inline KernelCompleteBlocks(uint32_t vec_len, uint32_t num_blocks,
+                                         uint32_t tile_len)
+      : block_num_(GetBlockNum() * GetTaskRation()),
+        vec_len_(vec_len),
+        sums_len_(num_blocks),
+        block_len_(vec_len_ / sums_len_),  // TODO: assert this
+        tile_len_(tile_len),
+        output_real_elems_(IsInclusive ? vec_len_ : vec_len_ - 1),
+        num_tiles_(scalar::CeilDiv(vec_len_, tile_len_)),
+        max_num_tiles_per_block_(scalar::CeilDiv(block_len_, tile_len_)) {
+    constexpr bool IS_DT_SUPPORTED =
+        std::is_same_v<T, float> || std::is_same_v<T, int32_t>;
+    static_assert(IS_DT_SUPPORTED, "Unsupported data type.");
+  }
 
   /**
    * @brief Initialize global and local memory structures.
    *
-   * @param [in] input Pointer to block-wise scan in global memory.
+   * @param [in] input_rows Pointer to input vector in global memory.
+   * @param [in] sums Pointer to vector with partial sums in global
+   * memory.
    * @param [in] output Pointer to output vector in global memory.
    */
-  __aicore__ inline void Init(GM_ADDR input, GM_ADDR output) {
-    global_input_.SetGlobalBuffer((__gm__ float *)input);
-    global_output_.SetGlobalBuffer((__gm__ float *)output);
+  __aicore__ inline void Init(GM_ADDR input_rows, GM_ADDR sums,
+                              GM_ADDR output) {
+    global_input_rows_.SetGlobalBuffer((__gm__ T *)input_rows, vec_len_);
+    global_sums_.SetGlobalBuffer((__gm__ T *)sums, sums_len_);
 
-    pipe.InitBuffer(vecin_q_, 1, tile_size_ * sizeof(float));
-    pipe.InitBuffer(vecout_q_, 1, tile_size_ * sizeof(float));
+    if constexpr (!IsInclusive) {
+      // The very first element of the output where a zero value must go
+      // in case of exclusive scan.
+      global_output_first_elem_.SetGlobalBuffer((__gm__ T *)output, 1);
+    }
+    global_output_.SetGlobalBuffer((__gm__ T *)output + global_shift_,
+                                   output_real_elems_);
+
+    pipe.InitBuffer(vec_tile_in_q_, 2, tile_len_ * sizeof(T));
+    pipe.InitBuffer(vec_tile_out_q_, 2, tile_len_ * sizeof(T));
+
+    pipe.InitBuffer(sums_q_, 1, AlignUp(block_num_, MIN_VEC_SIZE) * sizeof(T));
   }
 
   /**
-   * @brief Run the kernel.
+   * @brief Run the kernel - process all tiles.
+   *
+   * @param [in] starting_value Starting value added to all entries of the
+   * output vector.
    */
-  __aicore__ inline void Process() {
-    float running_sum = 0;
-    for (uint32_t offset = 0; offset < vec_len_; offset += tile_size_) {
+  __aicore__ inline void Process(T starting_value = 0) {
+    const T previous_sum = ScanReducedBlocks() + starting_value;
+    AddSumsToMatmulTiles(previous_sum);
+    if constexpr (!IsInclusive) {
       if (GetBlockIdx() == 0) {
-        running_sum = VecIter(offset, running_sum);
+        global_output_first_elem_(0) = starting_value;
+        DataCacheCleanAndInvalid<T, CacheLine::SINGLE_CACHE_LINE,
+                                 DcciDst::CACHELINE_OUT>(
+            global_output_first_elem_);
       }
     }
   }
 
  private:
-  __aicore__ inline float VecIter(uint32_t offset, float running_sum) {
-    copy::CopyGmToVec(vecin_q_, global_input_[offset], tile_size_);
-    running_sum = ReduceWithVec(running_sum);
-    copy::CopyVecToGm<float>(global_output_[offset], vecout_q_, vecin_q_,
-                             tile_size_);
-    return running_sum;
+  /**
+   * @brief Performs a scan on the block reduced values that is the output of
+   * `KernelReduceTiles`.
+   *
+   * @return Returns the prefix sum value of index `GetBlockIdx()`.
+   */
+  __aicore__ inline T ScanReducedBlocks() {
+    // Reduce the sums of all the previous tiles.
+    copy::CopyGmToVec(sums_q_, global_sums_, sums_len_);
+    LocalTensor<T> sums_lt = sums_q_.DeQue<T>();
+    const T previous_sum = reduce::ReduceScalarAdd(sums_lt, GetBlockIdx());
+    sums_q_.FreeTensor(sums_lt);
+    return previous_sum;
   }
 
-  __aicore__ inline float ReduceWithVec(float running_sum) {
-    const LocalTensor<float> vec_lt = vecin_q_.DeQue<float>();
-    Adds(vec_lt, vec_lt, running_sum, tile_size_);
-    running_sum = vec_lt.GetValue(tile_size_ - 1);
-    vecin_q_.EnQue(vec_lt);
-    return running_sum;
+  __aicore__ inline void AddSumsToMatmulTiles(T previous_sum) {
+    uint32_t global_offset =
+        GetBlockIdx() * tile_len_ * max_num_tiles_per_block_;
+    const uint32_t num_tiles_to_process =
+        scalar::GetWorkDistribution(vec_len_, tile_len_, block_num_);
+
+    for (uint32_t tile_idx = 0; tile_idx < max_num_tiles_per_block_;
+         tile_idx++) {
+      const bool full_tile = global_offset + tile_len_ <= output_real_elems_;
+      const uint32_t num_elems_to_process =
+          full_tile ? tile_len_ : output_real_elems_ - global_offset;
+
+      copy::CopyGmToVec(vec_tile_in_q_, global_input_rows_[global_offset],
+                        num_elems_to_process);
+
+      VectorAdds(previous_sum, num_elems_to_process);
+
+      copy::CopyVecToGm(global_output_[global_offset], vec_tile_out_q_,
+                        num_elems_to_process);
+
+      global_offset += tile_len_;
+    }
+  }
+
+  __aicore__ inline void VectorAdds(T block_level_prefix_sum,
+                                    uint32_t num_elems_to_process) {
+    LocalTensor<T> vec_lt = vec_tile_in_q_.DeQue<T>();
+    const LocalTensor<T> vec_out_lt = vec_tile_out_q_.AllocTensor<T>();
+
+    Adds(vec_out_lt, vec_lt, block_level_prefix_sum, num_elems_to_process);
+
+    vec_tile_out_q_.EnQue(vec_out_lt);
+    vec_tile_in_q_.FreeTensor(vec_lt);
   }
 
   TPipe pipe;
 
-  TQue<QuePosition::VECIN, 1> vecin_q_;
-  TQue<QuePosition::VECOUT, 1> vecout_q_;
+  TQue<QuePosition::VECIN, 2> vec_tile_in_q_;
+  TQue<QuePosition::VECOUT, 2> vec_tile_out_q_;
 
-  GlobalTensor<float> global_input_;
-  GlobalTensor<float> global_output_;
+  TQue<QuePosition::VECIN, 1> sums_q_;
 
+  GlobalTensor<T> global_input_rows_;
+  GlobalTensor<T> global_sums_;
+  GlobalTensor<T> global_output_;
+  GlobalTensor<T> global_output_first_elem_;
+
+  constexpr static uint32_t global_shift_ = IsInclusive ? 0 : 1;
+
+  const uint32_t block_num_;
   const uint32_t vec_len_;
-  const uint32_t tile_size_;
+  const uint32_t sums_len_;
+  const uint32_t block_len_;
+  const uint32_t tile_len_;
+
+  const uint32_t output_real_elems_;
+  const uint32_t num_tiles_;
+  const uint32_t max_num_tiles_per_block_;
 };

@@ -16,7 +16,9 @@
 struct CompleteBlocksTiling {
   /// @brief Number of elements
   uint32_t num_elems;
-  /// @brief block_size
-  uint32_t block_size;
+  /// @brief Number of blocks that are prefix-summed.
+  uint32_t num_blocks;
+  /// @brief Length of kernel tile.
+  uint32_t tile_len;
 };
 #pragma pack(pop)

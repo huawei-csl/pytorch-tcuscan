@@ -17,51 +17,65 @@ torch.npu.config.allow_internal_format = False
 torch.npu.set_device(NPU_DEVICE)
 
 
-def ref_complete_blocks(x, tile_len: int):
+def ref_complete_blocks(x, sums, num_blocks: int):
     "Reference implementation of `KernelCompleteBlocks` AscendC kernel."
     vec_len = len(x)
-    expected = x.clone()
-    running_sum = 0
-    for offset in range(0, vec_len, tile_len):
-        this_tile_len = tile_len
-        if offset + this_tile_len >= vec_len:
-            this_tile_len = vec_len - offset
-        expected[offset : offset + this_tile_len] = (
-            expected[offset : offset + this_tile_len] + running_sum
-        )
-        running_sum = expected[offset + this_tile_len - 1]
 
-    return expected
+    prefix_sums = torch.cumsum(
+        torch.concat([torch.zeros(1, dtype=x.dtype).npu(), sums[:-1]]), dim=-1
+    )
+
+    assert sums.numel() == num_blocks
+    assert prefix_sums.numel() == num_blocks
+
+    assert (
+        vec_len % num_blocks == 0
+    ), "Input vector length must be divisble by the number of blocks."
+
+    block_len = vec_len // num_blocks
+    expected = torch.clone(x)
+    for b in range(num_blocks):
+        block_offset = b * block_len
+        acc = prefix_sums[b]
+        expected[block_offset : block_offset + block_len] += acc
+
+    return expected.flatten()
 
 
-def _test_complete_blocks(vec_len: int, tile_len: int, dtype: torch.dtype):
+def _test_complete_blocks(
+    vec_len: int, tile_len: int, num_blocks: int, dtype: torch.dtype
+):
     if dtype == torch.float32:
-        x_np_cpu = np.random.randn(vec_len).astype(np.float32)
-        x_cpu = torch.from_numpy(x_np_cpu)
+        x = 0.1 * torch.randn(vec_len, device=NPU_DEVICE).float()
+    elif dtype == torch.int32:
+        x = torch.randint(-3, 3, size=(vec_len,), dtype=torch.int32, device=NPU_DEVICE)
     else:
         assert False, f"Unsupported dtype for reduce_tiles. Got {dtype}."
 
-    expected_cpu = ref_complete_blocks(x_cpu, tile_len)
+    # Sum-reductions per block
+    sums = torch.sum(x.reshape(num_blocks, -1), dim=1, dtype=dtype).flatten()
+    expected = ref_complete_blocks(x, sums, num_blocks)
+    torch.npu.synchronize()
+    actual = tcuscan_ops.run_complete_blocks(x, sums, tile_len)
+    torch.npu.synchronize()
 
-    x = x_cpu.npu()
-    torch.npu.synchronize()
-    actual = tcuscan_ops.run_complete_blocks(x, tile_len)
-    actual_cpu = actual.cpu()
-    torch.npu.synchronize()
-    assert expected_cpu.dtype == actual_cpu.dtype
-    assert expected_cpu.shape == actual_cpu.shape
+    assert expected.dtype == actual.dtype
+    assert expected.shape == actual.shape
     assert torch.allclose(
-        actual_cpu, expected_cpu, atol=0, rtol=1e-15
-    ), "Returned tensor does not match the expected tensor."
+        actual, expected, atol=1e-0, rtol=1e-3
+    ), f"Returned tensor does not match the expected tensor. sums: {sums}"
 
 
-@pytest.mark.parametrize("matrix_size", [32, 64, 128])
-@pytest.mark.parametrize("multiplier", range(1, 10))
-def test_tcuscan_complete_blocks_fp32(matrix_size: int, multiplier: int):
-    tile_len = matrix_size * matrix_size
-    vec_len = tile_len * multiplier
+@pytest.mark.parametrize("num_blocks", [2, 10, 20, 40])
+@pytest.mark.parametrize("tile_len", [32, 128, 256, 512])
+@pytest.mark.parametrize("multiplier", [3, 5, 7])
+@pytest.mark.parametrize("dtype", [torch.float32], ids=str)
+def test_tcuscan_complete_blocks_fp32(
+    num_blocks: int, tile_len: int, multiplier: int, dtype: torch.dtype
+):
     _test_complete_blocks(
-        vec_len,
+        num_blocks * tile_len * tile_len * multiplier,
         tile_len,
-        torch.float32,
+        num_blocks,
+        dtype,
     )
