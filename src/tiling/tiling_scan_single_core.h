@@ -18,5 +18,11 @@ struct SingleCoreScanTiling {
   uint32_t num_elems;
   /// @brief Size of the matmul tile used in the cube part.
   uint32_t matmul_size;
+  /// @brief Starting sum for the scan operator. it can be either float or
+  /// int32_t.
+  union {
+    int32_t int_value;
+    float float_value;
+  } running_sum;
 };
 #pragma pack(pop)

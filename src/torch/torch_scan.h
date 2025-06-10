@@ -38,9 +38,11 @@ namespace scan {
  *
  * @param x Input 1D vector.
  * @param S Matrix tiling parameter. Typical values: 32, 64, 128.
+ * @param starting_sum Starting sum for the scan_single core. Default is 0
  * @return The prefix sum of `x`.
  */
-at::Tensor run_scan_single_core(const at::Tensor &x, int S) {
+at::Tensor run_scan_single_core(const at::Tensor &x, int S,
+                                double starting_sum = 0) {
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();
   const auto dtype = x.options().dtype();
@@ -53,8 +55,17 @@ at::Tensor run_scan_single_core(const at::Tensor &x, int S) {
   // Outuput is always 32-bits (float or int32_t)
   const at::Tensor z = at::empty(
       {totalLength}, at::TensorOptions().dtype(dtype_out).device(device));
+  SingleCoreScanTiling tiling;
+  tiling.num_elems = totalLength;
+  tiling.matmul_size = matmul_size;
 
-  const SingleCoreScanTiling tiling{totalLength, matmul_size};
+  if (dtype == torch::kHalf)
+    tiling.running_sum.float_value = static_cast<float>(starting_sum);
+
+  if (dtype == torch::kInt8) {
+    tiling.running_sum.int_value = static_cast<int32_t>(starting_sum);
+  }
+
   uint8_t *tiling_device = allocCopyTiling(tiling);
 
   if (dtype == torch::kInt8) {

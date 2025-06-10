@@ -314,16 +314,18 @@ __aicore__ inline void _run_scan_sc(
  * @param [in] vec_len Number of elements to process.
  * @param [in] matmul_size Size of the matmul tile used in the kernel.
  * @param [in] workspace Pointer to the kernel workspace.
+ * @param [in] starting_sum  starting sum, 0 by default.
  */
+
 template <typename InputT>
 __aicore__ inline void run_scan_single_core(
     GM_ADDR input_vec, GM_ADDR upper_triangular, GM_ADDR output_vec,
-    uint32_t vec_len, uint32_t matmul_size, GM_ADDR workspace) {
+    uint32_t vec_len, uint32_t matmul_size, GM_ADDR workspace,
+    typename kernel_utils::cube_unit::CubeOutType_t<InputT> starting_sum = 0) {
   using OutputT = kernel_utils::cube_unit::CubeOutType_t<InputT>;
 
   const uint32_t alignment = matmul_size * matmul_size;
   const uint32_t aligned_vec_len = scalar::AlignDown(vec_len, alignment);
-  OutputT aligned_prefix_sum = 0;
 
   if ASCEND_IS_AIV {
     // Copy last remaining tile in workspace and dummy-pad it up to
@@ -337,7 +339,7 @@ __aicore__ inline void run_scan_single_core(
 
   if (aligned_vec_len > 0) {
     _run_scan_sc<InputT>(input_vec, upper_triangular, output_vec, matmul_size,
-                         aligned_vec_len, aligned_vec_len, aligned_prefix_sum);
+                         aligned_vec_len, aligned_vec_len, starting_sum);
   }
 
   // // Run the kernel on the last matrix ile
@@ -354,7 +356,7 @@ __aicore__ inline void run_scan_single_core(
 
       KernelCompleteRows<OutputT> op_vec(matmul_size, matmul_size, vec_aiv_len);
       op_vec.Init(workspace, output_vec + offset);
-      op_vec.Process(aligned_prefix_sum);
+      op_vec.Process(starting_sum);
     }
   }
 }
