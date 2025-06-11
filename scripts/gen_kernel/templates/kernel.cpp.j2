@@ -1,0 +1,28 @@
+/**
+ * Copyright (c) Huawei Technologies Co., Ltd. {{ copyright_year }}. All rights reserved.
+ *
+ * @file kernel_{{ kernel_cpp_name }}.cpp
+ * @brief Kernel implementing the {{ kernel_desc_short }} operation.
+ */
+
+#include "kernels/ascendc_kernel_operator.h"
+#include "kernels/kernel_{{ kernel_cpp_name }}.h"
+#include "tiling/tiling_{{ kernel_cpp_name }}.h"
+
+
+/**
+ * @brief Run the `{{ kernel_cpp_name }}` kernel.
+ *
+ * @param [in] vec_in Pointer to the input vector.
+ * @param [in] vec_out Pointer to the output vector.
+ * @param [in] tiling Pointer to the tiling structure.
+ */
+
+extern "C" __global__ __aicore__ void {{ kernel_cpp_name }}_fp16(GM_ADDR vec_in, GM_ADDR vec_out, GM_ADDR workspace, GM_ADDR tiling) {
+
+    (void)workspace;
+    {{ kernel_cpp_name_suffix }}Tiling tiling_data;
+    tiling::GetTilingData(&tiling_data, tiling);
+
+    run_{{kernel_cpp_name}}<true, {{ kernel_dtype }}>(vec_in, vec_out, tiling_data.num_elems, tiling_data.tile_len);
+}

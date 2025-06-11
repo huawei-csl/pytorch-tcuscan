@@ -1,0 +1,24 @@
+/**
+ * Copyright (c) Huawei Technologies Co., Ltd. {{ copyright_year }}. All rights reserved.
+ *
+ * @file tiling_{{ kernel_cpp_name }}.h
+ * @brief Tiling structure for {{ kernel_desc_short }} operation.
+ */
+
+#pragma once
+
+#include <cstdint>
+
+#pragma pack(push, 8)
+/**
+ * @brief {{ kernel_desc_short }} tiling parameter structure.
+ */
+struct {{ kernel_cpp_name_suffix }}Tiling {
+    /// @brief Number of blocks.
+    uint32_t num_blocks;
+    /// @brief Total number of input elements.
+    uint32_t num_elems;
+    /// @brief Tiling length.
+    uint32_t tile_len;
+};
+#pragma pack(pop)
