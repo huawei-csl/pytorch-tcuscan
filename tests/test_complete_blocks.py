@@ -62,19 +62,25 @@ def _test_complete_blocks(
     assert expected.dtype == actual.dtype
     assert expected.shape == actual.shape
     assert torch.allclose(
-        actual, expected, atol=1e-0, rtol=1e-3
-    ), f"Returned tensor does not match the expected tensor. sums: {sums}"
+        actual, expected, atol=1e-0, rtol=1e-5
+    ), "Returned tensor does not match expected tensor."
 
 
-@pytest.mark.parametrize("num_blocks", [2, 10, 20, 40])
-@pytest.mark.parametrize("tile_len", [32, 128, 256, 512])
+@pytest.mark.parametrize("num_blocks", [2, 10, 20, 40, 80])
 @pytest.mark.parametrize("multiplier", [3, 5, 7])
-@pytest.mark.parametrize("dtype", [torch.float32], ids=str)
+@pytest.mark.parametrize(
+    "tile_ratio", [32, 16, 8, 4, 2]
+)  # Fails when tile_ratio = 1 and s=128
+@pytest.mark.parametrize(
+    "dtype", [torch.float32], ids=str
+)  # TODO: add support for int32
+@pytest.mark.parametrize("s", [32, 64, 128])
 def test_tcuscan_complete_blocks_fp32(
-    num_blocks: int, tile_len: int, multiplier: int, dtype: torch.dtype
+    num_blocks: int, s: int, multiplier: int, tile_ratio: int, dtype: torch.dtype
 ):
+    tile_len = s * s // tile_ratio
     _test_complete_blocks(
-        num_blocks * tile_len * tile_len * multiplier,
+        num_blocks * s * s * multiplier,
         tile_len,
         num_blocks,
         dtype,

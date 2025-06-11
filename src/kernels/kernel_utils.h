@@ -760,7 +760,7 @@ __aicore__ inline void CopyL1ToL0B(TQue<QuePosition::B2, L0NumBuffers> &l0_q,
 }
 
 /**
- * @brief Copy a tensor from global memory the the VECIN queue.
+ * @brief Copy a tensor from global memory to the VECIN queue.
  *
  * @tparam DataType Data type of the tensor.
  * @tparam QNumBuffers Depth of the queue.

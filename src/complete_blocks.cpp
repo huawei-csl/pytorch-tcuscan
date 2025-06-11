@@ -23,7 +23,8 @@ __aicore__ inline void _run_complete_blocks(GM_ADDR input_vec,
   const uint32_t tile_len = tiling.tile_len;
 
   if ASCEND_IS_AIV {
-    KernelCompleteBlocks<T> op_complete_blocks(vec_len, num_blocks, tile_len);
+    const uint32_t block_len = vec_len / num_blocks;
+    KernelCompleteBlocks<T> op_complete_blocks(vec_len, block_len, tile_len);
     op_complete_blocks.Init(input_vec, input_sums, output_vec);
     op_complete_blocks.Process();
   }

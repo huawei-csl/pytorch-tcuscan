@@ -35,22 +35,29 @@ class KernelCompleteBlocks {
    * @brief Class constructor.
    *
    * @param [in] vec_len Number of elements in an input vector.
-   * @param [in] num_blocks Number of blocks by `KernelBlockScan`.
+   * @param [in] block_scan_len Length of block scans that are pre-computed
+   * using `KernelBlockScan` or `KernelRowScan`.
    * @param [in] tile_len Length of kernel tiles.
    */
-  __aicore__ inline KernelCompleteBlocks(uint32_t vec_len, uint32_t num_blocks,
+  __aicore__ inline KernelCompleteBlocks(uint32_t vec_len,
+                                         uint32_t block_scan_len,
                                          uint32_t tile_len)
       : block_num_(GetBlockNum() * GetTaskRation()),
         vec_len_(vec_len),
-        sums_len_(num_blocks),
-        block_len_(vec_len_ / sums_len_),  // TODO: assert this
+        sums_len_(vec_len / block_scan_len),
+        block_scan_len_(block_scan_len),
         tile_len_(tile_len),
         output_real_elems_(IsInclusive ? vec_len_ : vec_len_ - 1),
-        num_tiles_(scalar::CeilDiv(vec_len_, tile_len_)),
-        max_num_tiles_per_block_(scalar::CeilDiv(block_len_, tile_len_)) {
+        max_num_tiles_per_block_(scalar::CeilDiv(block_scan_len_, tile_len_)) {
     constexpr bool IS_DT_SUPPORTED =
         std::is_same_v<T, float> || std::is_same_v<T, int32_t>;
     static_assert(IS_DT_SUPPORTED, "Unsupported data type.");
+    ASCENDC_ASSERT((vec_len % block_scan_len == 0), {
+      KERNEL_LOG(KERNEL_ERROR,
+                 "Input length (%d) must be "
+                 "divisible by the block scan length (%d)",
+                 vec_len, block_scan_len);
+    });
   }
 
   /**
@@ -110,7 +117,9 @@ class KernelCompleteBlocks {
     // Reduce the sums of all the previous tiles.
     copy::CopyGmToVec(sums_q_, global_sums_, sums_len_);
     LocalTensor<T> sums_lt = sums_q_.DeQue<T>();
-    const T previous_sum = reduce::ReduceScalarAdd(sums_lt, GetBlockIdx());
+    const uint32_t scan_idx =
+        scalar::FloorDiv(GetBlockIdx() * sums_len_, block_num_);
+    const T previous_sum = reduce::ReduceScalarAdd(sums_lt, scan_idx);
     sums_q_.FreeTensor(sums_lt);
     return previous_sum;
   }
@@ -154,7 +163,6 @@ class KernelCompleteBlocks {
 
   TQue<QuePosition::VECIN, 2> vec_tile_in_q_;
   TQue<QuePosition::VECOUT, 2> vec_tile_out_q_;
-
   TQue<QuePosition::VECIN, 1> sums_q_;
 
   GlobalTensor<T> global_input_rows_;
@@ -167,10 +175,8 @@ class KernelCompleteBlocks {
   const uint32_t block_num_;
   const uint32_t vec_len_;
   const uint32_t sums_len_;
-  const uint32_t block_len_;
+  const uint32_t block_scan_len_;
   const uint32_t tile_len_;
-
   const uint32_t output_real_elems_;
-  const uint32_t num_tiles_;
   const uint32_t max_num_tiles_per_block_;
 };
