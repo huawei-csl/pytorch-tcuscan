@@ -460,6 +460,32 @@ def row_scan_benchmark(
     return _run_benchmark(device, run_row_scan), size
 
 
+def complete_blocks_benchmark(
+    device: Device,
+    size: int,
+    dtype: torch.dtype,
+    s: int,
+    num_cores: int,
+    tile_ratio: int,
+) -> Tuple[float, int]:
+    if dtype == torch.float32:
+        x = torch.rand(size, device=device.str, dtype=dtype)
+    else:
+        raise RuntimeError(
+            f"dtype {dtype} is not supported in TCUSCAN block_scan operator"
+        )
+
+    # Number of AIC/AIV ratio is 1:2.
+    sums = torch.sum(x.reshape(num_cores * 2, -1), dim=1).flatten()
+    tile_len = s * s // tile_ratio
+    torch.npu.synchronize()
+
+    def run_complete_blocks() -> None:
+        _ = tcuscan_ops.run_complete_blocks(x, sums, tile_len)
+
+    return _run_benchmark(device, run_complete_blocks), size
+
+
 def block_scan_benchmark(
     device: Device, size: int, dtype: torch.dtype, s: int
 ) -> Tuple[float, int]:
@@ -633,6 +659,7 @@ if __name__ == "__main__":  # noqa
             "cast",
             "gen_lower",
             "block_scan",
+            "complete_blocks",
         ],
     )
     parser.add_argument("--dtype", choices=["int8", "fp16", "int16", "int32", "fp32"])
@@ -648,6 +675,7 @@ if __name__ == "__main__":  # noqa
     max_size = args.max_size
     num_cores = args.num_cores
     s = args.s
+    k = args.k
     density = args.density
 
     if DEVICE == "npu":
@@ -667,6 +695,7 @@ if __name__ == "__main__":  # noqa
     logger.info(f"* Max iterations : {max_iters}")
     logger.info(f"* num_cores      : {num_cores}")
     logger.info(f"* s              : {s}")
+    logger.info(f"* K              : {k}")
     logger.info(f"* density        : {density}")
     logger.info(f"* device         : {device.str}")
     logger.info("*******************************")
@@ -913,6 +942,22 @@ if __name__ == "__main__":  # noqa
             "gen_lower",
             dtype,
             partial(gen_lower_benchmark, dtype=tdtype),
+            sizes,
+            density,
+        )
+    elif bench == "complete_blocks" and dtype in ["fp32"]:
+        tdtype = STR_TO_DTYPE[dtype]
+        benchmark(
+            device,
+            f"complete_blocks_{k}",
+            dtype,
+            partial(
+                complete_blocks_benchmark,
+                dtype=tdtype,
+                s=s,
+                num_cores=num_cores,
+                tile_ratio=k,
+            ),
             sizes,
             density,
         )

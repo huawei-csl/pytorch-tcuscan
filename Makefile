@@ -102,6 +102,16 @@ profile_block_scan:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench block_scan --s 128 --dtype fp16
 
 
+profile_complete_blocks:
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench copy --dtype fp32
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench complete_blocks --s 128 --k 2 --dtype fp32
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench complete_blocks --s 128 --k 4 --dtype fp32
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench complete_blocks --s 128 --k 8 --dtype fp32
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench complete_blocks --s 128 --k 16 --dtype fp32
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench complete_blocks --s 128 --k 32 --dtype fp32
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench complete_blocks --s 128 --k 64 --dtype fp32
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench complete_blocks --s 128 --k 128 --dtype fp32
+
 profile_scscan: profile_all_s_fp16_scscan
 
 profile_fp16_compress:
