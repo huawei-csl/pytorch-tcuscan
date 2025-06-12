@@ -346,11 +346,16 @@ __aicore__ inline void run_scan_single_core(
 
   // // Run the kernel on the last matrix ile
   if (aligned_vec_len < vec_len) {
+    sync::SyncGroup<sync::GroupSyncDirection::FULL>();
+    PipeBarrier<PIPE_ALL>();
     if ASCEND_IS_AIC {
       KernelRowScan<InputT> op_cube(matmul_size, matmul_size, alignment);
       op_cube.Init(workspace, upper_triangular, workspace);
       op_cube.Process();
     }
+
+    sync::SyncGroup<sync::GroupSyncDirection::FULL>();
+    PipeBarrier<PIPE_ALL>();
 
     if ASCEND_IS_AIV {
       const uint32_t offset = aligned_vec_len * sizeof(OutputT);
