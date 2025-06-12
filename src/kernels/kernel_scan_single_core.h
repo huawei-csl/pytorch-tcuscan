@@ -326,7 +326,6 @@ __aicore__ inline void run_scan_single_core(
 
   const uint32_t alignment = matmul_size * matmul_size;
   const uint32_t aligned_vec_len = scalar::AlignDown(vec_len, alignment);
-
   if ASCEND_IS_AIV {
     // Copy last remaining tile in workspace and dummy-pad it up to
     // `alignment` elements.
@@ -336,6 +335,9 @@ __aicore__ inline void run_scan_single_core(
       op_pad.Process();
     }
   }
+
+  PipeBarrier<PIPE_ALL>();
+  sync::SyncGroup<sync::GroupSyncDirection::FULL>();
 
   if (aligned_vec_len > 0) {
     _run_scan_sc<InputT>(input_vec, upper_triangular, output_vec, matmul_size,
