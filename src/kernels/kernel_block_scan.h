@@ -51,17 +51,18 @@ class KernelBlockScan {
    * @brief Class constructor.
    *
    * @param [in] vec_len Number of elements in an input vector.
-   * @param [in] tile_size Size of the matmul executed in a single iteration.
+   * @param [in] matrix_size Tile size of square matrices.
    */
-  __aicore__ inline KernelBlockScan(uint32_t vec_len, uint32_t tile_size)
+  __aicore__ inline KernelBlockScan(uint32_t vec_len, uint32_t matrix_size)
       : vec_len_(vec_len),
-        matmul_size_(tile_size),
-        num_tiles_(vec_len_ / (matmul_size_ * matmul_size_ * GetBlockNum())) {
-    ASCENDC_ASSERT((vec_len_ % (matmul_size_ * matmul_size_) == 0), {
+        matmul_size_(matrix_size),
+        num_tiles_(scalar::FloorDiv(vec_len, matmul_size_ * matmul_size_)),
+        max_num_tiles_per_block_(scalar::CeilDiv(num_tiles_, GetBlockNum())) {
+    ASCENDC_ASSERT((vec_len_ % (matmul_size * matmul_size) == 0), {
       KERNEL_LOG(KERNEL_ERROR,
                  "The length of the input vector (%d) must be "
                  "divisible by the square of the tile size (%d)",
-                 vec_len, matmul_size_ * matmul_size_);
+                 vec_len, matmul_size * matmul_size);
     });
 
     ASCENDC_ASSERT((num_tiles_ <= 0), {
@@ -85,14 +86,15 @@ class KernelBlockScan {
   __aicore__ inline void Init(GM_ADDR input, GM_ADDR upper, GM_ADDR lower,
                               GM_ADDR output) {
     global_input_.SetGlobalBuffer(
-        (__gm__ T *)input + (GetBlockIdx() * a_cube_tile_size_ * num_tiles_),
-        a_cube_tile_size_ * num_tiles_);
+        (__gm__ T *)input +
+            (GetBlockIdx() * a_cube_tile_size_ * max_num_tiles_per_block_),
+        a_cube_tile_size_ * max_num_tiles_per_block_);
     global_upper_.SetGlobalBuffer((__gm__ T *)upper, b_cube_tile_size_);
     global_lower_.SetGlobalBuffer((__gm__ T *)lower);
     global_output_.SetGlobalBuffer(
         (__gm__ OutputT *)output +
-            (GetBlockIdx() * c_cube_tile_size_ * num_tiles_),
-        c_cube_tile_size_ * num_tiles_);
+            (GetBlockIdx() * c_cube_tile_size_ * max_num_tiles_per_block_),
+        c_cube_tile_size_ * max_num_tiles_per_block_);
 
     pipe.InitBuffer(a1_q_, 1, a_cube_tile_size_ * sizeof(T));
     pipe.InitBuffer(b1_1_q_, 1, b_cube_tile_size_ * sizeof(T));
@@ -113,6 +115,9 @@ class KernelBlockScan {
    * @brief Run the kernel.
    */
   __aicore__ inline void Process() {
+    const uint32_t num_tiles_to_process =
+        kernel_utils::scalar::GetWorkDistribution(
+            vec_len_, matmul_size_ * matmul_size_, GetBlockNum());
     // A1: L
     kernel_utils::copy::CopyGmToL1A(a1_q_, global_lower_, m_blocks_, k_blocks_);
 
@@ -130,7 +135,7 @@ class KernelBlockScan {
 
     copy::CopyL1ToL0B<T>(b2_1_q_, all_ones_1_lt_, k_blocks_, n_blocks_);
 
-    for (uint32_t idx = 0; idx < num_tiles_; ++idx) {
+    for (uint32_t idx = 0; idx < num_tiles_to_process; ++idx) {
       // A1: A; A2: L; B1: U; B2: [1]
       copy::CopyGmToL1A(a1_q_, global_input_[idx * a_cube_tile_size_],
                         m_blocks_, k_blocks_);
@@ -204,6 +209,7 @@ class KernelBlockScan {
   const uint32_t vec_len_;
   const uint32_t matmul_size_;
   const uint32_t num_tiles_;
+  const uint32_t max_num_tiles_per_block_;
 
   const uint32_t K_ = matmul_size_;
   const uint32_t N_ = matmul_size_;

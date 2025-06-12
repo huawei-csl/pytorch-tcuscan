@@ -18,13 +18,12 @@ torch.npu.config.allow_internal_format = False
 torch.npu.set_device(NPU_DEVICE)
 
 NUM_CORES = 20
+S = 128
 
-
-M_LIST = [NUM_CORES * 128 * 128 * i for i in range(1, 10)]
+M_LIST = [NUM_CORES * S * S * i - 13 for i in range(1, 10)]
 
 
 def _test_row_scan(m: int, dtype: torch.dtype):
-    S = 128
     A = torch.ones(m, S, dtype=dtype, device=NPU_DEVICE)
     B = torch.tril(torch.ones((S, S), dtype=dtype, device=NPU_DEVICE))
 
