@@ -40,11 +40,12 @@ def _test_dtype(vec_len: int, s: int, dtype: torch.dtype):
     actual = tcuscan_ops.run_scan_multi_core(x, s)
     torch.npu.synchronize()
 
+    abs_error = torch.max(torch.abs(actual - expected))
+    rel_error = torch.max(torch.abs(actual - expected) / torch.abs(expected))
     assert actual.dtype == expected.dtype
-    # TODO: the allclose rtol threshold must be lowered. It fails 1 case with -1, 9 cases with -2
     assert torch.allclose(
-        actual, expected, atol=0, rtol=1e-0
-    ), f"multi-core scan ({dtype}) is wrong. s={s}, vec_len={vec_len}"
+        actual, expected, atol=1e-3, rtol=1e-7
+    ), f"multi-core scan ({dtype}) is wrong. s={s}, vec_len={vec_len}. Abs/rel error: {abs_error:.5f} / {rel_error:.7f}"
 
 
 @pytest.mark.parametrize("vec_len", get_lengths(s=16, max_iters=16))
@@ -54,6 +55,6 @@ def test_mcscan(vec_len: int, s: int, dtype: torch.dtype):
     _test_dtype(vec_len, s, dtype)
 
 
-@pytest.mark.parametrize("vec_len", get_lengths(s=32, max_iters=12))
+@pytest.mark.parametrize("vec_len", get_lengths(s=16, max_iters=12))
 def test_mcscan_fp16_s_16(vec_len: int):
     _test_dtype(vec_len, 16, torch.float16)
