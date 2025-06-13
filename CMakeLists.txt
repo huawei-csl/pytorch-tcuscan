@@ -26,42 +26,84 @@ endif()
 include(${ASCENDC_CMAKE_DIR}/ascendc.cmake)
 
 # ascendc_library use to add kernel file to generate AscendC library
-ascendc_library(kernels SHARED
-    src/vadd.cpp
-    src/diff.cpp
+ascendc_library(scan_kernels SHARED
     src/seg_scan_single_core.cpp
     src/scan_multi_core.cpp
     src/scan_batch.cpp
-    src/csr_gather.cpp
-    src/radix_sort.cpp
-    src/compress.cpp
-    src/copy.cpp
+    src/matmul_cce.cpp
     src/scan_single_core.cpp
     src/seg_scan_vec_single_core.cpp
     src/seg_scan_mc_revert.cpp
-    src/gather_spmv.cpp
-    src/split.cpp
-    src/mc_gather.cpp
-    src/matmul_cce.cpp
     src/row_scan.cpp
-    src/gen_lower.cpp
-    src/reduce_tiles.cpp
-    src/complete_rows.cpp
-    src/complete_blocks.cpp
     src/block_scan.cpp
     src/simple_pad.cpp
 )
-
-ascendc_compile_definitions(kernels PRIVATE
+ascendc_compile_definitions(scan_kernels PRIVATE
 -DHAVE_WORKSPACE
 -DHAVE_TILING
 )
 
-ascendc_include_directories(kernels PRIVATE
+ascendc_include_directories(scan_kernels PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
-target_link_libraries(kernels PRIVATE
+target_link_libraries(scan_kernels PRIVATE
+    ascendcl
+    c_sec
+    tiling_api
+    register
+    platform
+    ascendalog
+)
+
+ascendc_library(vector_kernels SHARED
+    src/vadd.cpp
+    src/diff.cpp
+    src/csr_gather.cpp
+    src/copy.cpp
+    src/gather_spmv.cpp
+    src/mc_gather.cpp
+    src/gen_lower.cpp
+    src/reduce_tiles.cpp
+    src/complete_rows.cpp
+    src/complete_blocks.cpp
+)
+
+ascendc_compile_definitions(vector_kernels PRIVATE
+-DHAVE_WORKSPACE
+-DHAVE_TILING
+)
+
+ascendc_include_directories(vector_kernels PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+target_link_libraries(vector_kernels PRIVATE
+    ascendcl
+    c_sec
+    tiling_api
+    register
+    platform
+    ascendalog
+)
+
+ascendc_library(split_kernels SHARED
+    src/radix_sort.cpp
+    src/compress.cpp
+    src/split.cpp
+)
+
+
+ascendc_compile_definitions(split_kernels PRIVATE
+-DHAVE_WORKSPACE
+-DHAVE_TILING
+)
+
+ascendc_include_directories(split_kernels PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+target_link_libraries(split_kernels PRIVATE
     ascendcl
     c_sec
     tiling_api
@@ -79,7 +121,9 @@ target_link_libraries(pybind11_lib PRIVATE
   torch_npu
   torch_python
   tiling_api
-  kernels
+  scan_kernels
+  vector_kernels
+  split_kernels
 )
 
 # Sets the PyTorch installation path on env variable 'TORCH_PATH'
