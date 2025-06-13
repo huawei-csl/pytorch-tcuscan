@@ -48,7 +48,7 @@ def _test_complete_blocks(
     if dtype == torch.float32:
         x = 0.1 * torch.randn(vec_len, device=NPU_DEVICE).float()
     elif dtype == torch.int32:
-        x = torch.randint(-3, 3, size=(vec_len,), dtype=torch.int32, device=NPU_DEVICE)
+        x = torch.randint(0, 3, size=(vec_len,), dtype=torch.int32, device=NPU_DEVICE)
     else:
         assert False, f"Unsupported dtype for reduce_tiles. Got {dtype}."
 
@@ -72,7 +72,7 @@ def _test_complete_blocks(
     "tile_ratio", [32, 16, 8, 4, 2]
 )  # Fails when tile_ratio = 1 and s=128
 @pytest.mark.parametrize(
-    "dtype", [torch.float32], ids=str
+    "dtype", [torch.float32, torch.int32], ids=str
 )  # TODO: add support for int32
 @pytest.mark.parametrize("s", [32, 64, 128])
 def test_tcuscan_complete_blocks_fp32(

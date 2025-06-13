@@ -14,6 +14,7 @@
 #include "../tiling/tiling_complete_rows.h"
 #include "../tiling/tiling_reduce_tiles.h"
 #include "aclrtlaunch_complete_blocks_fp32.h"
+#include "aclrtlaunch_complete_blocks_int32.h"
 #include "aclrtlaunch_complete_rows_fp32.h"
 #include "aclrtlaunch_complete_rows_int32.h"
 #include "aclrtlaunch_reduce_tiles_fp16.h"
@@ -155,6 +156,12 @@ at::Tensor run_complete_blocks(const at::Tensor &x, const at::Tensor &sums,
   const at::Tensor workspace_tensor = alloc_workspace(0, device);
   if (dtype == torch::kFloat) {
     ACLRT_LAUNCH_KERNEL(complete_blocks_fp32)
+    (num_blocks, acl_stream, const_cast<void *>(x.storage().data()),
+     const_cast<void *>(sums.storage().data()),
+     const_cast<void *>(z.storage().data()),
+     const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
+  } else if (dtype == torch::kInt32) {
+    ACLRT_LAUNCH_KERNEL(complete_blocks_int32)
     (num_blocks, acl_stream, const_cast<void *>(x.storage().data()),
      const_cast<void *>(sums.storage().data()),
      const_cast<void *>(z.storage().data()),
