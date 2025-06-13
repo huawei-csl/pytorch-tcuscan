@@ -76,7 +76,6 @@ class KernelSimplePad {
 
   TQue<QuePosition::VECIN, BUFFER_NUM> in_q_;
   TQue<QuePosition::VECOUT, BUFFER_NUM> out_q_;
-  TQue<QuePosition::VECOUT, BUFFER_NUM> out_pad_q_;
 
   GlobalTensor<T> global_in_;
   GlobalTensor<T> global_out_;

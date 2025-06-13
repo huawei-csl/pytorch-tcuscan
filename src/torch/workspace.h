@@ -127,7 +127,7 @@ constexpr uint32_t GetWorkspaceSize(const SingleCoreScanTiling& tiling) {
   using OutputT = host_utils::CubeOutType_t<InputT>;
 
   const uint32_t total_size =
-      tiling.matmul_size * tiling.matmul_size * sizeof(OutputT);
+      2 * tiling.matmul_size * tiling.matmul_size * sizeof(OutputT);
   return total_size;
 }
 }  // namespace sc_scan
