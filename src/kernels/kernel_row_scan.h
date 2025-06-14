@@ -100,6 +100,10 @@ class KernelRowScan {
         kernel_utils::scalar::GetWorkDistribution(vec_len_, tile_size_,
                                                   block_num_);
 
+    if (num_tiles_to_process == 0) {
+      return;
+    }
+
     LoadBToL0();
     for (uint32_t idx = 0; idx < num_tiles_to_process; ++idx) {
       CubeIter(idx);

@@ -118,6 +118,11 @@ class KernelBlockScan {
     const uint32_t num_tiles_to_process =
         kernel_utils::scalar::GetWorkDistribution(
             vec_len_, matmul_size_ * matmul_size_, GetBlockNum());
+
+    if (num_tiles_to_process == 0) {
+      return;
+    }
+
     // A1: L
     kernel_utils::copy::CopyGmToL1A(a1_q_, global_lower_, m_blocks_, k_blocks_);
 

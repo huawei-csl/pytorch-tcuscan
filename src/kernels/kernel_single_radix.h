@@ -66,6 +66,10 @@ class KernelSingleRadix {
         kernel_utils::scalar::GetWorkDistribution(vec_len_, tile_size_,
                                                   block_num_);
 
+    if (num_tiles_to_process == 0) {
+      return;
+    }
+
     LocalTensor<T> compare_lt = bitmap_buf_.Get<T>();
     const T compare_val = 1 << bit_idx_;
     Duplicate(compare_lt, compare_val, tile_size_);

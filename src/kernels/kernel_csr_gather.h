@@ -72,6 +72,10 @@ class KernelCSRGather {
         kernel_utils::scalar::GetWorkDistribution(values_in_len_, tile_len_,
                                                   vec_core_num_);
 
+    if (num_tiles_to_process == 0) {
+      return;
+    }
+
     // Read whole vector x
     copy::CopyGmToVec(x_q_, global_x_, x_in_len_);
     x_lt_ = x_q_.DeQue<DataType>();

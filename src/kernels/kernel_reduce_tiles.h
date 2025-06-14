@@ -86,7 +86,9 @@ class KernelReduceTiles {
         kernel_utils::scalar::GetWorkDistribution(vec_len_, tile_size_,
                                                   block_num_);
 
-    if (num_tiles_to_process == 0) return;
+    if (num_tiles_to_process == 0) {
+      return;
+    }
 
     const LocalTensor<AccT> input_lt = vec_tile_q_.Get<AccT>();
 
