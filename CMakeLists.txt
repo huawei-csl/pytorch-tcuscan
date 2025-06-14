@@ -91,6 +91,7 @@ ascendc_library(split_kernels SHARED
     src/radix_sort.cpp
     src/compress.cpp
     src/split.cpp
+    src/topk.cpp
 )
 
 

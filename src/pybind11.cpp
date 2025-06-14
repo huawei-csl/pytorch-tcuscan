@@ -54,6 +54,10 @@ PYBIND11_MODULE(tcuscan_ops, m) {
         "Segmented Scan (vector-only)");
   m.def("run_seg_scan_mc_revert", &asc::seg_ops::run_seg_scan_mc_revert,
         "Vector Revert for MC Segmented Scan");
+  m.def("run_topk_int16", &asc::split::run_topk_int16,
+        "TopK using parallel splits (int16)");
+  m.def("run_topk_fp16", &asc::split::run_topk_fp16,
+        "TopK using parallel splits (fp16)");
   m.def("run_split", &asc::split::run_split, "Split (16-bits)");
   m.def("run_split_ind", &asc::split::run_split_ind,
         "Split with indices (16-bits)");

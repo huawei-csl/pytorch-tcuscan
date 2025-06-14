@@ -210,6 +210,12 @@ test_split_ind:
     - make setup_ci
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_split_ind
 
+test_topk:
+  <<: *test_config
+  script:
+    - make setup_ci
+    - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_topk
+
 test_radix_sort:
   <<: *test_config
   script:

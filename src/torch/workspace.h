@@ -192,7 +192,46 @@ uint32_t GetWorkspaceSize(const RadixSortTiling& t) {
       tmp_output_size + radices_size + indices_size + split_ws_size;
   return total_size;
 }
-
 }  // namespace radix_sort
+
+namespace topk {
+
+/**
+ * @brief Calculate the workspace size for topk.
+ *
+ * @tparam InputT Input data type.
+ *
+ * @param [in] input_elems Number of elements in the input vector.
+ * @param [in] matmul_size Size of the matmul used in scan.
+ * @param [in] num_blocks Number of blocks.
+ * @return Size of the workspace in bytes.
+ */
+template <typename InputT>
+constexpr uint32_t GetWorkspaceSize(size_t input_elems, size_t matmul_size,
+                                    size_t num_blocks) {
+  const uint32_t mask_size = host_utils::AlignUp(input_elems * sizeof(uint8_t),
+                                                 host_utils::GM_ALIGNMENT);
+  const uint32_t split_input_size = host_utils::AlignUp(
+      input_elems * sizeof(int16_t), host_utils::GM_ALIGNMENT);
+  const uint32_t split_output_size = split_input_size;
+  const uint32_t indices_ws_size = host_utils::AlignUp(
+      input_elems * sizeof(uint32_t) * 2, host_utils::GM_ALIGNMENT);
+  const bool is_input_size_aligned =
+      input_elems % (matmul_size * matmul_size) == 0;
+  // if the input size is aligned, the workspace of the first split may be
+  // smaller than the workspace of the second split; so we force it to be
+  // unaligned to avoid memory access errors
+  const uint32_t split_ws_size =
+      is_input_size_aligned ? workspace::split::GetWorkspaceSize(
+                                  input_elems + 1, matmul_size, num_blocks)
+                            : workspace::split::GetWorkspaceSize(
+                                  input_elems, matmul_size, num_blocks);
+
+  const uint32_t total_size = mask_size + split_ws_size + indices_ws_size +
+                              split_input_size + split_output_size;
+  return total_size;
+}
+
+}  // namespace topk
 
 }  // namespace workspace
