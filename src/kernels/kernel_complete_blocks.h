@@ -51,7 +51,9 @@ class KernelCompleteBlocks {
         block_scan_len_(block_scan_len),
         tile_len_(tile_len),
         output_real_elems_(IsInclusive ? vec_len_ : vec_len_ - 1),
-        max_num_tiles_per_block_(scalar::CeilDiv(block_scan_len_, tile_len_)) {
+        max_num_tiles_per_block_(
+            scalar::CeilDiv(vec_len_, tile_len_ * block_num_)),
+        num_tiles_per_matrix_tile_(block_scan_len / tile_len) {
     constexpr bool IS_DT_SUPPORTED =
         std::is_same_v<T, float> || std::is_same_v<T, int32_t>;
     static_assert(IS_DT_SUPPORTED, "Unsupported data type.");
@@ -60,6 +62,13 @@ class KernelCompleteBlocks {
                  "Input length (%d) must be "
                  "divisible by the block scan length (%d)",
                  vec_len, block_scan_len);
+    });
+
+    ASCENDC_ASSERT((block_scan_len % tile_len == 0), {
+      KERNEL_LOG(KERNEL_ERROR,
+                 "Block scan length (%d) must be "
+                 "divisible by tile length (%d)",
+                 block_scan_len, tile_len);
     });
   }
 
@@ -120,9 +129,7 @@ class KernelCompleteBlocks {
     // Reduce the sums of all the previous tiles.
     copy::CopyGmToVec(sums_q_, global_sums_, sums_len_);
     LocalTensor<T> sums_lt = sums_q_.DeQue<T>();
-    const uint32_t scan_idx =
-        scalar::FloorDiv(GetBlockIdx() * sums_len_, block_num_);
-    const T previous_sum = reduce::ReduceScalarAdd(sums_lt, scan_idx);
+    const T previous_sum = reduce::ReduceScalarAdd(sums_lt, GetBlockIdx());
     sums_q_.FreeTensor(sums_lt);
     return previous_sum;
   }
@@ -133,8 +140,7 @@ class KernelCompleteBlocks {
     const uint32_t num_tiles_to_process =
         scalar::GetWorkDistribution(vec_len_, tile_len_, block_num_);
 
-    for (uint32_t tile_idx = 0; tile_idx < max_num_tiles_per_block_;
-         tile_idx++) {
+    for (uint32_t tile_idx = 0; tile_idx < num_tiles_to_process; tile_idx++) {
       const bool full_tile = global_offset + tile_len_ <= output_real_elems_;
       const uint32_t num_elems_to_process =
           full_tile ? tile_len_ : output_real_elems_ - global_offset;
@@ -142,7 +148,10 @@ class KernelCompleteBlocks {
       copy::CopyGmToVec(vec_tile_in_q_, global_input_rows_[global_offset],
                         num_elems_to_process);
 
-      VectorAdds(previous_sum, num_elems_to_process);
+      const bool is_last_tile_in_block =
+          (tile_idx + 1) % num_tiles_per_matrix_tile_ == 0;
+
+      VectorAdds(previous_sum, num_elems_to_process, is_last_tile_in_block);
 
       copy::CopyVecToGm(global_output_[global_offset], vec_tile_out_q_,
                         num_elems_to_process);
@@ -151,15 +160,20 @@ class KernelCompleteBlocks {
     }
   }
 
-  __aicore__ inline void VectorAdds(T block_level_prefix_sum,
-                                    uint32_t num_elems_to_process) {
+  __aicore__ inline void VectorAdds(T &block_level_running_sum,
+                                    uint32_t num_elems_to_process,
+                                    bool is_last_tile_in_block) {
     LocalTensor<T> vec_lt = vec_tile_in_q_.template DeQue<T>();
     const LocalTensor<T> vec_out_lt = vec_tile_out_q_.template AllocTensor<T>();
     DataCopy(vec_out_lt, vec_lt, vec_lt.GetSize());
     vec_tile_in_q_.FreeTensor(vec_lt);
 
-    Adds(vec_out_lt, vec_out_lt, block_level_prefix_sum, num_elems_to_process);
+    Adds(vec_out_lt, vec_out_lt, block_level_running_sum, num_elems_to_process);
 
+    // If tile is the last in the block scan, update the running_sum value
+    if (is_last_tile_in_block) {
+      block_level_running_sum = vec_out_lt.GetValue(num_elems_to_process - 1);
+    }
     vec_tile_out_q_.EnQue(vec_out_lt);
   }
 
@@ -181,4 +195,5 @@ class KernelCompleteBlocks {
   const uint32_t tile_len_;
   const uint32_t output_real_elems_;
   const uint32_t max_num_tiles_per_block_;
+  const uint32_t num_tiles_per_matrix_tile_;
 };

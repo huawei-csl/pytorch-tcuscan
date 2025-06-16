@@ -36,6 +36,7 @@ ascendc_library(scan_kernels SHARED
     src/seg_scan_mc_revert.cpp
     src/row_scan.cpp
     src/block_scan.cpp
+    src/scan_multi_cube.cpp
     src/simple_pad.cpp
 )
 ascendc_compile_definitions(scan_kernels PRIVATE

@@ -68,8 +68,7 @@ PYBIND11_MODULE(tcuscan_ops, m) {
   m.def("run_radix_sort", &asc::sort::run_radix_sort,
         "Radix sort using cube units");
   m.def("run_matmul_cce", &asc::matmul::matmul_cce,
-        "Matrix multiplication CCE kernel (B dimensions must be a multiple of "
-        "512)");
+        "Matrix multiplication CCE kernel (B dims must be a multiple of 512)");
   m.def("run_row_scan", &asc::scan::run_row_scan,
         "Matrix multiplication row scan kernel");
   m.def("run_gen_lower", &asc::gen::run_gen_lower,
@@ -84,4 +83,6 @@ PYBIND11_MODULE(tcuscan_ops, m) {
         "Block scan on blocks of length S^2");
   m.def("run_simple_pad", &asc::pad::run_simple_pad,
         "Padding of an input tensor from length vec_len up to align_len");
+  m.def("run_scan_multi_cube", &asc::scan::run_scan_multi_cube,
+        "Multi-cube scan");
 }

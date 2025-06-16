@@ -14,6 +14,7 @@
 #include "../tiling/tiling_row_scan.h"
 #include "../tiling/tiling_scan_batch.h"
 #include "../tiling/tiling_scan_multi_core.h"
+#include "../tiling/tiling_scan_multi_cube.h"
 #include "../tiling/tiling_scan_single_core.h"
 #include "aclrtlaunch_block_scan_fp16.h"
 #include "aclrtlaunch_row_scan_fp16.h"
@@ -22,6 +23,7 @@
 #include "aclrtlaunch_scan_multi_core_fp16_no_l2.h"
 #include "aclrtlaunch_scan_multi_core_int8.h"
 #include "aclrtlaunch_scan_multi_core_int8_no_l2.h"
+#include "aclrtlaunch_scan_multi_cube_fp16.h"
 #include "aclrtlaunch_scan_single_core_fp16.h"
 #include "aclrtlaunch_scan_single_core_int8.h"
 #include "commons.h"
@@ -358,6 +360,64 @@ at::Tensor run_block_scan(const at::Tensor &x, int S) {
     (blockDim, acl_stream, const_cast<void *>(x.storage().data()),
      const_cast<void *>(upper.storage().data()),
      const_cast<void *>(lower.storage().data()),
+     const_cast<void *>(z.storage().data()),
+     const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
+  } else {
+    /* Unsupported*/
+  }
+
+  aclrtFree(tiling_device);
+  aclrtSynchronizeStream(acl_stream);
+
+  return z;
+}
+
+/**
+ * @brief Returns the prefix sum (scan) by computing the block scan of length
+ * S^2 using the cube unit.
+ *
+ * @param x Input 1D vector.
+ * @param upper Upper triangular all-ones matrix of size S.
+ * @param lower_strict Strict lower triangular all-ones matrix of size S.
+ * @return The prefix sum of each concecutive block of `x` (block length S^2).
+ */
+at::Tensor run_scan_multi_cube(const at::Tensor &x, const at::Tensor &upper,
+                               const at::Tensor &lower_strict) {
+  const auto ascendc_platform =
+      platform_ascendc::PlatformAscendCManager::GetInstance(SOC_VERSION);
+  auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
+  const at::Device device = x.options().device();
+  const auto dtype = x.options().dtype();
+  const auto dtype_out =
+      dtype == torch::kHalf ? torch::kFloat32 : torch::kInt32;
+
+  const uint32_t s = static_cast<uint32_t>(upper.size(0));
+  const uint32_t total_len = x.numel();
+
+  const at::Tensor z = at::empty(
+      {total_len}, at::TensorOptions().dtype(dtype_out).device(device));
+
+  const uint32_t tile_elems = s * s;
+  const size_t num_tiles = host_utils::CeilDiv(total_len, tile_elems);
+
+  uint32_t block_dim = ascendc_platform->GetCoreNum() / 2;
+  if (num_tiles < block_dim) {
+    block_dim = num_tiles;
+  }
+
+  const ScanMultiCubeTiling tiling{block_dim, total_len, s};
+  uint8_t *tiling_device = allocCopyTiling(tiling);
+
+  if (dtype == torch::kHalf) {
+    const uint32_t user_workspace_size =
+        workspace::mc_scan::GetWorkspaceSize<int16_t>(
+            tiling.num_elems, tiling.matmul_size, tiling.num_blocks);
+    const at::Tensor workspace_tensor =
+        alloc_workspace(user_workspace_size, device);
+    ACLRT_LAUNCH_KERNEL(scan_multi_cube_fp16)
+    (block_dim, acl_stream, const_cast<void *>(x.storage().data()),
+     const_cast<void *>(upper.storage().data()),
+     const_cast<void *>(lower_strict.storage().data()),
      const_cast<void *>(z.storage().data()),
      const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
   } else {

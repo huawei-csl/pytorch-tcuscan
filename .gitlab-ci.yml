@@ -288,6 +288,12 @@ test_complete_blocks:
     - make setup_ci
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_complete_blocks
 
+test_scan_multi_cube:
+  <<: *test_config
+  script:
+    - make setup_ci
+    - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_scan_multi_cube
+
 # Uncomment to run all tests in a single run
 unit_test:
   tags:
