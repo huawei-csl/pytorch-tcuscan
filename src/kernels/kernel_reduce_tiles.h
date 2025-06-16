@@ -23,9 +23,10 @@ using namespace kernel_utils;
  * padding data.
  *
  * @tparam InputT Data type of the input vector.
- * @tparam AccT Data type of the accumulator and output vectors.
+ * @tparam BufferNum Number of buffers. If set to `2`, double-buffering is
+ * enabled.
  */
-template <typename InputT>
+template <typename InputT, int32_t BufferNum = 2>
 class KernelReduceTiles {
   using IntermediateT = half;
   using AccT = cube_unit::CubeOutType_t<InputT>;
@@ -66,7 +67,7 @@ class KernelReduceTiles {
     global_input_.SetGlobalBuffer((__gm__ InputT *)input, vec_len_);
     global_output_.SetGlobalBuffer((__gm__ AccT *)output, block_num_);
 
-    pipe.InitBuffer(vec_tile_input_q_, 2, tile_size_ * sizeof(InputT));
+    pipe.InitBuffer(vec_tile_input_q_, BufferNum, tile_size_ * sizeof(InputT));
     if constexpr (REQ_INTERMEDIATE_CAST) {
       pipe.InitBuffer(vec_tile_intermediate_buf_,
                       tile_size_ * sizeof(IntermediateT));
@@ -75,7 +76,7 @@ class KernelReduceTiles {
 
     pipe.InitBuffer(red1_buf_, red1_size_ * sizeof(AccT));
     pipe.InitBuffer(red2_buf_, RED2_SIZE * sizeof(AccT));
-    pipe.InitBuffer(res_q_, 2, MIN_VEC_SIZE * sizeof(AccT));
+    pipe.InitBuffer(res_q_, BufferNum, MIN_VEC_SIZE * sizeof(AccT));
   }
 
   /**
@@ -125,7 +126,7 @@ class KernelReduceTiles {
 
     copy::CopyGmToVec(vec_tile_input_q_,
                       global_input_[global_offset + tile_idx * tile_size_]);
-    LocalTensor<InputT> input_lt = vec_tile_input_q_.DeQue<InputT>();
+    LocalTensor<InputT> input_lt = vec_tile_input_q_.template DeQue<InputT>();
     if constexpr (REQ_INTERMEDIATE_CAST) {
       const LocalTensor<IntermediateT> intermediate_lt =
           vec_tile_intermediate_buf_.Get<IntermediateT>();
@@ -142,12 +143,12 @@ class KernelReduceTiles {
   }
   TPipe pipe;
 
-  TQue<QuePosition::VECIN, 2> vec_tile_input_q_;
+  TQue<QuePosition::VECIN, BufferNum> vec_tile_input_q_;
   TBuf<QuePosition::VECCALC> vec_tile_intermediate_buf_;
   TBuf<QuePosition::VECCALC> vec_tile_q_;
   TBuf<QuePosition::VECCALC> red1_buf_;
   TBuf<QuePosition::VECCALC> red2_buf_;
-  TQue<QuePosition::VECOUT, 2> res_q_;
+  TQue<QuePosition::VECOUT, BufferNum> res_q_;
 
   GlobalTensor<InputT> global_input_;
   GlobalTensor<AccT> global_output_;

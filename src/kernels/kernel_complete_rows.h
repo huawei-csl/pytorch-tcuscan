@@ -24,8 +24,10 @@ using namespace kernel_utils;
  *
  * @tparam T Data type of the input and output vectors.
  * @tparam IsInclusive Indicates whether the scan is inclusive or exclusive.
+ * @tparam BufferNum Number of buffers. If set to `2`, double-buffering is
+ * enabled.
  */
-template <typename T, bool IsInclusive = true>
+template <typename T, bool IsInclusive = true, int32_t BufferNum = 2>
 class KernelCompleteRows {
   constexpr static int32_t MIN_VEC_SIZE = UB_ALIGNMENT / sizeof(T);
   /// @brief Maximum allowed tile size
@@ -81,12 +83,10 @@ class KernelCompleteRows {
     global_output_.SetGlobalBuffer((__gm__ T *)output + global_shift_,
                                    output_real_elems_);
 
-    pipe.InitBuffer(vec_tile_q_, 2, tile_size_ * sizeof(T));
-    pipe.InitBuffer(vec_tile_out_q_, 2, tile_size_ * sizeof(T));
+    pipe.InitBuffer(vec_tile_q_, BufferNum, tile_size_ * sizeof(T));
+    pipe.InitBuffer(vec_tile_out_q_, BufferNum, tile_size_ * sizeof(T));
 
     pipe.InitBuffer(sums_q_, 1, AlignUp(block_num_, MIN_VEC_SIZE) * sizeof(T));
-
-    pipe.InitBuffer(work_buf_, tile_size_ * sizeof(T));
   }
 
   /**
@@ -133,39 +133,38 @@ class KernelCompleteRows {
                         num_elems_to_process);
       previous_sum = VectorAdds(previous_sum);
 
-      const LocalTensor<T> result_lt = work_buf_.Get<T>();
       copy::CopyVecToGm(global_output_[global_offset], vec_tile_out_q_,
-                        result_lt, num_elems_to_process);
+                        num_elems_to_process);
 
       global_offset += tile_size_;
     }
   }
 
   __aicore__ inline T VectorAdds(T running_sum) {
-    LocalTensor<T> vec_lt = vec_tile_q_.DeQue<T>();
+    LocalTensor<T> vec_lt = vec_tile_q_.template DeQue<T>();
+    const LocalTensor<T> vec_out_lt = vec_tile_out_q_.template AllocTensor<T>();
 
-    const LocalTensor<T> vec_buf = work_buf_.Get<T>();
-    DataCopy(vec_buf, vec_lt, vec_lt.GetSize());
+    DataCopy(vec_out_lt, vec_lt, vec_lt.GetSize());
     vec_tile_q_.FreeTensor(vec_lt);
 
     uint32_t offset = 0;
     T accumulation = running_sum;
     for (uint32_t i = 0; i < tile_height_; i++) {
-      Adds(vec_buf[offset], vec_buf[offset], accumulation, tile_width_);
+      Adds(vec_out_lt[offset], vec_out_lt[offset], accumulation, tile_width_);
       offset += tile_width_;
-      accumulation = vec_buf.GetValue(offset - 1);
+      accumulation = vec_out_lt.GetValue(offset - 1);
     }
+    vec_tile_out_q_.EnQue(vec_out_lt);
+
     return accumulation;
   }
 
   TPipe pipe;
 
-  TQue<QuePosition::VECIN, 2> vec_tile_q_;
-  TQue<QuePosition::VECOUT, 2> vec_tile_out_q_;
+  TQue<QuePosition::VECIN, BufferNum> vec_tile_q_;
+  TQue<QuePosition::VECOUT, BufferNum> vec_tile_out_q_;
 
   TQue<QuePosition::VECIN, 1> sums_q_;
-
-  TBuf<QuePosition::VECCALC> work_buf_;
 
   GlobalTensor<T> global_input_rows_;
   GlobalTensor<T> global_sums_;

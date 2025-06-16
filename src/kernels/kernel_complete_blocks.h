@@ -25,10 +25,13 @@ using namespace kernel_utils;
  *
  * @tparam T Data type of the input and output vectors.
  * @tparam IsInclusive Indicates whether the scan is inclusive or exclusive.
+ * @tparam BufferNum Number of buffers. If set to `2`, double-buffering is
+ * enabled.
  */
-template <typename T, bool IsInclusive = true>
+template <typename T, bool IsInclusive = true, int32_t BufferNum = 2>
 class KernelCompleteBlocks {
   constexpr static int32_t MIN_VEC_SIZE = UB_ALIGNMENT / sizeof(T);
+  constexpr static uint32_t global_shift_ = IsInclusive ? 0 : 1;
 
  public:
   /**
@@ -81,8 +84,8 @@ class KernelCompleteBlocks {
     global_output_.SetGlobalBuffer((__gm__ T *)output + global_shift_,
                                    output_real_elems_);
 
-    pipe.InitBuffer(vec_tile_in_q_, 2, tile_len_ * sizeof(T));
-    pipe.InitBuffer(vec_tile_out_q_, 2, tile_len_ * sizeof(T));
+    pipe.InitBuffer(vec_tile_in_q_, BufferNum, tile_len_ * sizeof(T));
+    pipe.InitBuffer(vec_tile_out_q_, BufferNum, tile_len_ * sizeof(T));
 
     pipe.InitBuffer(sums_q_, 1, AlignUp(block_num_, MIN_VEC_SIZE) * sizeof(T));
   }
@@ -150,27 +153,26 @@ class KernelCompleteBlocks {
 
   __aicore__ inline void VectorAdds(T block_level_prefix_sum,
                                     uint32_t num_elems_to_process) {
-    LocalTensor<T> vec_lt = vec_tile_in_q_.DeQue<T>();
-    const LocalTensor<T> vec_out_lt = vec_tile_out_q_.AllocTensor<T>();
+    LocalTensor<T> vec_lt = vec_tile_in_q_.template DeQue<T>();
+    const LocalTensor<T> vec_out_lt = vec_tile_out_q_.template AllocTensor<T>();
+    DataCopy(vec_out_lt, vec_lt, vec_lt.GetSize());
+    vec_tile_in_q_.FreeTensor(vec_lt);
 
-    Adds(vec_out_lt, vec_lt, block_level_prefix_sum, num_elems_to_process);
+    Adds(vec_out_lt, vec_out_lt, block_level_prefix_sum, num_elems_to_process);
 
     vec_tile_out_q_.EnQue(vec_out_lt);
-    vec_tile_in_q_.FreeTensor(vec_lt);
   }
 
   TPipe pipe;
 
-  TQue<QuePosition::VECIN, 2> vec_tile_in_q_;
-  TQue<QuePosition::VECOUT, 2> vec_tile_out_q_;
+  TQue<QuePosition::VECIN, BufferNum> vec_tile_in_q_;
+  TQue<QuePosition::VECOUT, BufferNum> vec_tile_out_q_;
   TQue<QuePosition::VECIN, 1> sums_q_;
 
   GlobalTensor<T> global_input_rows_;
   GlobalTensor<T> global_sums_;
   GlobalTensor<T> global_output_;
   GlobalTensor<T> global_output_first_elem_;
-
-  constexpr static uint32_t global_shift_ = IsInclusive ? 0 : 1;
 
   const uint32_t block_num_;
   const uint32_t vec_len_;
