@@ -186,7 +186,6 @@ std::tuple<at::Tensor, at::Tensor> run_topk_int16(const at::Tensor &x,
       at::empty({k}, at::TensorOptions().dtype(dtype).device(device));
   const at::Tensor indices_out =
       at::empty({k}, at::TensorOptions().dtype(torch::kInt32).device(device));
-  uint8_t *tilingDevice;
 
   const uint32_t user_workspace_size =
       workspace::topk::GetWorkspaceSize<int32_t>(totalLength, matmul_size,
@@ -194,29 +193,24 @@ std::tuple<at::Tensor, at::Tensor> run_topk_int16(const at::Tensor &x,
   const at::Tensor workspace_tensor =
       alloc_workspace(user_workspace_size, device);
 
-  const TopKTiling tiling{blockDim,
-                          totalLength,
-                          matmul_size,
-                          vec_tile_size,
-                          static_cast<int32_t>(x_min),
-                          static_cast<int32_t>(x_max),
-                          k};
+  TopKTiling tiling;
+  tiling.num_elems = totalLength;
+  tiling.matmul_size = matmul_size;
+  tiling.num_blocks = blockDim;
+  tiling.vec_tile_size = vec_tile_size;
+  tiling.x_min.value_i32 = static_cast<int32_t>(x_min);
+  tiling.x_max.value_i32 = static_cast<int32_t>(x_max);
+  tiling.k = k;
 
-  // tilingSize is the same for both int16_t and half
-  constexpr size_t tilingSize = sizeof(tiling);
-  aclrtMalloc((void **)&tilingDevice, tilingSize, ACL_MEM_MALLOC_HUGE_FIRST);
-
-  const uint8_t *tilingHost = reinterpret_cast<const uint8_t *>(&tiling);
-  aclrtMemcpy(tilingDevice, tilingSize, tilingHost, tilingSize,
-              ACL_MEMCPY_HOST_TO_DEVICE);
+  uint8_t *tiling_device = allocCopyTiling(tiling);
 
   ACLRT_LAUNCH_KERNEL(topk_int16)
   (blockDim, acl_stream, const_cast<void *>(x.storage().data()),
    const_cast<void *>(vec_out.storage().data()),
    const_cast<void *>(indices_out.storage().data()),
-   const_cast<void *>(workspace_tensor.storage().data()), tilingDevice);
+   const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
 
-  aclrtFree(tilingDevice);
+  aclrtFree(tiling_device);
   aclrtSynchronizeStream(acl_stream);
 
   return std::make_tuple(vec_out, indices_out);
@@ -261,7 +255,6 @@ std::tuple<at::Tensor, at::Tensor> run_topk_fp16(const at::Tensor &x,
       at::empty({k}, at::TensorOptions().dtype(dtype).device(device));
   const at::Tensor indices_out =
       at::empty({k}, at::TensorOptions().dtype(torch::kInt32).device(device));
-  uint8_t *tilingDevice;
 
   const uint32_t user_workspace_size =
       workspace::topk::GetWorkspaceSize<int32_t>(totalLength, matmul_size,
@@ -269,23 +262,24 @@ std::tuple<at::Tensor, at::Tensor> run_topk_fp16(const at::Tensor &x,
   const at::Tensor workspace_tensor =
       alloc_workspace(user_workspace_size, device);
 
-  const TopKTiling tiling{
-      blockDim, totalLength, matmul_size, vec_tile_size, x_min, x_max, k};
+  TopKTiling tiling;
+  tiling.num_elems = totalLength;
+  tiling.matmul_size = matmul_size;
+  tiling.num_blocks = blockDim;
+  tiling.vec_tile_size = vec_tile_size;
+  tiling.x_min.value_fp32 = x_min;
+  tiling.x_max.value_fp32 = x_max;
+  tiling.k = k;
 
-  constexpr size_t tilingSize = sizeof(tiling);
-  aclrtMalloc((void **)&tilingDevice, tilingSize, ACL_MEM_MALLOC_HUGE_FIRST);
-
-  const uint8_t *tilingHost = reinterpret_cast<const uint8_t *>(&tiling);
-  aclrtMemcpy(tilingDevice, tilingSize, tilingHost, tilingSize,
-              ACL_MEMCPY_HOST_TO_DEVICE);
+  uint8_t *tiling_device = allocCopyTiling(tiling);
 
   ACLRT_LAUNCH_KERNEL(topk_fp16)
   (blockDim, acl_stream, const_cast<void *>(x.storage().data()),
    const_cast<void *>(vec_out.storage().data()),
    const_cast<void *>(indices_out.storage().data()),
-   const_cast<void *>(workspace_tensor.storage().data()), tilingDevice);
+   const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
 
-  aclrtFree(tilingDevice);
+  aclrtFree(tiling_device);
   aclrtSynchronizeStream(acl_stream);
 
   return std::make_tuple(vec_out, indices_out);
