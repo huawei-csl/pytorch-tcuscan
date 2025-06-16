@@ -6,6 +6,8 @@ BASE_SPARSE_MATRIX_PATH?=/scratch/TCUSCAN/sparse-suite-matrices/ssgetpy-download
 FULL_SPARSE_MATRIX_PATH=${BASE_SPARSE_MATRIX_PATH}${LOCAL_SPARSE_MATRIX_NAME}
 PROFILING_SCRIPTS_PATH=scripts/profiling/
 CONDA_ENV_NAME="pytorch_tcuscan"
+PYTORCH_ASCEND_WHEEL_NAME=torch_npu-2.4.0.post4-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
+PYTORCH_ASCEND_WHEEL_URL=https://gitee.com/ascend/pytorch/releases/download/v7.0.0-pytorch2.4.0/${PYTORCH_ASCEND_WHEEL_NAME}
 
 DEVICE_TYPE?=npu
 LD_LIBRARY_PATH := ${LD_LIBRARY_PATH}:$(shell pwd)/build/lib/
@@ -30,18 +32,18 @@ create_conda_env:
 	# PyTorch Ascend requires cmake >= 3.18
 	conda install -y cmake -n ${CONDA_ENV_NAME}
 	conda run -n ${CONDA_ENV_NAME} pip3 install -r requirements.txt
-	wget -nc https://gitee.com/ascend/pytorch/releases/download/v6.0.0-pytorch2.4.0/torch_npu-2.4.0.post2-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
-	conda run -n ${CONDA_ENV_NAME} pip3 install torch_npu-2.4.0.post2-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl --index-url https://download.pytorch.org/whl/cpu
+	wget -nc ${PYTORCH_ASCEND_WHEEL_URL}
+	conda run -n ${CONDA_ENV_NAME} pip3 install ${PYTORCH_ASCEND_WHEEL_NAME} --index-url https://download.pytorch.org/whl/cpu
 
 setup_once:
 	pip3 install -r requirements.txt
-	wget -nc https://gitee.com/ascend/pytorch/releases/download/v6.0.0-pytorch2.4.0/torch_npu-2.4.0.post2-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
-	pip3 install torch_npu-2.4.0.post2-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl --index-url https://download.pytorch.org/whl/cpu
+	wget -nc ${PYTORCH_ASCEND_WHEEL_URL}
+	pip3 install ${PYTORCH_ASCEND_WHEEL_NAME} --index-url https://download.pytorch.org/whl/cpu
 
 setup_once_aarch64:
 	pip3 install -r requirements.txt
-	wget https://gitee.com/ascend/pytorch/releases/download/v6.0.0-pytorch2.4.0/torch_npu-2.4.0.post2-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl
-	pip3 install torch_npu-2.4.0.post2-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl --index-url https://download.pytorch.org/whl/cpu
+	wget -nc ${PYTORCH_ASCEND_WHEEL_URL}
+	pip3 install ${PYTORCH_ASCEND_WHEEL_NAME} --index-url https://download.pytorch.org/whl/cpu
 
 build: build.sh src/vadd.cpp src/diff.cpp src/seg_scan_single_core.cpp src/seg_scan_mc_revert.cpp src/pybind11.cpp
 	./build.sh -v ASCEND910B4
