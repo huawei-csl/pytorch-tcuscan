@@ -38,8 +38,9 @@ using namespace kernel_utils;
  *   - inputs: `half`; output: `float`.
  *
  * @tparam InputT Data type of the input vector.
+ * @tparam SyncAfter Synchronize cube tiles with vector cores if true
  */
-template <typename InputT>
+template <typename InputT, bool SyncAfter = false>
 class KernelRowScan {
   using OutputT = kernel_utils::cube_unit::CubeOutType_t<InputT>;
 
@@ -107,6 +108,9 @@ class KernelRowScan {
     LoadBToL0();
     for (uint32_t idx = 0; idx < num_tiles_to_process; ++idx) {
       CubeIter(idx);
+      if constexpr (SyncAfter) {
+        sync::SyncGroup<sync::GroupSyncDirection::FULL>();
+      }
     }
     queue::FreeFromQ<InputT>(b2_q_);
   }
