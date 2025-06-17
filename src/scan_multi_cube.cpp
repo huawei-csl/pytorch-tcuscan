@@ -10,6 +10,59 @@
 #include "kernels/kernel_scan_multi_cube.h"
 #include "tiling/tiling_scan_multi_cube.h"
 
+template <typename InputT>
+__aicore__ inline void _run_scan_multi_cube(GM_ADDR input_vec, GM_ADDR lower,
+                                            GM_ADDR upper_strict,
+                                            GM_ADDR output_vec,
+                                            GM_ADDR workspace,
+                                            GM_ADDR tilingGm) {
+  using OutputT = kernel_utils::cube_unit::CubeOutType_t<InputT>;
+
+  ScanMultiCubeTiling tiling;
+  tiling::GetTilingData(&tiling, tilingGm);
+
+  const uint32_t vec_len = tiling.num_elems;
+  const uint32_t matmul_size = tiling.matmul_size;
+
+  constexpr bool IsInclusive = true;
+
+  // We consider the L2 cache maxed when the scan takes up around 50% of the
+  // L2 total cache size -> maybe available L2 size can be a tiling parameter
+  constexpr uint32_t available_l2_size = L2_SIZE;
+  const uint32_t fitting_len = scalar::AlignUp(
+      available_l2_size / (sizeof(InputT) + sizeof(OutputT)), GM_ALIGNMENT);
+
+  uint32_t remaining_len = vec_len;
+  uint32_t offset = 0;
+  uint32_t used_size = multi_cube::get_workspace_size<InputT, IsInclusive>(
+                           remaining_len, matmul_size) +
+                       vec_len * sizeof(InputT) + vec_len * sizeof(OutputT);
+
+  OutputT starting_value = 0;
+
+  while (used_size > available_l2_size && fitting_len < remaining_len) {
+    run_scan_multi_cube_kernel<InputT>(
+        input_vec + offset * sizeof(InputT), lower, upper_strict,
+        output_vec + offset * sizeof(OutputT), workspace, fitting_len,
+        matmul_size, starting_value);
+    SyncAll<false>();
+
+    remaining_len -= fitting_len;
+    used_size = multi_cube::get_workspace_size<InputT, IsInclusive>(
+                    remaining_len, matmul_size) +
+                vec_len * sizeof(InputT) + vec_len * sizeof(OutputT);
+    starting_value = scalar::GetGMValue<OutputT>(
+        output_vec + offset * sizeof(OutputT), fitting_len - 1, fitting_len);
+    offset += fitting_len;
+  }
+  if (remaining_len > 0) {
+    run_scan_multi_cube_kernel<InputT>(
+        input_vec + offset * sizeof(InputT), lower, upper_strict,
+        output_vec + offset * sizeof(OutputT), workspace, remaining_len,
+        matmul_size, starting_value);
+  }
+}
+
 /**
  * @brief Run the multi-cube inclusive block scan kernel with dtype fp16
  *
@@ -19,17 +72,11 @@
  * with ones
  * @param [in] output_vec Pointer to an output vector.
  * @param [in] workspace Pointer to the kernel workspace.
- * @param [in] tilingGm Pointer to the tiling buffer.
+ * @param [in] tiling_gm Pointer to the tiling buffer.
  */
 extern "C" __global__ __aicore__ void scan_multi_cube_fp16(
     GM_ADDR input_vec, GM_ADDR lower, GM_ADDR upper_strict, GM_ADDR output_vec,
-    GM_ADDR workspace, GM_ADDR tilingGm) {
-  ScanMultiCubeTiling tiling;
-  tiling::GetTilingData(&tiling, tilingGm);
-
-  const uint32_t vec_len = tiling.num_elems;
-  const uint32_t matmul_size = tiling.matmul_size;
-
-  run_scan_multi_cube_kernel<half>(input_vec, lower, upper_strict, output_vec,
-                                   workspace, vec_len, matmul_size);
+    GM_ADDR workspace, GM_ADDR tiling_gm) {
+  _run_scan_multi_cube<half>(input_vec, lower, upper_strict, output_vec,
+                             workspace, tiling_gm);
 }

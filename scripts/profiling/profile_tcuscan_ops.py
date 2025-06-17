@@ -708,12 +708,13 @@ if __name__ == "__main__":  # noqa
 
     # Maximum number of iterations
     max_iters = ceil(max_size / (num_cores * s * s))
+    iters = range(1, max_iters, 16 * 128 // s)
 
     logger.info("*******************************")
     logger.info(f"* bench          : {bench}")
     logger.info(f"* dtype          : {dtype}")
     logger.info(f"* max_size       : {max_size}")
-    logger.info(f"* Max iterations : {max_iters}")
+    logger.info(f"* # of Iters     : {len(iters)}")
     logger.info(f"* num_cores      : {num_cores}")
     logger.info(f"* s              : {s}")
     logger.info(f"* K              : {k}")
@@ -723,7 +724,7 @@ if __name__ == "__main__":  # noqa
     logger.info("*******************************")
 
     # Input sizes to benchmark
-    sizes = [i * num_cores * s * s for i in range(1, max_iters, 16 * 128 // s)]
+    sizes = [i * num_cores * s * s for i in iters]
 
     if bench == "vadd":
         benchmark(device, "vadd", "fp16", vadd_benchmark, sizes)

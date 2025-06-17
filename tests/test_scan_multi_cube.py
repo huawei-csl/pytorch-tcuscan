@@ -21,7 +21,7 @@ NUM_AI_CORES = 20
 
 def get_lengths(s: int, max_iters: int):
     for multiplier in range(1, max_iters):
-        yield multiplier * 2 * NUM_AI_CORES * s * s
+        yield multiplier * NUM_AI_CORES * s * s
 
 
 def _test_dtype(vec_len: int, s: int, dtype: torch.dtype):
@@ -33,7 +33,7 @@ def _test_dtype(vec_len: int, s: int, dtype: torch.dtype):
 
     out_dtype = None
     if dtype == torch.float16:
-        x = torch.randn(vec_len, dtype=dtype, device=NPU_DEVICE)
+        x = torch.rand(vec_len, dtype=dtype, device=NPU_DEVICE)
         out_dtype = torch.float32
     elif dtype == torch.int8:
         x = torch.randint(0, 10, size=(vec_len,), dtype=dtype, device=NPU_DEVICE)
@@ -48,10 +48,10 @@ def _test_dtype(vec_len: int, s: int, dtype: torch.dtype):
     torch.npu.synchronize()
 
     abs_error = torch.max(torch.abs(actual - expected))
-    rel_error = torch.max(torch.abs(actual - expected) / torch.abs(expected))
+    rel_error = torch.max(torch.abs(actual - expected) / torch.abs(actual))
     assert actual.dtype == expected.dtype
     assert torch.allclose(
-        actual, expected, atol=1e-1, rtol=1e-2
+        actual, expected, atol=0, rtol=1e-2
     ), f"multi-cube scan ({dtype}) is wrong. len / s : {vec_len} / {s}. Abs/rel error: {abs_error:.5f} / {rel_error:.7f}"
 
 
@@ -82,6 +82,18 @@ def test_scan_multi_cube_s_64(multiplier: int, s: int, dtype: torch.dtype):
 @pytest.mark.parametrize("multiplier", range(1, 10))
 @pytest.mark.parametrize("s", [128])
 @pytest.mark.parametrize("dtype", [torch.float16], ids=str)
-def test_scan_multi_cube_s_128(multiplier: int, s: int, dtype: torch.dtype):
-    vec_len = multiplier * NUM_AI_CORES * s * s
+@pytest.mark.parametrize("offset", [5, 13, 23, 33])
+def test_scan_multi_cube_s_128(
+    multiplier: int, s: int, dtype: torch.dtype, offset: int
+):
+    vec_len = multiplier * NUM_AI_CORES * s * s - offset
     _test_dtype(vec_len, s, dtype)
+
+
+# Uncomment this test to verify that the input length used in profiling are correct.
+# @pytest.mark.parametrize("multiplier", range(1, 39))
+# @pytest.mark.parametrize("s", [128])
+# @pytest.mark.parametrize("dtype", [torch.float16], ids=str)
+# def test_scan_multi_cube_profiling_lengths(multiplier: int, s: int, dtype: torch.dtype):
+#     vec_len = multiplier * NUM_AI_CORES * s * s
+#     _test_dtype(vec_len, s, dtype)

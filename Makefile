@@ -115,6 +115,7 @@ profile_complete_blocks:
 
 profile_scan_multi_cube:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench copy --dtype fp16
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench cast --dtype fp16
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench mcscan --s 128 --dtype fp16
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench scan_multi_cube --s 128 --dtype fp16
 
