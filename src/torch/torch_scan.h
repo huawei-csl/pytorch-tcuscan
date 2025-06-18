@@ -74,7 +74,7 @@ at::Tensor run_scan_single_core(const at::Tensor &x, int S,
     const uint32_t user_workspace_size =
         workspace::sc_scan::GetWorkspaceSize<int8_t>(tiling);
     const at::Tensor workspace_tensor =
-        alloc_workspace(user_workspace_size, device);
+        alloc_zeros_workspace(user_workspace_size, device);
     ACLRT_LAUNCH_KERNEL(scan_single_core_int8)
     (1 /* single core*/, acl_stream, const_cast<void *>(x.storage().data()),
      const_cast<void *>(z.storage().data()),
@@ -83,7 +83,7 @@ at::Tensor run_scan_single_core(const at::Tensor &x, int S,
     const uint32_t user_workspace_size =
         workspace::sc_scan::GetWorkspaceSize<int16_t>(tiling);
     const at::Tensor workspace_tensor =
-        alloc_workspace(user_workspace_size, device);
+        alloc_zeros_workspace(user_workspace_size, device);
     ACLRT_LAUNCH_KERNEL(scan_single_core_fp16)
     (1 /* single core*/, acl_stream, const_cast<void *>(x.storage().data()),
      const_cast<void *>(z.storage().data()),

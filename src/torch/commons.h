@@ -30,6 +30,27 @@ at::Tensor alloc_workspace(uint32_t user_workspace_size, at::Device device) {
   const uint32_t system_workspace_size =
       static_cast<uint32_t>(ascendc_platform->GetLibApiWorkSpaceSize());
   const uint32_t workspace_size = user_workspace_size + system_workspace_size;
+  const at::Tensor workspace_tensor = at::empty(
+      {workspace_size}, at::TensorOptions().dtype(at::kByte).device(device));
+
+  return workspace_tensor;
+}
+
+/**
+ * @brief Allocates a torch tensor for AscendC kernel working space, zeroing
+ * memory.
+ *
+ * @param user_workspace_size Workspace size in bytes
+ * @param device Device on which the tensor is allocated.
+ * @return at::Tensor The allocated workspace tensor.
+ */
+at::Tensor alloc_zeros_workspace(uint32_t user_workspace_size,
+                                 at::Device device) {
+  const auto ascendc_platform =
+      platform_ascendc::PlatformAscendCManager::GetInstance(SOC_VERSION);
+  const uint32_t system_workspace_size =
+      static_cast<uint32_t>(ascendc_platform->GetLibApiWorkSpaceSize());
+  const uint32_t workspace_size = user_workspace_size + system_workspace_size;
   const at::Tensor workspace_tensor = at::zeros(
       {workspace_size}, at::TensorOptions().dtype(at::kByte).device(device));
 
