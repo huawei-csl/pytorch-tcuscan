@@ -251,6 +251,40 @@ def baseline_diff_benchmark(device: Device, B: csr_matrix) -> float:
     return _run_benchmark(device, run_diff), len(vals)
 
 
+def spmv_multi_cube_benchmark(device: Device, B: csr_matrix, s: int):
+    """
+    Benchmark TCUSCAN SpMV kernel.
+
+    Args:
+        device: Device to run benchmark on.
+        B: Input CSR Matrix
+        s: Matrix size tiling parameter.
+
+    Returns:
+        Average time in microseconds.
+    """
+    rng = np.random.default_rng(seed=42)
+    vals = torch.from_numpy((B.data).astype(np.float16))
+    idx = torch.from_numpy((B.indptr).astype(np.uint32))
+    cols = torch.from_numpy((B.indices).astype(np.uint32))
+    vector = torch.from_numpy(rng.uniform(1, 9, len(idx) - 1).astype(np.float16))
+    vals_npu = vals.npu()
+    idx_npu = idx.npu()
+    col_npu = cols.npu()
+    vec_npu = vector.npu()
+    ones = torch.ones((s, s), dtype=torch.float16, device=NPU_DEVICE)
+    upper = torch.triu(ones)
+    lower_strict = torch.tril(ones, -1)
+    torch.npu.synchronize()
+
+    def run_spmv_multi_cube():
+        _ = tcuscan_ops.run_spmv_multi_cube(
+            vals_npu, idx_npu, col_npu, vec_npu, s, upper, lower_strict
+        )
+
+    return _run_benchmark(device, run_spmv_multi_cube), len(vals)
+
+
 def spmv_benchmark(device: Device, B: csr_matrix, s: int):
     """
     Benchmark TCUSCAN SpMV kernel.
@@ -272,6 +306,7 @@ def spmv_benchmark(device: Device, B: csr_matrix, s: int):
     idx_npu = idx.npu()
     col_npu = cols.npu()
     vec_npu = vector.npu()
+
     torch.npu.synchronize()
 
     def run_spmv():
@@ -373,6 +408,7 @@ if __name__ == "__main__":
             "diff",
             "vec_seg_scan_sc",
             "spmv",
+            "spmv_multi_cube",
             "csr_gather",
             "gather_spmv",
         ],
@@ -443,6 +479,19 @@ if __name__ == "__main__":
         bench_name = fullpath.split("/")[-1]
         benchmark(
             device, "diff", dtype, partial(baseline_diff_benchmark, B=B), bench_name
+        )
+    elif bench == "spmv_multi_cube" and dtype in ["fp16"]:
+        bench_name = fullpath.split("/")[-1]
+        benchmark(
+            device,
+            f"spmv_multi_cube_{s}",
+            dtype,
+            partial(
+                spmv_multi_cube_benchmark,
+                B=B,
+                s=s,
+            ),
+            bench_name,
         )
     elif bench == "spmv" and dtype in ["fp16"]:
         bench_name = fullpath.split("/")[-1]

@@ -45,6 +45,8 @@ PYBIND11_MODULE(tcuscan_ops, m) {
   m.def("run_seg_sum", &asc::seg_ops::run_seg_sum, "Segmented Sum");
   m.def("run_spmv", &asc::spmv::run_spmv,
         "Sparse Matrix-Vector Multiplication");
+  m.def("run_spmv_multi_cube", &asc::spmv::run_spmv_multi_cube,
+        "Sparse Matrix-Vector Multiplication Using Multi-cube Scan");
   m.def("run_copy", &asc::copy::run_copy, "Copy single core");
   m.def("run_scan_batch", &asc::scan::run_scan_batch, "Scan Batch");
   m.def("run_scan_single_core", &asc::scan::run_scan_single_core,
