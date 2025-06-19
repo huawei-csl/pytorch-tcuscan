@@ -397,7 +397,7 @@ if __name__ == "__main__":
     else:
         device = Device(torch.cuda, "cuda:0")
 
-    for nnr in range(s * num_cores, s * 200 * num_cores, s * 20):
+    for nnr in range(s * num_cores, 71680, s * 20):
         vec_len = nnr * nnr * density
         B = []
         if "Uniform" == distr:
