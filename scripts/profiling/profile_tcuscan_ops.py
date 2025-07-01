@@ -498,7 +498,7 @@ def complete_blocks_benchmark(
         x = torch.rand(size, device=device.str, dtype=dtype)
     else:
         raise RuntimeError(
-            f"dtype {dtype} is not supported in TCUSCAN block_scan operator"
+            f"dtype {dtype} is not supported in TCUSCAN complete_blocks operator"
         )
 
     # Number of AIC/AIV ratio is 1:2.
@@ -512,6 +512,31 @@ def complete_blocks_benchmark(
     return _run_benchmark(device, run_complete_blocks), size
 
 
+def complete_rows_benchmark(
+    device: Device,
+    size: int,
+    dtype: torch.dtype,
+    s: int,
+    num_cores: int,
+) -> Tuple[float, int]:
+    if dtype == torch.float32:
+        x = torch.rand(size, device=device.str, dtype=dtype)
+    else:
+        raise RuntimeError(
+            f"dtype {dtype} is not supported in TCUSCAN complete_rows operator"
+        )
+
+    # Number of AIC/AIV ratio is 1:2.
+    sums = torch.sum(x.reshape(num_cores * 2, -1), dim=1, dtype=dtype).flatten()
+    block_len = size // sums.numel()
+    torch.npu.synchronize()
+
+    def run_complete_rows() -> None:
+        _ = tcuscan_ops.run_complete_rows(x, sums, s, block_len)
+
+    return _run_benchmark(device, run_complete_rows), size
+
+
 def block_scan_benchmark(
     device: Device, size: int, dtype: torch.dtype, s: int
 ) -> Tuple[float, int]:
@@ -522,8 +547,13 @@ def block_scan_benchmark(
             f"dtype {dtype} is not supported in TCUSCAN block_scan operator"
         )
 
+    ones = torch.ones((s, s), dtype=dtype, device=NPU_DEVICE)
+    upper = torch.triu(ones)
+    lower_strict = torch.tril(ones, -1)
+    torch.npu.synchronize()
+
     def run_block_scan() -> None:
-        _ = tcuscan_ops.run_block_scan(x.reshape(-1, s), s)
+        _ = tcuscan_ops.run_block_scan(x.reshape(-1, s), upper, lower_strict)
 
     return _run_benchmark(device, run_block_scan), size
 
@@ -687,6 +717,7 @@ if __name__ == "__main__":  # noqa
             "gen_lower",
             "block_scan",
             "complete_blocks",
+            "complete_rows",
             "scan_multi_cube",
         ],
     )
@@ -990,7 +1021,22 @@ if __name__ == "__main__":  # noqa
             sizes,
             density,
         )
-    elif bench == "scan_multi_cube" and dtype in ["fp16", "int8"]:
+    elif bench == "complete_rows" and dtype in ["fp32"]:
+        tdtype = STR_TO_DTYPE[dtype]
+        benchmark(
+            device,
+            "complete_rows",
+            dtype,
+            partial(
+                complete_rows_benchmark,
+                dtype=tdtype,
+                s=s,
+                num_cores=num_cores,
+            ),
+            sizes,
+            density,
+        )
+    elif bench == "scan_multi_cube" and dtype in ["fp16"]:
         tdtype = STR_TO_DTYPE[dtype]
         benchmark(
             device,

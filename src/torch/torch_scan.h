@@ -316,10 +316,12 @@ at::Tensor run_row_scan(const at::Tensor &x, int S) {
  * vector `x`.
  *
  * @param x Input 1D vector.
- * @param S Tiling parameter. Typical values 32, 64, 128.
+ * @param upper Upper triangular all-ones matrix of size S.
+ * @param lower_strict Strict lower triangular all-ones matrix of size S.
  * @return The prefix sum of each concecutive block of `x` (block length S^2).
  */
-at::Tensor run_block_scan(const at::Tensor &x, int S) {
+at::Tensor run_block_scan(const at::Tensor &x, const at::Tensor &upper,
+                          const at::Tensor &lower_strict) {
   const auto ascendc_platform =
       platform_ascendc::PlatformAscendCManager::GetInstance(SOC_VERSION);
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
@@ -328,7 +330,7 @@ at::Tensor run_block_scan(const at::Tensor &x, int S) {
   const auto dtype_out =
       dtype == torch::kHalf ? torch::kFloat32 : torch::kInt32;
 
-  const uint32_t s = static_cast<uint32_t>(S);
+  const uint32_t s = static_cast<uint32_t>(upper.size(0));
   const uint32_t total_len = x.numel();
 
   const at::Tensor z = at::empty(
@@ -345,21 +347,12 @@ at::Tensor run_block_scan(const at::Tensor &x, int S) {
   const BlockScanTiling tiling{total_len, s};
   uint8_t *tiling_device = allocCopyTiling(tiling);
 
-  const at::Tensor upper =
-      torch::triu(torch::ones({s, s}, at::TensorOptions().dtype(dtype)))
-          .to(device);
-
-  const at::Tensor lower =
-      torch::tril(torch::ones({s, s}, at::TensorOptions().dtype(dtype)),
-                  -1 /* diagonal */)
-          .to(device);
-
   if (dtype == torch::kHalf) {
     const at::Tensor workspace_tensor = alloc_workspace(0, device);
     ACLRT_LAUNCH_KERNEL(block_scan_fp16)
     (blockDim, acl_stream, const_cast<void *>(x.storage().data()),
      const_cast<void *>(upper.storage().data()),
-     const_cast<void *>(lower.storage().data()),
+     const_cast<void *>(lower_strict.storage().data()),
      const_cast<void *>(z.storage().data()),
      const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
   } else {

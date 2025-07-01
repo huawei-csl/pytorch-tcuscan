@@ -109,9 +109,13 @@ profile_block_scan:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench block_scan --s 64 --dtype fp16
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench block_scan --s 128 --dtype fp16
 
+profile_down_sweep:
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench copy --dtype fp32
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench complete_rows --s 128 --dtype fp32
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench complete_blocks --s 128 --k 2 --dtype fp32
+
 profile_complete_blocks:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench copy --dtype fp32
-	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench complete_blocks --s 128 --k 2 --dtype fp32
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench complete_blocks --s 128 --k 4 --dtype fp32
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench complete_blocks --s 128 --k 8 --dtype fp32
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench complete_blocks --s 128 --k 16 --dtype fp32
@@ -302,13 +306,13 @@ profile_fp32_gather_spmv:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench gather_spmv --dtype fp32 --num_cores 20 --s 256
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench gather_spmv --dtype fp32 --num_cores 20 --s 512
 
-profile_fp16_spmv_uniform: 
+profile_fp16_spmv_uniform:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_random_matrices.py --bench spmv --dtype fp16 --prob Uniform --num_cores 20 --s 128 --density 0.1
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_random_matrices.py --bench spmv --dtype fp16 --prob Uniform --num_cores 20 --s 128 --density 0.01
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_random_matrices.py --bench spmv --dtype fp16 --prob Uniform --num_cores 20 --s 128 --density 0.001
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_random_matrices.py --bench spmv --dtype fp16 --prob Uniform --num_cores 20 --s 128 --density 0.0001
 
-profile_fp16_spmv_powerlaw: 
+profile_fp16_spmv_powerlaw:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_random_matrices.py --bench spmv --dtype fp16 --prob PowerLaw --num_cores 20 --s 128 --density 0.1
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_random_matrices.py --bench spmv --dtype fp16 --prob PowerLaw --num_cores 20 --s 128 --density 0.01
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_random_matrices.py --bench spmv --dtype fp16 --prob PowerLaw --num_cores 20 --s 128 --density 0.001

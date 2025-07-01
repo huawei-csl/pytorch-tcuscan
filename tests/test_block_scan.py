@@ -22,7 +22,12 @@ def _test_block_scan(m: int, s: int, dtype: torch.dtype):
     A = 0.1 * torch.randn(m, matmul_tile, dtype=dtype).npu()
     B = torch.triu(torch.ones((matmul_tile, matmul_tile), dtype=dtype)).npu()
 
-    actual = tcuscan_ops.run_block_scan(A.flatten(), s)
+    ones = torch.ones((s, s), dtype=dtype, device=NPU_DEVICE)
+    upper = torch.triu(ones)
+    lower_strict = torch.tril(ones, -1)
+    torch.npu.synchronize()
+
+    actual = tcuscan_ops.run_block_scan(A.flatten(), upper, lower_strict)
     expected = torch.matmul(A.float(), B.float()).flatten()
 
     assert actual.dtype == expected.dtype
