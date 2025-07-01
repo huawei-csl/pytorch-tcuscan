@@ -465,10 +465,16 @@ def scan_multi_cube_benchmark(
 ) -> Tuple[float, int]:
     if dtype == torch.float16:
         x = torch.rand(size, device=device.str, dtype=dtype)
-    else:
-        raise RuntimeError(
-            f"dtype {dtype} is not supported in scan_multi_cube operator"
+    elif dtype == torch.int8:
+        x = torch.randint(
+            torch.iinfo(dtype).min,
+            torch.iinfo(dtype).max,
+            (size,),
+            device=device.str,
+            dtype=dtype,
         )
+    else:
+        raise RuntimeError(f"dtype {dtype} is not supported in scan_multi_cube.")
 
     ones = torch.ones((s, s), dtype=dtype, device=device.str)
     upper = torch.triu(ones)
@@ -640,7 +646,8 @@ def benchmark(
 
         for size in sizes:
             time, outputsize = fn(device, size)
-            fd.write(f"{op_name},{dtype},{size},{density},{outputsize},{time:.2f}\n")
+            name = f"{op_name}_{dtype}"
+            fd.write(f"{name},{dtype},{size},{density},{outputsize},{time:.2f}\n")
             logger.info(
                 f"OP:{op_name}, dtype: {dtype}, size: {size:}, outputsize: {outputsize}, density: {density}, device: {device.str}"
             )
@@ -983,7 +990,7 @@ if __name__ == "__main__":  # noqa
             sizes,
             density,
         )
-    elif bench == "scan_multi_cube" and dtype in ["fp16"]:
+    elif bench == "scan_multi_cube" and dtype in ["fp16", "int8"]:
         tdtype = STR_TO_DTYPE[dtype]
         benchmark(
             device,

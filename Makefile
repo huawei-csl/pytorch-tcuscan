@@ -254,6 +254,7 @@ paper_fig_5: powerlaw_fig_5 uniform_fig_5
 
 paper_fig_6_segsum:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench mcscan --s 128 --dtype fp16
+	#python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench scan_multi_cube --s 128 --dtype fp16
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench compress --s 128 --density ${DENSITY} --dtype fp32
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench diff_cann --s 128 --dtype fp32
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench copy --dtype fp16
@@ -261,6 +262,8 @@ paper_fig_6_segsum:
 paper_fig_6_segscan:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench mcscan --s 128 --dtype fp16
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench mcscan --s 128 --dtype int8
+	#python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench scan_multi_cube --s 128 --dtype fp16
+	#python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench scan_multi_cube --s 128 --dtype int8
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench seg_scan_mc_revert --s 128 --dtype fp32 --density ${DENSITY}
 
 paper_fig_6: paper_fig_6_segsum paper_fig_6_segscan
@@ -293,10 +296,24 @@ profile_fp32_gather_spmv_matrix:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_random_matrices.py --bench gather_spmv --dtype fp32 --prob Uniform --num_cores 20 --s 256 --density 0.0001
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_random_matrices.py --bench gather_spmv --dtype fp32 --prob Uniform --num_cores 20 --s 512 --density 0.0001
 
+
 profile_fp32_gather_spmv:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench gather_spmv --dtype fp32 --num_cores 20 --s 128
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench gather_spmv --dtype fp32 --num_cores 20 --s 256
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench gather_spmv --dtype fp32 --num_cores 20 --s 512
+
+profile_fp16_spmv_uniform: 
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_random_matrices.py --bench spmv --dtype fp16 --prob Uniform --num_cores 20 --s 128 --density 0.1
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_random_matrices.py --bench spmv --dtype fp16 --prob Uniform --num_cores 20 --s 128 --density 0.01
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_random_matrices.py --bench spmv --dtype fp16 --prob Uniform --num_cores 20 --s 128 --density 0.001
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_random_matrices.py --bench spmv --dtype fp16 --prob Uniform --num_cores 20 --s 128 --density 0.0001
+
+profile_fp16_spmv_powerlaw: 
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_random_matrices.py --bench spmv --dtype fp16 --prob PowerLaw --num_cores 20 --s 128 --density 0.1
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_random_matrices.py --bench spmv --dtype fp16 --prob PowerLaw --num_cores 20 --s 128 --density 0.01
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_random_matrices.py --bench spmv --dtype fp16 --prob PowerLaw --num_cores 20 --s 128 --density 0.001
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_random_matrices.py --bench spmv --dtype fp16 --prob PowerLaw --num_cores 20 --s 128 --density 0.0001
+
 
 profile_fp16_spmv:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_random_matrices.py --bench spmv --dtype fp16 --prob Uniform --num_cores 20 --s 128 --density 0.001
