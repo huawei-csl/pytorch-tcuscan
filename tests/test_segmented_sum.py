@@ -26,7 +26,7 @@ NPU_DEVICE = os.environ.get("NPU_DEVICE", "npu:1")
 torch.npu.config.allow_internal_format = False
 torch.npu.set_device(NPU_DEVICE)
 
-_MULTIPLIER = [1, 2]  # Fails on , 3, 5, 6, 7, 8, 9, 10, 11, 12]
+_MULTIPLIER = [1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12]
 
 
 def ref_segsum(x: torch.Tensor, f: torch.Tensor) -> torch.Tensor:
@@ -72,7 +72,7 @@ def _test_tcuscan_seg_sum(n: int, s: int, segm_density: float):
     torch.npu.synchronize()
     assert (
         actual.shape == expected.shape
-    ), "Output shape mismatch. Got {actual.shape}. Expected {expected.shape}"
+    ), f"Output shape mismatch. Got {actual.shape}. Expected {expected.shape}"
     assert (
         actual.dtype == expected.dtype
     ), f"Output dtype mismatch. Got {actual.dtype}. Expected {expected.dtype}"
