@@ -80,6 +80,20 @@ profile_all_s_fp16_%:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench $* --s 64 --dtype fp16
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench $* --s 128 --dtype fp16
 
+profile_cuda:
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops_gpu.py --bench copy --dtype fp16
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops_gpu.py --bench scan --dtype fp16
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops_gpu.py --bench sort --dtype fp16
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops_gpu.py --bench masked_select --dtype fp16
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops_gpu.py --bench top_p --dtype fp16
+
+profile_baselines:
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench copy --dtype fp16
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench scan --dtype fp16
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench sort --dtype fp16
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench masked_select --dtype fp16
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench top_p --dtype fp16
+
 profile_mcscan_int8:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench copy --dtype fp16
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench mcscan --s 128 --dtype fp16
@@ -88,6 +102,7 @@ profile_mcscan_int8:
 
 profile_mcscan:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench copy --dtype fp16
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench scan --s 128 --dtype fp16
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench mcscan --s 32 --dtype fp16
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench mcscan --s 64 --dtype fp16
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench mcscan --s 128 --dtype fp16

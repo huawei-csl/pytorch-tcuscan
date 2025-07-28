@@ -1,0 +1,510 @@
+#!/usr/bin/env python3
+# -*- coding:utf-8 -*-
+#
+# PyTorch profiling code is part of TCUSCAN-CH CSTT project.
+#
+# Copyright 2024 Huawei Technologies Co., Ltd
+
+import argparse
+import logging
+import os
+import sys
+import types
+import typing
+from dataclasses import dataclass
+from functools import partial
+from math import ceil
+from typing import Optional, Tuple
+
+import torch
+
+GPU_NAME = os.environ.get("GPU_NAME", "A100")
+DEVICE = os.environ.get("DEVICE_TYPE", "cuda")
+
+file_handler = logging.FileHandler(filename="torch_profiler_gpu.log")
+stdout_handler = logging.StreamHandler(stream=sys.stdout)
+handlers = [file_handler, stdout_handler]
+
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="[%(asctime)s] {%(filename)s:%(lineno)d} %(levelname)s - %(message)s",
+    handlers=handlers,
+)
+
+logger = logging.getLogger(__name__)
+
+STR_TO_DTYPE = {"fp16": torch.float16, "int16": torch.int16, "int8": torch.int8}
+
+WARMUP_ITERS = 10
+BENCH_ITERS = 100
+
+STR_TO_DTYPE = {
+    "fp16": torch.float16,
+    "int16": torch.int16,
+    "int8": torch.int8,
+    "fp32": torch.float32,
+}
+
+
+@dataclass
+class Device:
+    module: types.ModuleType
+    str: str
+
+    def sync(self) -> None:
+        self.module.synchronize()
+
+    def event(self) -> "typing.Self.module.Event":
+        return self.module.Event(enable_timing=True)
+
+
+def _run_benchmark(
+    device: Device,
+    fn: typing.Callable,
+    warmup_iters: int = WARMUP_ITERS,
+    benchmark_iters: int = BENCH_ITERS,
+) -> float:
+    """
+    Benchmark a given function with warmup.
+
+    Args:
+        device: Device to run benchmark on.
+        fn: Function to benchmark.
+        warmup_iters: Number of warmup runs.
+        benchmark_iters: Number of benchmark runs.
+
+    Returns:
+        Average time in microseconds.
+    """
+    start_events = [device.event() for _ in range(benchmark_iters)]
+    end_events = [device.event() for _ in range(benchmark_iters)]
+
+    device.sync()
+    for _ in range(warmup_iters):
+        fn()
+
+    device.sync()
+
+    # We maintain a buffer of 256 MB that we clear
+    # before each kernel call to make sure that the L2 cache
+    # doesn't contain any input data before the run
+    # Copied from https://github.com/triton-lang/triton/blob/v2.1.0/python/triton/testing.py#L110
+    cache_size = 256 * 1024 * 1024
+    cache = torch.ones(cache_size, dtype=torch.int8, device=device.str)
+
+    for i in range(benchmark_iters):
+        cache.zero_()
+        device.sync()
+        start_events[i].record()
+        fn()
+        end_events[i].record()
+        device.sync()
+
+    times_ms = [s.elapsed_time(e) for s, e in zip(start_events, end_events)]
+    avg_time_ms = sum(times_ms) / len(times_ms)
+    avg_time_us = avg_time_ms * 1000
+    return avg_time_us
+
+
+def clone_benchmark(device: Device, size: int, dtype: torch.dtype) -> Tuple[float, int]:
+    if dtype in {torch.float16, torch.float32}:
+        x = torch.rand(size, device=device.str, dtype=dtype)
+    elif dtype == torch.int16:
+        x = torch.randint(0, 2**7 - 1, (size,), device=device.str, dtype=dtype)
+    else:
+        raise ValueError("Incorrect copy data type")
+
+    def run_clone() -> None:
+        _ = torch.clone(x)
+
+    return _run_benchmark(device, run_clone), size
+
+
+def cast_benchmark(device: Device, size: int, dtype: torch.dtype) -> Tuple[float, int]:
+    if dtype in {torch.float16}:
+        x = torch.rand(size, device=device.str, dtype=dtype)
+    else:
+        raise ValueError("Cast benchmark only supports fp16 for now")
+
+    def run_cast() -> None:
+        _ = x.to(torch.float32)
+
+    return _run_benchmark(device, run_cast), size
+
+
+def baseline_diff_benchmark(
+    device: Device, size: int, dtype=torch.dtype
+) -> Tuple[float, int]:
+    if dtype in [torch.float16, torch.float32]:
+        x = torch.rand(size, device=device.str, dtype=dtype)
+    else:
+        raise ValueError("Invalid diff_cann input data type")
+
+    def run_diff() -> None:
+        _ = torch.diff(x)
+
+    return _run_benchmark(device, run_diff), size
+
+
+def baseline_diffp_benchmark(
+    device: Device, size: int, dtype=torch.dtype
+) -> Tuple[float, int]:
+    x = torch.rand(size, device=device.str, dtype=torch.float16)
+    if dtype in [torch.float16, torch.float32]:
+        x = torch.rand(size, device=device.str, dtype=dtype)
+    else:
+        raise ValueError("Invalid diff_cann input data type")
+
+    def run_diff() -> None:
+        _ = torch.diff(x, prepend=torch.zeros(1, device=device.str))
+
+    return _run_benchmark(device, run_diff), size
+
+
+def masked_select_benchmark(device: Device, size: int, dtype: torch.dtype) -> float:
+    mask = (torch.randn(size, device=device.str) > 0).to(torch.bool)
+    if dtype == torch.int16:
+        x = torch.randint(0, 2**7 - 1, (size,), device=device.str).to(torch.int16)
+    elif dtype == torch.float16:
+        x = torch.rand(size, device=device.str, dtype=dtype)
+
+    else:
+        raise RuntimeError(f"dtype {dtype} is not supported in torch.masked_select")
+
+    def run_masked_select() -> None:
+        _ = torch.masked_select(x, mask)
+
+    out = torch.masked_select(x, mask)
+
+    return _run_benchmark(device, run_masked_select), len(out)
+
+
+def scan_benchmark(device: Device, size: int, dtype: torch.dtype) -> float:
+    if dtype == torch.float16:
+        out_dtype = torch.float32
+        x = torch.rand(size, device=device.str, dtype=dtype)
+    elif dtype == torch.int8:
+        out_dtype = torch.int32
+        x = torch.randint(0, 2**7 - 1, (size,), device=device.str, dtype=dtype)
+    else:
+        raise ValueError("Incorrect scan data type")
+
+    y = torch.zeros(size, device=device.str, dtype=out_dtype)
+
+    def run_scan() -> None:
+        torch.cumsum(x, dim=-1, dtype=out_dtype, out=y)
+
+    return _run_benchmark(device, run_scan), size
+
+
+def scan_batch_benchmark(
+    device: Device, shape: Tuple[int, int], dtype: torch.dtype
+) -> float:
+    if dtype in {torch.int8, torch.float16}:
+        x = torch.rand(shape, device=device.str, dtype=dtype)
+    else:
+        raise RuntimeError(
+            f"dtype {dtype} is not supported in TCUSCAN batch scan operator"
+        )
+
+    def run_scan() -> None:
+        _ = torch.cumsum(x, dim=1, dtype=torch.float)
+
+    return _run_benchmark(device, run_scan), x.numel()
+
+
+def sort_benchmark(device: Device, size: int, dtype: torch.dtype) -> float:
+    if dtype in {torch.float16, torch.float32}:
+        x = torch.rand(size, device=device.str, dtype=dtype)
+    else:
+        x = torch.randint(
+            0, torch.iinfo(dtype).max, (size,), device=device.str, dtype=dtype
+        )
+    out = torch.zeros(size, device=device.str, dtype=dtype)
+    ind = torch.zeros(size, device=device.str, dtype=torch.int64)
+
+    def run_sort() -> None:
+        torch.sort(x, dim=-1, descending=False, out=(out, ind))
+
+    return _run_benchmark(device, run_sort), size
+
+
+def topk_benchmark(device: Device, size: int, dtype: torch.dtype, k: int) -> float:
+    """
+    Benchmark topk kernel.
+
+    Args:
+        device: Device to run benchmark on.
+        size: Size of the arrays to use.
+        dtype: Data type of the input/output arrays.
+        k: topk parameter.
+
+    Returns:
+        Average time in microseconds.
+    """
+    if dtype in {torch.float16, torch.float32}:
+        x = torch.rand(size, device=device.str, dtype=dtype)
+    else:
+        x = torch.randint(
+            torch.iinfo(dtype).min,
+            torch.iinfo(dtype).max,
+            (size,),
+            device=device.str,
+            dtype=dtype,
+        )
+
+    def run_topk() -> None:
+        _, _ = torch.topk(x, k)
+
+    return _run_benchmark(device, run_topk), k
+
+
+def sample_top_p(probs, p):
+    """
+    Perform top-p (nucleus) sampling on a probability distribution.
+
+    Args:
+        probs (torch.Tensor): Probability distribution tensor.
+        p (float): Probability threshold for top-p sampling.
+
+    Returns:
+        torch.Tensor: Sampled token indices.
+
+    Note:
+        Top-p sampling selects the smallest set of tokens whose cumulative probability mass
+        exceeds the threshold p. The distribution is renormalized based on the selected tokens.
+    """
+    probs_sort, probs_idx = torch.sort(probs, dim=-1, descending=True)
+    probs_sum = torch.cumsum(probs_sort, dim=-1)
+    mask = probs_sum - probs_sort > p
+    probs_sort[mask] = 0.0
+    probs_sort.div_(probs_sort.sum(dim=-1, keepdim=True))
+    next_token = torch.multinomial(probs_sort, num_samples=1)
+    next_token = torch.gather(probs_idx, -1, next_token)
+    return next_token
+
+
+def top_p_benchmark(device: Device, size: int, dtype: torch.dtype) -> float:
+    """
+    Benchmark top-p.
+
+    Args:
+        device: Device to run benchmark on.
+        size: Size of the arrays to use.
+        dtype: Data type of the input/output arrays.
+
+    Returns:
+        Average time in microseconds.
+    """
+    threshold = 0.1
+    if dtype == torch.float16:
+        probs = torch.rand(size, device=device.str, dtype=dtype)
+    else:
+        raise RuntimeError(f"dtype {dtype} is not supported in sample_top_p operator")
+
+    def run_top_p() -> None:
+        _ = sample_top_p(probs, threshold)
+
+    return _run_benchmark(device, run_top_p), 1
+
+
+def benchmark(
+    device: Device,
+    op_name: str,
+    dtype: str,
+    fn: typing.Callable,
+    sizes: typing.List[int],
+    density: Optional[float] = None,
+):
+    """
+    Benchmark a given function.
+
+    Args:
+        device: Device to run benchmark on.
+        op_name: Operator name.
+        dtype: Input data type.
+        fn: Function to benchmark.
+        sizes: Sizes of the arrays to use.
+        density: percentage of non-zero elements in a sparse matrix
+    """
+    with open(
+        f"bench_results_{op_name}_{GPU_NAME}_{dtype}.csv",
+        "w",
+        encoding="UTF-8",
+    ) as fd:
+
+        fd.write("operator,dtype,size,density,outputsize,time_us\n")
+
+        for size in sizes:
+            time, outputsize = fn(device, size)
+            name = f"{op_name}_{dtype}"
+            fd.write(f"{name},{dtype},{size},{density},{outputsize},{time:.2f}\n")
+            logger.info(
+                f"OP:{op_name}, dtype: {dtype}, size: {size:}, outputsize: {outputsize}, density: {density}, device: {device.str}"
+            )
+
+
+if __name__ == "__main__":  # noqa
+    parser = argparse.ArgumentParser(
+        prog="torch_profile", description="Profiler for torch_npu operators"
+    )
+
+    parser.add_argument(
+        "--bench",
+        choices=[
+            "copy",
+            "diff_cann",
+            "diffp_cann",
+            "csr_gather",
+            "seg_scan_sc",
+            "mcscan",
+            "mcscan_no_l2",
+            "scan",
+            "masked_select",
+            "segmented_sum",
+            "topk",
+            "top_p",
+            "sort",
+            "radix_sort",
+            "cast",
+        ],
+    )
+    parser.add_argument("--dtype", choices=["int8", "fp16", "int16", "int32", "fp32"])
+    parser.add_argument("--s", type=int, default=64, required=False)
+    parser.add_argument("--k", type=int, default=256, required=False)
+    parser.add_argument("--max_size", type=int, default=1e8, required=False)
+    parser.add_argument("--num_cores", type=int, default=20, required=False)
+    parser.add_argument("--density", type=float, default=None, required=False)
+    args = parser.parse_args()
+
+    bench = args.bench
+    dtype = args.dtype
+    max_size = args.max_size
+    num_cores = args.num_cores
+    s = args.s
+    k = args.k
+    density = args.density
+
+    if DEVICE == "cpu":
+        device = Device(torch, "cpu")
+    elif DEVICE in {"cuda", "gpu"}:
+        device = Device(torch.cuda, "cuda:0")
+    else:
+        raise ValueError(f"Invalid input device from list 'cpu', 'cuda'. Got {DEVICE}")
+
+    # Maximum number of iterations
+    max_iters = ceil(max_size / (num_cores * s * s))
+    iters = range(1, max_iters, 16 * 128 // s)
+
+    logger.info("*******************************")
+    logger.info(f"* bench          : {bench}")
+    logger.info(f"* dtype          : {dtype}")
+    logger.info(f"* max_size       : {max_size}")
+    logger.info(f"* # of Iters     : {len(iters)}")
+    logger.info(f"* num_cores      : {num_cores}")
+    logger.info(f"* s              : {s}")
+    logger.info(f"* K              : {k}")
+    logger.info(f"* density        : {density}")
+    logger.info(f"* device         : {device.str}")
+    logger.info("*******************************")
+    logger.info("*******************************")
+
+    # Input sizes to benchmark
+    sizes = [i * num_cores * s * s for i in iters]
+
+    if bench == "scan" and dtype in ["int8", "fp16"]:
+        tdtype = STR_TO_DTYPE[dtype]
+        benchmark(
+            device,
+            "scan",
+            dtype,
+            partial(scan_benchmark, dtype=tdtype),
+            sizes,
+        )
+    elif bench == "copy" and dtype in ["int16", "fp16", "fp32"]:
+        tdtype = STR_TO_DTYPE[dtype]
+        benchmark(
+            device,
+            "copy",
+            dtype,
+            partial(clone_benchmark, dtype=tdtype),
+            sizes,
+            density,
+        )
+    elif bench == "cast" and dtype in ["fp16"]:
+        tdtype = STR_TO_DTYPE[dtype]
+        benchmark(
+            device,
+            "cast",
+            dtype,
+            partial(cast_benchmark, dtype=tdtype),
+            sizes,
+            density,
+        )
+    elif bench == "diff_cann" and dtype in ["fp16", "fp32"]:
+        tdtype = STR_TO_DTYPE[dtype]
+        benchmark(
+            device,
+            "diff_cann",
+            dtype,
+            partial(baseline_diff_benchmark, dtype=tdtype),
+            sizes,
+            density,
+        )
+    elif bench == "diffp_cann" and dtype in ["fp16", "fp32"]:
+        tdtype = STR_TO_DTYPE[dtype]
+        benchmark(
+            device,
+            "diffp_cann",
+            dtype,
+            partial(baseline_diffp_benchmark, dtype=tdtype),
+            sizes,
+            density,
+        )
+    elif bench == "masked_select" and dtype in ["int16", "fp16"]:
+        tdtype = STR_TO_DTYPE[dtype]
+        benchmark(
+            device,
+            "masked_select",
+            dtype,
+            partial(masked_select_benchmark, dtype=tdtype),
+            sizes,
+        )
+    elif bench == "topk":
+        k = args.k
+        assert dtype in [
+            "int16",
+            "fp16",
+            "int32",
+        ], "TCUSCAN topk only works for dtype 'int16', 'int32'"
+
+        tdtype = torch.float16
+        if dtype == "int16":
+            tdtype = torch.int16
+        elif dtype == "int32":
+            tdtype = torch.int32
+
+        benchmark(
+            device,
+            f"topk_{k}",
+            dtype,
+            partial(topk_benchmark, dtype=tdtype, k=k),
+            sizes,
+        )
+    elif bench == "sort" and dtype in ["int16", "fp16"]:
+        tdtype = STR_TO_DTYPE[dtype]
+        benchmark(device, "sort", dtype, partial(sort_benchmark, dtype=tdtype), sizes)
+    elif bench == "top_p" and dtype in ["fp16"]:
+        tdtype = STR_TO_DTYPE[dtype]
+        benchmark(
+            device,
+            "top_p",
+            dtype,
+            partial(top_p_benchmark, dtype=tdtype),
+            filter(lambda x: x < 2**24, sizes),
+        )
+    else:
+        raise RuntimeError(
+            f"Unsupported benchmark setup: bench:{bench}, dtype:{dtype}, s:{s}"
+        )

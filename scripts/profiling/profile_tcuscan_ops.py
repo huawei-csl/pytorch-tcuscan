@@ -160,6 +160,153 @@ def _run_benchmark(
     return avg_time_us
 
 
+def masked_select_benchmark(device: Device, size: int, dtype: torch.dtype) -> float:
+    mask = (torch.randn(size, device=device.str) > 0).to(torch.bool)
+    if dtype == torch.int16:
+        x = torch.randint(0, 2**7 - 1, (size,), device=device.str).to(torch.int16)
+    elif dtype == torch.float16:
+        x = torch.rand(size, device=device.str, dtype=dtype)
+
+    else:
+        raise RuntimeError(f"dtype {dtype} is not supported in torch.masked_select")
+
+    def run_masked_select() -> None:
+        _ = torch.masked_select(x, mask)
+
+    out = torch.masked_select(x, mask)
+
+    return _run_benchmark(device, run_masked_select), len(out)
+
+
+def scan_benchmark(device: Device, size: int, dtype: torch.dtype) -> float:
+    if dtype == torch.float16:
+        out_dtype = torch.float32
+        x = torch.rand(size, device=device.str, dtype=dtype)
+    elif dtype == torch.int8:
+        out_dtype = torch.int32
+        x = torch.randint(0, 2**7 - 1, (size,), device=device.str, dtype=dtype)
+    else:
+        raise ValueError("Incorrect scan data type")
+
+    y = torch.zeros(size, device=device.str, dtype=out_dtype)
+
+    def run_scan() -> None:
+        torch.cumsum(x, dim=-1, dtype=out_dtype, out=y)
+
+    return _run_benchmark(device, run_scan), size
+
+
+def scan_batch_benchmark(
+    device: Device, shape: Tuple[int, int], dtype: torch.dtype
+) -> float:
+    if dtype in {torch.int8, torch.float16}:
+        x = torch.rand(shape, device=device.str, dtype=dtype)
+    else:
+        raise RuntimeError(
+            f"dtype {dtype} is not supported in TCUSCAN batch scan operator"
+        )
+
+    def run_scan() -> None:
+        _ = torch.cumsum(x, dim=1, dtype=torch.float)
+
+    return _run_benchmark(device, run_scan), x.numel()
+
+
+def sort_benchmark(device: Device, size: int, dtype: torch.dtype) -> float:
+    if dtype in {torch.float16, torch.float32}:
+        x = torch.rand(size, device=device.str, dtype=dtype)
+    else:
+        x = torch.randint(
+            0, torch.iinfo(dtype).max, (size,), device=device.str, dtype=dtype
+        )
+    out = torch.zeros(size, device=device.str, dtype=dtype)
+    ind = torch.zeros(size, device=device.str, dtype=torch.int64)
+
+    def run_sort() -> None:
+        torch.sort(x, dim=-1, descending=False, out=(out, ind))
+
+    return _run_benchmark(device, run_sort), size
+
+
+def topk_benchmark(device: Device, size: int, dtype: torch.dtype, k: int) -> float:
+    """
+    Benchmark topk kernel.
+
+    Args:
+        device: Device to run benchmark on.
+        size: Size of the arrays to use.
+        dtype: Data type of the input/output arrays.
+        k: topk parameter.
+
+    Returns:
+        Average time in microseconds.
+    """
+    if dtype in {torch.float16, torch.float32}:
+        x = torch.rand(size, device=device.str, dtype=dtype)
+    else:
+        x = torch.randint(
+            torch.iinfo(dtype).min,
+            torch.iinfo(dtype).max,
+            (size,),
+            device=device.str,
+            dtype=dtype,
+        )
+
+    def run_topk() -> None:
+        _, _ = torch.topk(x, k)
+
+    return _run_benchmark(device, run_topk), k
+
+
+def sample_top_p(probs, p):
+    """
+    Perform top-p (nucleus) sampling on a probability distribution.
+
+    Args:
+        probs (torch.Tensor): Probability distribution tensor.
+        p (float): Probability threshold for top-p sampling.
+
+    Returns:
+        torch.Tensor: Sampled token indices.
+
+    Note:
+        Top-p sampling selects the smallest set of tokens whose cumulative probability mass
+        exceeds the threshold p. The distribution is renormalized based on the selected tokens.
+    """
+    probs_sort, probs_idx = torch.sort(probs, dim=-1, descending=True)
+    probs_sum = torch.cumsum(probs_sort, dim=-1)
+    mask = probs_sum - probs_sort > p
+    probs_sort[mask] = 0.0
+    probs_sort.div_(probs_sort.sum(dim=-1, keepdim=True))
+    next_token = torch.multinomial(probs_sort, num_samples=1)
+    next_token = torch.gather(probs_idx, -1, next_token)
+    return next_token
+
+
+def top_p_benchmark(device: Device, size: int, dtype: torch.dtype) -> float:
+    """
+    Benchmark top-p.
+
+    Args:
+        device: Device to run benchmark on.
+        size: Size of the arrays to use.
+        dtype: Data type of the input/output arrays.
+
+    Returns:
+        Average time in microseconds.
+    """
+    threshold = 0.1
+    if dtype == torch.float16:
+        probs = torch.rand(size, device=device.str, dtype=dtype)
+    else:
+        raise RuntimeError(f"dtype {dtype} is not supported in sample_top_p operator")
+
+    def run_top_p() -> None:
+        _ = sample_top_p(probs, threshold)
+
+    return _run_benchmark(device, run_top_p), 1
+
+
 def vadd_benchmark(device: Device, size: int) -> Tuple[float, int]:
     x = torch.rand(size, device=device.str, dtype=torch.float16)
     y = torch.rand(size, device=device.str, dtype=torch.float16)
@@ -392,22 +539,6 @@ def radix_sort_benchmark(device: Device, vec_len: int, dtype: torch.dtype, s: in
     return _run_benchmark(device, run_radix_sort), vec_len
 
 
-def sort_benchmark(device: Device, size: int, dtype: torch.dtype) -> float:
-    if dtype in {torch.float16, torch.float32}:
-        x = torch.rand(size, device=device.str, dtype=dtype)
-    else:
-        x = torch.randint(
-            0, torch.iinfo(dtype).max, (size,), device=device.str, dtype=dtype
-        )
-    out = torch.zeros(size, device=device.str, dtype=dtype)
-    ind = torch.zeros(size, device=device.str, dtype=torch.int64)
-
-    def run_sort() -> None:
-        torch.sort(x, dim=-1, descending=False, out=(out, ind))
-
-    return _run_benchmark(device, run_sort), size
-
-
 def mcscan_benchmark(
     device: Device, size: int, dtype: torch.dtype, s: int
 ) -> Tuple[float, int]:
@@ -605,36 +736,6 @@ def seg_scan_mc_revert_benchmark(
     return _run_benchmark(device, run_revert), len(diff_npu)
 
 
-def topk_benchmark(device: Device, size: int, dtype: torch.dtype, k: int) -> float:
-    """
-    Benchmark topk kernel.
-
-    Args:
-        device: Device to run benchmark on.
-        size: Size of the arrays to use.
-        dtype: Data type of the input/output arrays.
-        k: topk parameter.
-
-    Returns:
-        Average time in microseconds.
-    """
-    if dtype in {torch.float16, torch.float32}:
-        x = torch.rand(size, device=device.str, dtype=dtype)
-    else:
-        x = torch.randint(
-            torch.iinfo(dtype).min,
-            torch.iinfo(dtype).max,
-            (size,),
-            device=device.str,
-            dtype=dtype,
-        )
-
-    def run_topk() -> None:
-        _, _ = torch.topk(x, k)
-
-    return _run_benchmark(device, run_topk), k
-
-
 def gen_lower_benchmark(
     device: Device, size: int, dtype: torch.dtype
 ) -> Tuple[float, int]:
@@ -707,9 +808,12 @@ if __name__ == "__main__":  # noqa
             "scscan",
             "seg_scan_mc_revert",
             "topk",
+            "topp",
             "mcgather",
             "gather_spmv",
             "sort",
+            "scan",
+            "masked_select",
             "radix_sort",
             "row_scan",
             "row_scan_cce",
@@ -946,19 +1050,9 @@ if __name__ == "__main__":  # noqa
             sizes,
             density,
         )
-    elif bench == "topk":
+    elif bench == "topk" and dtype in ["int16", "int32", "fp16"]:
         k = args.k
-        assert dtype in [
-            "int16",
-            "fp16",
-            "int32",
-        ], "TCUSCAN topk only works for dtype 'int16', 'int32'"
-
-        tdtype = torch.float16
-        if dtype == "int16":
-            tdtype = torch.int16
-        elif dtype == "int32":
-            tdtype = torch.int32
+        tdtype = STR_TO_DTYPE[dtype]
 
         benchmark(
             device,
@@ -967,7 +1061,25 @@ if __name__ == "__main__":  # noqa
             partial(topk_benchmark, dtype=tdtype, k=k),
             sizes,
         )
+    elif bench == "top_p" and dtype in ["fp16"]:
+        tdtype = STR_TO_DTYPE[dtype]
 
+        benchmark(
+            device,
+            "top_p",
+            dtype,
+            partial(top_p_benchmark, dtype=tdtype),
+            sizes,
+        )
+    elif bench == "scan" and dtype in ["int8", "fp16"]:
+        tdtype = STR_TO_DTYPE[dtype]
+        benchmark(
+            device,
+            "scan",
+            dtype,
+            partial(scan_benchmark, dtype=tdtype),
+            sizes,
+        )
     elif bench == "scscan" and dtype in ["fp16"]:
         tdtype = STR_TO_DTYPE[dtype]
         benchmark(
