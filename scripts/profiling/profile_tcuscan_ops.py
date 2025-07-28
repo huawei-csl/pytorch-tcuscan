@@ -21,15 +21,6 @@ import torch.nn.functional as F
 
 import torch
 
-
-def pad_to_multiple(x: torch.Tensor, s: int):
-    N = x.shape[-1]
-    target_size = ((N + s * s - 1) // (s * s)) * (s * s)
-    pad_amount = target_size - N
-    padded_x = F.pad(x, (0, pad_amount), mode="constant", value=0)
-    return padded_x
-
-
 DEVICE = os.environ.get("DEVICE_TYPE", "npu")
 if DEVICE == "npu":
     import torch_npu  # noqa
@@ -44,39 +35,6 @@ import tcuscan_ops  # noqa
 file_handler = logging.FileHandler(filename="torch_profiler.log")
 stdout_handler = logging.StreamHandler(stream=sys.stdout)
 handlers = [file_handler, stdout_handler]
-
-_MULTIPLIER = [
-    1,
-    2,
-    3,
-    4,
-    5,
-    6,
-    7,
-    8,
-    9,
-    10,
-    11,
-    12,
-    13,
-    14,
-    15,
-    16,
-    24,
-    32,
-    44,
-    56,
-    68,
-    80,
-    100,
-    120,
-    140,
-    160,
-    180,
-    200,
-    500,
-    1000,
-]
 
 
 logging.basicConfig(
@@ -110,6 +68,14 @@ class Device:
 
     def event(self) -> "typing.Self.module.Event":
         return self.module.Event(enable_timing=True)
+
+
+def pad_to_multiple(x: torch.Tensor, s: int):
+    N = x.shape[-1]
+    target_size = ((N + s * s - 1) // (s * s)) * (s * s)
+    pad_amount = target_size - N
+    padded_x = F.pad(x, (0, pad_amount), mode="constant", value=0)
+    return padded_x
 
 
 def _run_benchmark(
