@@ -247,7 +247,8 @@ paper_fig_3:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_sparse_matrices.py --bench seg_scan_sc --dtype fp16 --matrixpath ${BASE_SPARSE_MATRIX_PATH}Sandia/ASIC_680k/ASIC_680k --s 128 --num_cores 1
 
 profile_fp16_csr_gather:
-	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench csr_gather --dtype fp16 --num_cores 40
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench copy --dtype fp16 --num_cores 20
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench csr_gather --dtype fp16 --num_cores 20
 
 fig_3_matmul:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_sparse_matrices.py --bench seg_scan_sc --dtype fp16 --matrixpath ${BASE_SPARSE_MATRIX_PATH}Williams/pdb1HYS/pdb1HYS --s 128 --num_cores 1

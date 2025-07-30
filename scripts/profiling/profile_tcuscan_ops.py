@@ -398,7 +398,7 @@ def mc_gather_benchmark(device: Device, vec_len: int, s: int) -> Tuple[float, in
 
 def csr_gather_benchmark(device: Device, vec_len: int) -> Tuple[float, int]:
     # Maximum value of x cannot exceed 20K (UB shared memory size)
-    max_x_len = 2 * 1024
+    max_x_len = 50 * 1024
 
     input_x = torch.rand(max_x_len, device=device.str).half()
 
