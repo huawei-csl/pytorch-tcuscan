@@ -41,11 +41,10 @@ ascendc_library(scan_kernels SHARED
 )
 
 ascendc_compile_options(scan_kernels PRIVATE
--Wall
--Wextra
--Werror
+  -Wall
+  -Wextra
+  -Werror
 )
-
 
 ascendc_compile_definitions(scan_kernels PRIVATE
 -DHAVE_WORKSPACE
@@ -79,6 +78,12 @@ ascendc_library(vector_kernels SHARED
     src/complete_blocks.cpp
 )
 
+ascendc_compile_options(vector_kernels PRIVATE
+  -Wall
+  -Wextra
+  -Werror
+)
+
 ascendc_compile_definitions(vector_kernels PRIVATE
 -DHAVE_WORKSPACE
 -DHAVE_TILING
@@ -97,6 +102,7 @@ target_link_libraries(vector_kernels PRIVATE
     ascendalog
 )
 
+
 ascendc_library(split_kernels SHARED
     src/radix_sort.cpp
     src/compress.cpp
@@ -104,6 +110,11 @@ ascendc_library(split_kernels SHARED
     src/topk.cpp
 )
 
+ascendc_compile_options(split_kernels PRIVATE
+  -Wall
+  -Wextra
+  -Werror
+)
 
 ascendc_compile_definitions(split_kernels PRIVATE
 -DHAVE_WORKSPACE

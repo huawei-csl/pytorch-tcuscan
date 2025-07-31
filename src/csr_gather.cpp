@@ -7,6 +7,7 @@ extern "C" __global__ __aicore__ void csr_gather(GM_ADDR values_in,
                                                  GM_ADDR z_out,
                                                  GM_ADDR workspace,
                                                  GM_ADDR tilingGm) {
+  (void)workspace;
   CSRGatherTiling tiling;
   tiling::GetTilingData(&tiling, tilingGm);
 

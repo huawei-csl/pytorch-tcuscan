@@ -120,7 +120,6 @@ extern "C" __global__ __aicore__ void radix_sort_int16(GM_ADDR in, GM_ADDR out,
   RadixSortTiling tiling_data;
   tiling::GetTilingData(&tiling_data, tiling);
 
-  GM_ADDR const usrWorkspace = AscendC::GetUserWorkspace(workspace);
   GM_ADDR const lower = load_tril_matrix<int8_t>(tiling_data.matmul_size);
 
   // Arrays in workspace have to be aligned to their data type size. Therefore

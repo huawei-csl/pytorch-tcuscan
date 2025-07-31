@@ -52,11 +52,11 @@ extern "C" __global__ __aicore__ void compress_fp16(GM_ADDR x, GM_ADDR mask,
 extern "C" __global__ __aicore__ void compress_pos_fp16(
     GM_ADDR vec_in, GM_ADDR mask, GM_ADDR pos, GM_ADDR vec_out,
     GM_ADDR workspace, GM_ADDR tilingGm) {
+  (void)workspace;
   CompressTiling tiling;
   tiling::GetTilingData(&tiling, tilingGm);
 
   const uint32_t in_size = tiling.size;
-  const uint32_t scan_tile_size = tiling.scan_tile_size;
   const uint32_t compress_tile_size = tiling.compress_tile_size;
 
   if ASCEND_IS_AIV {
@@ -108,11 +108,11 @@ extern "C" __global__ __aicore__ void compress_fp32(GM_ADDR x, GM_ADDR mask,
 extern "C" __global__ __aicore__ void compress_pos_fp32(
     GM_ADDR vec_in, GM_ADDR mask, GM_ADDR pos, GM_ADDR vec_out,
     GM_ADDR workspace, GM_ADDR tilingGm) {
+  (void)workspace;
   CompressTiling tiling;
   tiling::GetTilingData(&tiling, tilingGm);
 
   const uint32_t in_size = tiling.size;
-  const uint32_t scan_tile_size = tiling.scan_tile_size;
   const uint32_t compress_tile_size = tiling.compress_tile_size;
 
   if ASCEND_IS_AIV {

@@ -173,6 +173,7 @@ __aicore__ inline void run_csr_gather(GM_ADDR values_in, GM_ADDR cols_in,
                                       GM_ADDR x_in, GM_ADDR z_out,
                                       uint32_t values_len, uint32_t x_len,
                                       uint32_t tile_len, GM_ADDR workspace) {
+  (void)workspace;
   if constexpr (ForceMixMode) {
     exec_mode::EnableCubeCores();
   }
