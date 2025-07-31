@@ -21,7 +21,7 @@ using namespace kernel_utils;
  */
 template <typename DataType>
 class KernelCSRGather {
-  constexpr static uint32_t BUFFER_NUM = 1;
+  constexpr static uint32_t BUFFER_NUM = 2;
 
  public:
   /**
@@ -37,7 +37,7 @@ class KernelCSRGather {
         values_in_len_(values_in_len),
         x_in_len_(x_in_len),
         tile_len_(tile_len),
-        num_tiles_(values_in_len / tile_len_),
+        num_tiles_(scalar::CeilDiv(values_in_len, tile_len_)),
         max_num_tiles_per_block_(scalar::CeilDiv(num_tiles_, vec_core_num_)) {}
 
   /**
@@ -57,7 +57,7 @@ class KernelCSRGather {
 
     pipe.InitBuffer(values_q_, BUFFER_NUM, tile_len_ * sizeof(DataType));
     pipe.InitBuffer(cols_q_, BUFFER_NUM, tile_len_ * sizeof(uint32_t));
-    pipe.InitBuffer(x_q_, BUFFER_NUM, x_in_len_ * sizeof(DataType));
+    pipe.InitBuffer(x_q_, 1, x_in_len_ * sizeof(DataType));
     pipe.InitBuffer(output_q_, BUFFER_NUM, tile_len_ * sizeof(DataType));
 
     pipe.InitBuffer(tbuf_, tile_len_ * sizeof(uint32_t));
@@ -108,30 +108,26 @@ class KernelCSRGather {
    *    @param num_elems Number of elements to process
    */
   __aicore__ inline void ProcessTile(uint32_t num_elems) {
-    LocalTensor<DataType> values_lt = values_q_.DeQue<DataType>();
     LocalTensor<uint32_t> cols_lt = cols_q_.DeQue<uint32_t>();
     LocalTensor<DataType> z_lt = output_q_.AllocTensor<DataType>();
 
     LocalTensor<uint32_t> cols_uint32_t = tbuf_.Get<uint32_t>();
 
     ShiftLeft<uint32_t>(cols_uint32_t, cols_lt, 1, cols_lt.GetSize());
-    PipeBarrier<PIPE_V>();
-
+    cols_q_.FreeTensor<uint32_t>(cols_lt);
     AscendC::Gather(z_lt, x_lt_, cols_uint32_t, (uint32_t)0, num_elems);
-    PipeBarrier<PIPE_V>();
-
+    LocalTensor<DataType> values_lt = values_q_.DeQue<DataType>();
     Mul(z_lt, z_lt, values_lt, num_elems);
+    values_q_.FreeTensor<DataType>(values_lt);
 
     output_q_.EnQue<DataType>(z_lt);
-    values_q_.FreeTensor<DataType>(values_lt);
-    cols_q_.FreeTensor<uint32_t>(cols_lt);
   }
 
  private:
   TPipe pipe;
   TQue<QuePosition::VECIN, BUFFER_NUM> values_q_;
   TQue<QuePosition::VECIN, BUFFER_NUM> cols_q_;
-  TQue<QuePosition::VECIN, BUFFER_NUM> x_q_;
+  TQue<QuePosition::VECIN, 1> x_q_;
   TQue<QuePosition::VECOUT, BUFFER_NUM> output_q_;
 
   TBuf<QuePosition::VECCALC> tbuf_;

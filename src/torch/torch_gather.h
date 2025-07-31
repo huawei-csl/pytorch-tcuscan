@@ -77,19 +77,16 @@ at::Tensor run_csr_gather(const at::Tensor &values, const at::Tensor &cols,
   const at::Tensor z = at::empty_like(values);
   const at::Device device = x.options().device();
   const uint32_t tileLen = 4 * 1024;
-
-  uint32_t values_len = values.numel();
-
-  uint32_t x_len = x.numel();
+  const uint32_t values_len = values.numel();
+  const uint32_t x_len = x.numel();
 
   const at::Tensor workspace_tensor = alloc_workspace(0, device);
 
   const CSRGatherTiling tiling{values_len, x_len, tileLen};
   uint8_t *tiling_device = allocCopyTiling(tiling);
 
-  uint32_t blockDim =
-      static_cast<uint32_t>(host_utils::CeilDiv(values_len, (tileLen)));
-  blockDim = blockDim > 60 ? 40 : blockDim;
+  uint32_t blockDim = host_utils::CeilDiv(values_len, tileLen);
+  blockDim = blockDim > 40 ? 40 : blockDim;
 
   if (blockDim <= 1) {
     blockDim = 1;
