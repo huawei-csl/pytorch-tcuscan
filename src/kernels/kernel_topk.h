@@ -12,7 +12,7 @@
 #include "kernel_copy.h"
 #include "kernel_less_or_equal.h"
 #include "kernel_split.h"
-#include "kernel_utils.h"
+#include "tcuscan_utils.h"
 #include "tiling/tiling_topk.h"
 
 /**

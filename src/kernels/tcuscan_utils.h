@@ -1,7 +1,7 @@
 /**
  * Copyright (c) Huawei Technologies Co., Ltd. 2024. All rights reserved.
  *
- * @file kernel_utils.h
+ * @file tcuscan_utils.h
  * @brief Common building blocks for kernels.
  */
 

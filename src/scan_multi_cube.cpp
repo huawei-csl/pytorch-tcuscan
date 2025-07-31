@@ -5,9 +5,9 @@
  * @brief Kernel implementing a multi-cube inclusive scan.
  */
 
-#include "kernel_utils.h"
 #include "kernels/constants.h"
 #include "kernels/kernel_scan_multi_cube.h"
+#include "kernels/tcuscan_utils.h"
 #include "tiling/tiling_scan_multi_cube.h"
 
 template <typename InputT>

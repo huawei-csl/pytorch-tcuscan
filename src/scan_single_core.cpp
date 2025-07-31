@@ -5,10 +5,9 @@
  * @brief Entrypoint for scan single core kernel operation.
  */
 
-#include "kernel_utils.h"
 #include "kernels/constants.h"
 #include "kernels/kernel_scan_single_core.h"
-#include "lib/matmul_intf.h"
+#include "kernels/tcuscan_utils.h"
 #include "tiling/tiling_scan_single_core.h"
 
 /**

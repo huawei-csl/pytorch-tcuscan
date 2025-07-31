@@ -6,8 +6,8 @@
  * scan.
  */
 
-#include "kernel_utils.h"
 #include "kernels/kernel_complete_blocks.h"
+#include "kernels/tcuscan_utils.h"
 #include "tiling/tiling_complete_blocks.h"
 
 template <typename T>

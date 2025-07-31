@@ -5,8 +5,8 @@
  * @brief Entrypoint for gather_spmv kernel operation.
  */
 
-#include "kernel_utils.h"
 #include "kernels/kernel_gather_spmv.h"
+#include "kernels/tcuscan_utils.h"
 #include "tiling/tiling_gather_spmv.h"
 
 /**

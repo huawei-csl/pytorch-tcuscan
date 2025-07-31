@@ -5,10 +5,9 @@
  * @brief Launcher of seg_scan_single_core
  */
 
-#include "kernel_utils.h"
 #include "kernels/constants.h"
 #include "kernels/kernel_seg_scan_single_core.h"
-#include "lib/matmul_intf.h"
+#include "kernels/tcuscan_utils.h"
 #include "tiling/tiling_seg_scan_single_core.h"
 
 __aicore__ inline void _run_kernel(GM_ADDR input_vec, GM_ADDR input_flag,

@@ -5,8 +5,8 @@
  * @brief Kernel implementing a multi-core AIV complete rows phase of MCSCAN.
  */
 
-#include "kernel_utils.h"
 #include "kernels/kernel_complete_rows.h"
+#include "kernels/tcuscan_utils.h"
 #include "tiling/tiling_complete_rows.h"
 
 template <typename InputT>

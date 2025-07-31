@@ -5,8 +5,8 @@
  * @brief Launcher of seg_scan_vec_single_core
  */
 
-#include "kernel_utils.h"
 #include "kernels/kernel_seg_scan_vec_single_core.h"
+#include "kernels/tcuscan_utils.h"
 #include "tiling/tiling_seg_scan_vec_single_core.h"
 
 /**

@@ -1,5 +1,5 @@
-#include "kernel_utils.h"
 #include "kernels/kernel_csr_gather.h"
+#include "kernels/tcuscan_utils.h"
 #include "tiling/tiling_csr_gather.h"
 
 extern "C" __global__ __aicore__ void csr_gather(GM_ADDR values_in,

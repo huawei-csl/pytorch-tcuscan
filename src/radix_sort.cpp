@@ -5,13 +5,12 @@
  * @brief Kernel implementing a radix sort operation for fp16 / int16.
  */
 
-#include "kernel_utils.h"
 #include "kernels/constants.h"
 #include "kernels/kernel_arithmetic_progression.h"
 #include "kernels/kernel_radix_enc.h"
 #include "kernels/kernel_single_radix.h"
 #include "kernels/kernel_split.h"
-#include "lib/matmul_intf.h"
+#include "kernels/tcuscan_utils.h"
 #include "tiling/tiling_radix_sort.h"
 
 __aicore__ inline void _radix_sort_iter(GM_ADDR in, GM_ADDR radices_ws,

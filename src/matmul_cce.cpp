@@ -1,4 +1,4 @@
-#include "kernel_operator.h"
+#include "kernels/ascendc_kernel_operator.h"
 
 // Copied from
 // https://open.codehub.huawei.com/innersource/self_spec_infer_G/ascendc-samples
@@ -6,8 +6,8 @@
 #ifdef __DAV_C220_CUBE__
 // Cube-specific CCE intrinsics need to be inside this MACRO
 
-#include "kernel_utils.h"
 #include "kernels/kernel_matmul_cce.h"
+#include "kernels/tcuscan_utils.h"
 #include "tiling/tiling_matmul_cce.h"
 
 /**
@@ -49,6 +49,11 @@ extern "C" __global__ __aicore__ void matmul_cce(GM_ADDR x, GM_ADDR y,
 extern "C" __global__ __aicore__ void matmul_cce(GM_ADDR a, GM_ADDR b,
                                                  GM_ADDR c, GM_ADDR workspace,
                                                  GM_ADDR tiling) {
+  (void)a;
+  (void)b;
+  (void)c;
+  (void)workspace;
+  (void)tiling;
   pipe_barrier(PIPE_ALL);
 }
 

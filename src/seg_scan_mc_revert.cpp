@@ -6,8 +6,8 @@
  * kernel operation.
  */
 
-#include "kernel_utils.h"
 #include "kernels/kernel_seg_scan_mc_revert.h"
+#include "kernels/tcuscan_utils.h"
 #include "tiling/tiling_seg_scan_mc_revert.h"
 
 /**

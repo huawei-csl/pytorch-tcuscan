@@ -8,7 +8,7 @@
 
 #include "ascendc_kernel_operator.h"
 #include "kernel_row_scan.h"
-#include "kernel_utils.h"
+#include "tcuscan_utils.h"
 
 using namespace AscendC;
 using namespace kernel_utils;

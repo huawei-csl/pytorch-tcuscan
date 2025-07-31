@@ -39,6 +39,14 @@ ascendc_library(scan_kernels SHARED
     src/scan_multi_cube.cpp
     src/simple_pad.cpp
 )
+
+ascendc_compile_options(scan_kernels PRIVATE
+-Wall
+-Wextra
+-Werror
+)
+
+
 ascendc_compile_definitions(scan_kernels PRIVATE
 -DHAVE_WORKSPACE
 -DHAVE_TILING
@@ -56,6 +64,7 @@ target_link_libraries(scan_kernels PRIVATE
     platform
     ascendalog
 )
+
 
 ascendc_library(vector_kernels SHARED
     src/vadd.cpp

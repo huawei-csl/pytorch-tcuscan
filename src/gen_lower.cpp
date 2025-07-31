@@ -6,7 +6,7 @@
  */
 
 #include "kernels/kernel_gen_lower.h"
-#include "kernels/kernel_utils.h"
+#include "kernels/tcuscan_utils.h"
 #include "tiling/tiling_gen_lower.h"
 
 /**

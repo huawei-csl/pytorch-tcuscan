@@ -2,11 +2,11 @@
  * Copyright (c) Huawei Technologies Co., Ltd. 2024. All rights reserved.
  *
  * @file vadd.cpp
- * @brief vadd launcher
+ * @brief Entrypoint for `vadd` kernel.
  */
 
-#include "kernels/kernel_utils.h"
 #include "kernels/kernel_vadd.h"
+#include "kernels/tcuscan_utils.h"
 #include "tiling/tiling_vadd.h"
 
 using namespace kernel_utils;

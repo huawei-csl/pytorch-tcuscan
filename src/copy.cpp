@@ -5,8 +5,8 @@
  * @brief Kernel implementing a copy operation.
  */
 
-#include "kernel_utils.h"
 #include "kernels/kernel_copy.h"
+#include "kernels/tcuscan_utils.h"
 #include "tiling/tiling_copy.h"
 
 /**

@@ -5,8 +5,8 @@
  * @brief Kernel implementing a multi-core AIV reduce tiles.
  */
 
-#include "kernel_utils.h"
 #include "kernels/kernel_reduce_tiles.h"
+#include "kernels/tcuscan_utils.h"
 #include "tiling/tiling_reduce_tiles.h"
 
 template <typename InputT>

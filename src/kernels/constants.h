@@ -10,7 +10,7 @@
  */
 #pragma once
 
-#include "kernel_operator.h"
+#include "ascendc_kernel_operator.h"
 
 #define CONST_HALF_TO_GM(x) \
   reinterpret_cast<GM_ADDR>(const_cast<__gm__ half*>((x)))

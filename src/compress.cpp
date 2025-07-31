@@ -5,10 +5,9 @@
  * @brief Multi-core compress approach.
  */
 
-#include "kernel_utils.h"
 #include "kernels/constants.h"
 #include "kernels/kernel_compress.h"
-#include "lib/matmul_intf.h"
+#include "kernels/tcuscan_utils.h"
 #include "tiling/tiling_compress.h"
 
 using namespace AscendC;

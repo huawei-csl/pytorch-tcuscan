@@ -6,10 +6,9 @@
  * approach.
  */
 
-#include "kernel_utils.h"
 #include "kernels/constants.h"
 #include "kernels/kernel_scan_multi_core.h"
-#include "lib/matmul_intf.h"
+#include "kernels/tcuscan_utils.h"
 #include "tiling/tiling_scan_multi_core.h"
 
 template <typename InputT>
@@ -49,7 +48,6 @@ __aicore__ inline void _run_scan_multi_core(GM_ADDR input_vec,
   const uint32_t matmul_size = tiling.matmul_size;
   constexpr bool IsInclusive = true;
 
-  GM_ADDR const usrWorkspace = AscendC::GetUserWorkspace(workspace);
   GM_ADDR const lower = load_tril_matrix<InputT>(matmul_size);
 
   // We consider the L2 cache maxed when the scan takes up around 50% of the

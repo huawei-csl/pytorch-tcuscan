@@ -5,23 +5,19 @@
  * @brief Kernel implementing a multi-core inclusive row scan.
  */
 
-#include "kernel_utils.h"
 #include "kernels/constants.h"
 #include "kernels/kernel_scan_multi_core.h"
-#include "lib/matmul_intf.h"
+#include "kernels/tcuscan_utils.h"
 #include "tiling/tiling_row_scan.h"
 
 template <typename InputT>
 __aicore__ inline void _run_row_scan(GM_ADDR input_vec, GM_ADDR output_vec,
                                      GM_ADDR tilingGm) {
-  using OutputT = kernel_utils::cube_unit::CubeOutType_t<InputT>;
-
   RowScanTiling tiling;
   tiling::GetTilingData(&tiling, tilingGm);
 
   const uint32_t vec_len = tiling.num_elems;
   const uint32_t matmul_size = tiling.S;
-  constexpr bool IsInclusive = true;
 
   GM_ADDR const lower = load_tril_matrix<InputT>(matmul_size);
 

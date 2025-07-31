@@ -5,17 +5,15 @@
  * @brief Kernel implementing a multi-core inclusive block scan.
  */
 
-#include "kernel_utils.h"
 #include "kernels/constants.h"
 #include "kernels/kernel_block_scan.h"
+#include "kernels/tcuscan_utils.h"
 #include "tiling/tiling_block_scan.h"
 
 template <typename InputT>
 __aicore__ inline void _run_block_scan(GM_ADDR input_vec, GM_ADDR lower,
                                        GM_ADDR upper_strict, GM_ADDR output_vec,
                                        GM_ADDR tilingGm) {
-  using OutputT = kernel_utils::cube_unit::CubeOutType_t<InputT>;
-
   BlockScanTiling tiling;
   tiling::GetTilingData(&tiling, tilingGm);
 
@@ -23,7 +21,7 @@ __aicore__ inline void _run_block_scan(GM_ADDR input_vec, GM_ADDR lower,
   const uint32_t matmul_size = tiling.matmul_size;
 
   if ASCEND_IS_AIC {
-    KernelBlockScan op_cube(vec_len, matmul_size);
+    KernelBlockScan<InputT> op_cube(vec_len, matmul_size);
     op_cube.Init(input_vec, lower, upper_strict, output_vec);
     op_cube.Process();
   }

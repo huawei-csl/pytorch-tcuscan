@@ -5,10 +5,9 @@
  * @brief Entrypoint for parallel split kernel.
  */
 
-#include "kernel_utils.h"
 #include "kernels/constants.h"
 #include "kernels/kernel_split.h"
-#include "lib/matmul_intf.h"
+#include "kernels/tcuscan_utils.h"
 #include "tiling/tiling_split.h"
 
 /**

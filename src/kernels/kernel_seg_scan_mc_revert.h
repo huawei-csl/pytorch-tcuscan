@@ -8,7 +8,7 @@
 #pragma once
 
 #include "ascendc_kernel_operator.h"
-#include "kernel_utils.h"
+#include "tcuscan_utils.h"
 
 using namespace AscendC;
 using namespace kernel_utils;
@@ -161,7 +161,8 @@ class KernelSegScanMcRevert {
     const int32_t smallestSegmIdx = vec_f_in_lt(0) > 0 ? vec_f_in_lt(0) - 1 : 0;
 
     const int32_t largestSegmIdx =
-        vec_f_in_lt(vec_f_in_lt.GetSize() - 1) > num_segments_
+        static_cast<uint32_t>(vec_f_in_lt(vec_f_in_lt.GetSize() - 1)) >
+                num_segments_
             ? (num_segments_ - 1)
             : vec_f_in_lt(vec_f_in_lt.GetSize() - 1);
     copy::CopyGmToVec(in_diff_q_, global_diff_in_[smallestSegmIdx],

@@ -213,7 +213,6 @@ inline __aicore__ void run_matmul_cce(GM_ADDR x, GM_ADDR y, GM_ADDR z, int M,
       wait_flag(PIPE_FIX, PIPE_M, EVENT_ID0);
     }
 
-    int index = 0;
     int kStart = 0;
 
     wait_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID0 + curr);
