@@ -51,4 +51,4 @@ cmake -B build \
     -DSOC_VERSION="${SOC_VERSION}" \
     -DASCEND_CANN_PACKAGE_PATH="${_ASCEND_INSTALL_PATH}" \
     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
-cmake --build build -j
+cmake --build build --target scan_kernels vector_kernels split_kernels -j

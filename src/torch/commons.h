@@ -14,7 +14,7 @@
 #include "tiling/platform/platform_ascendc.h"
 #include "torch_npu/csrc/core/npu/NPUStream.h"
 
-static const char *SOC_VERSION = "Ascend910B4";
+const static char *SOC_VERSION = "Ascend910B4";
 
 namespace asc {
 /**
@@ -90,7 +90,7 @@ uint8_t *allocCopyTiling(const T &tiling_struct) {
   const uint8_t *tiling_host =
       reinterpret_cast<const uint8_t *>(&tiling_struct);
 
-  uint8_t *tiling_device;
+  uint8_t *tiling_device = nullptr;
   aclrtMalloc((void **)&tiling_device, tiling_size, ACL_MEM_MALLOC_HUGE_FIRST);
   aclrtMemcpy(tiling_device, tiling_size, tiling_host, tiling_size,
               ACL_MEMCPY_HOST_TO_DEVICE);

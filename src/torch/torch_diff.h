@@ -35,11 +35,9 @@ at::Tensor run_diff(const at::Tensor &x, int64_t max_size) {
   // Tiling length must be around 10,000
   const uint32_t tileLen = 20 * 1024 / byte_size(x);
 
-  uint32_t totalLength;
+  uint32_t totalLength = x.numel();
   if (max_size > 0) {
     totalLength = max_size;
-  } else {
-    totalLength = x.numel();
   }
 
   const at::Tensor z =

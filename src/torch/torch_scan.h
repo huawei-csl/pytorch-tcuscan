@@ -284,7 +284,6 @@ at::Tensor run_row_scan(const at::Tensor &x, int S) {
   const at::Tensor z =
       at::empty({M * S}, at::TensorOptions().dtype(dtype_out).device(device));
 
-  const uint32_t tile_elems = matmul_size * matmul_size;
   const size_t num_tiles = M;
 
   uint32_t blockDim = ascendc_platform->GetCoreNum() / 2;

@@ -61,6 +61,19 @@ clang_linter:
     - echo "$linter_errors"
     - if [ ! -z "$linter_errors" ]; then echo "Detected formatting issues; please fix"; exit 1; else echo "Formatting is correct"; exit 0; fi
 
+
+clang_tidy:
+  stage: linter
+  tags:
+    - baremetal
+  dependencies: []
+  needs: []
+  before_script:
+    - export DEBIAN_FRONTEND=noninteractive
+    - apt-get update && apt-get install -y clang-tidy
+  script:
+    - make clang_tidy
+
 secret_detection:
   stage: linter
   dependencies: []

@@ -45,8 +45,14 @@ setup_once_aarch64:
 	wget -nc ${PYTORCH_ASCEND_WHEEL_URL}
 	pip3 install ${PYTORCH_ASCEND_WHEEL_NAME} --index-url https://download.pytorch.org/whl/cpu
 
-build: build.sh src/vadd.cpp src/diff.cpp src/seg_scan_single_core.cpp src/seg_scan_mc_revert.cpp src/pybind11.cpp
+clang_tidy: build_tidy
+	python3 ./scripts/ci/run-clang-tidy.py -j 1 -p build/ src/
+
+build: build.sh
 	./build.sh -v ASCEND910B4
+
+build_tidy: build-tidy.sh
+	./build-tidy.sh -v ASCEND910B4
 
 docs:
 	doxygen doxygen/Doxyfile

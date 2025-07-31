@@ -70,7 +70,7 @@ def _test_tcuscan_spmv_multi_cube(nnr: int, s: int, density: float):
 
     torch.npu.synchronize()
     actual = tcuscan_ops.run_spmv_multi_cube(
-        torch_values, torch_indexes, torch_cols, torch_vector, s, upper, lower_strict
+        torch_values, torch_indexes, torch_cols, torch_vector, upper, lower_strict
     )
     torch.npu.synchronize()
     actual_cpu = actual.cpu()
