@@ -1,6 +1,6 @@
-#  -readability-identifier-naming,
-# ,
-
+# TODOs:
+# 1) Enable all readability checks 1-by-1.
+# 2) Enable cppcoreguidelines most checks (to discuss)
 # Disabled macro-usage due to ACLRT_LAUNCH_KERNEL
 # * PYBIND11_MODULE -> cppcoreguidelines-pro-type-vararg, cppcoreguidelines-pro-bounds-pointer-arithmetic
 Checks: >
@@ -33,24 +33,24 @@ CheckOptions:
     value:           CamelCase
 #  - key:             readability-identifier-naming.FunctionCase
 #    value:           lower_case
-#   - key:             readability-identifier-naming.GlobalConstantCase
-#     value:           lower_case
-#   - key:             readability-identifier-naming.StaticConstantCase
-#     value:           lower_case
-#   - key:             readability-identifier-naming.StaticVariableCase
-#     value:           lower_case
+  - key:             readability-identifier-naming.GlobalConstantCase
+    value:           lower_case
+  - key:             readability-identifier-naming.StaticConstantCase
+    value:           lower_case
+  - key:             readability-identifier-naming.StaticVariableCase
+    value:           lower_case
 #   - key:             readability-identifier-naming.MacroDefinitionCase
 #     value:           UPPER_CASE
 #   - key:             readability-identifier-naming.MacroDefinitionIgnoredRegexp
 #     value:           '^[A-Z]+(_[A-Z]+)*_$'
-#   - key:             readability-identifier-naming.MemberCase
-#     value:           lower_case
-#   - key:             readability-identifier-naming.PrivateMemberSuffix
-#     value:           _
-#   - key:             readability-identifier-naming.PublicMemberSuffix
-#     value:           ''
-#   - key:             readability-identifier-naming.NamespaceCase
-#     value:           lower_case
+#  - key:             readability-identifier-naming.MemberCase
+#    value:           lower_case
+  - key:             readability-identifier-naming.PrivateMemberSuffix
+    value:           _
+  - key:             readability-identifier-naming.PublicMemberSuffix
+    value:           ''
+  - key:             readability-identifier-naming.NamespaceCase
+    value:           lower_case
 #   - key:             readability-identifier-naming.ParameterCase
 #     value:           lower_case
 #   - key:             readability-identifier-naming.TypeAliasCase
@@ -59,8 +59,8 @@ CheckOptions:
 #     value:           CamelCase
 #   - key:             readability-identifier-naming.VariableCase
 #     value:           lower_case
-#   - key:             readability-identifier-naming.IgnoreMainLikeFunctions
-#     value:           1
+  - key:             readability-identifier-naming.IgnoreMainLikeFunctions
+    value:           1
 
 WarningsAsErrors:    'clang-*,readability-identifier-naming'
 HeaderFilterRegex : '.*pytorch-tcuscan.*'
