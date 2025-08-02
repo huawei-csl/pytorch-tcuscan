@@ -381,8 +381,8 @@ def gather_spmv_benchmark(device: Device, vec_len: int, s: int) -> Tuple[float, 
 def mc_gather_benchmark(device: Device, vec_len: int, s: int) -> Tuple[float, int]:
     rng = np.random.default_rng()
     input_values = rng.uniform(1, 100, vec_len).astype(np.float32)
-    idx_len = vec_len / s
-    input_cols = rng.uniform(0, vec_len, int(idx_len))
+    idx_len = vec_len // s
+    input_cols = rng.uniform(0, vec_len, idx_len)
     input_cols.sort()
     input_cols = input_cols.astype(np.uint32)
     val_torch = torch.Tensor(input_values).to(torch.float32).npu()

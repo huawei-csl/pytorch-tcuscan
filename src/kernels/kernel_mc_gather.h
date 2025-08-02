@@ -69,13 +69,12 @@ class KernelMcGather {
     pipe.InitBuffer(idx_q_, BUFFER_NUM, tile_len_ * sizeof(uint32_t));
     pipe.InitBuffer(output_q_, BUFFER_NUM, tile_len_ * sizeof(DataType));
 
-    pipe.InitBuffer(idx_buf_, tile_len_ * sizeof(uint32_t));
     pipe.InitBuffer(threshold_up_buf_, tile_len_ * sizeof(uint32_t));
     pipe.InitBuffer(threshold_down_buf_, tile_len_ * sizeof(uint32_t));
     pipe.InitBuffer(mask_buf_, tile_len_ * sizeof(uint32_t));
     pipe.InitBuffer(mask_up_buf_, tile_len_ * sizeof(uint32_t));
     pipe.InitBuffer(mask_down_buf_, tile_len_ * sizeof(uint32_t));
-    pipe.InitBuffer(gathered_mask_buff_, tile_len_ * sizeof(uint32_t));
+    pipe.InitBuffer(gathered_mask_buf_, tile_len_ * sizeof(uint32_t));
   }
 
   /**
@@ -224,10 +223,9 @@ class KernelMcGather {
    * @brief Filters an input tensor based on a upper and lower threshold
    * values. The output is a sub_tensor of the input tensor containing
    * only values in the specified interval. The number of returned
-   * elements is stored in the output parameter
-   * @p gathered_size.
+   * elements is stored in the output parameter @p gathered_size.
    *
-   * * Example 1:
+   * Example:
    *
    * Threshold_up 17
    * Threshold_down 10
@@ -242,18 +240,16 @@ class KernelMcGather {
    * this value.
    * @param threshold_down The lower value; elements must be bigger than
    * this value.
-   * @param gathered_size A reference to a variable where the count of
-   * valid (gathered) elements will be stored.
+   * @param gathered_len A reference to a variable where the count of
+   * (gathered) elements will be stored.
    * @param this_tile_len the length of the current tile (always the
    * same as tile_len_, except possibly for the last tile)
    * @return LocalTensor<uint32_t> A tensor containing the indices of elements
    * that meet the filtering criteria.
-   *
    */
   __aicore__ inline LocalTensor<uint32_t> FilterTileInterval(
       LocalTensor<uint32_t> idx_lt, uint32_t threshold_up,
-      uint32_t threshold_down, uint64_t &gathered_size,
-      uint32_t this_tile_len) {
+      uint32_t threshold_down, uint64_t &gathered_len, uint32_t this_tile_len) {
     LocalTensor<uint32_t> threshold_up_lt = threshold_up_buf_.Get<uint32_t>();
     LocalTensor<uint32_t> threshold_down_lt =
         threshold_down_buf_.Get<uint32_t>();
@@ -288,10 +284,10 @@ class KernelMcGather {
     And(mask_lt, mask_up_lt.template ReinterpretCast<uint16_t>(),
         mask_down_lt.template ReinterpretCast<uint16_t>(), this_tile_len);
 
-    LocalTensor<uint32_t> gathered_idx_lt = gathered_mask_buff_.Get<uint32_t>();
+    LocalTensor<uint32_t> gathered_idx_lt = gathered_mask_buf_.Get<uint32_t>();
     GatherMask(gathered_idx_lt, idx_lt,
                mask_lt.template ReinterpretCast<uint32_t>(), true,
-               this_tile_len, {1, 1, 8, 8}, gathered_size);
+               this_tile_len, {1, 1, 8, 8}, gathered_len);
 
     return gathered_idx_lt;
   }
@@ -318,16 +314,15 @@ class KernelMcGather {
                                           uint64_t num_elem_to_process) {
     LocalTensor<int32_t> idx_int32_lt =
         idx_lt.template ReinterpretCast<int32_t>();
-    LocalTensor<int32_t> indices = idx_buf_.Get<int32_t>();
 
     // Substract offset since gather must be done in local/tile "coordinates".
     AscendC::Adds(idx_int32_lt, idx_int32_lt, -offset, num_elem_to_process);
     // Multiple indices by sizeof(DataType) since Gather works on bytes
-    AscendC::Muls(indices, idx_int32_lt, static_cast<int32_t>(sizeof(DataType)),
-                  num_elem_to_process);
+    AscendC::Muls(idx_int32_lt, idx_int32_lt,
+                  static_cast<int32_t>(sizeof(DataType)), num_elem_to_process);
     // Perform the AscendC::Gather
     AscendC::Gather(out_tensor, in_values,
-                    indices.template ReinterpretCast<uint32_t>(),
+                    idx_int32_lt.template ReinterpretCast<uint32_t>(),
                     static_cast<uint32_t>(0), num_elem_to_process);
   }
 
@@ -337,13 +332,12 @@ class KernelMcGather {
   TQue<QuePosition::VECIN, BUFFER_NUM> values_q_gather_;
   TQue<QuePosition::VECIN, BUFFER_NUM> idx_q_;
   TQue<QuePosition::VECOUT, BUFFER_NUM> output_q_;
-  TBuf<QuePosition::VECCALC> idx_buf_;
   TBuf<QuePosition::VECCALC> threshold_up_buf_;
   TBuf<QuePosition::VECCALC> threshold_down_buf_;
   TBuf<QuePosition::VECCALC> mask_buf_;
   TBuf<QuePosition::VECCALC> mask_up_buf_;
   TBuf<QuePosition::VECCALC> mask_down_buf_;
-  TBuf<QuePosition::VECCALC> gathered_mask_buff_;
+  TBuf<QuePosition::VECCALC> gathered_mask_buf_;
 
   GlobalTensor<DataType> global_values_;
   GlobalTensor<uint32_t> global_idx_;
