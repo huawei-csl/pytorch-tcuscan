@@ -37,7 +37,7 @@ at::Tensor run_add(const at::Tensor &x, const at::Tensor &y) {
   const at::Tensor workspace_tensor = alloc_workspace(0, device);
 
   const VaddTiling tiling{total_len, tile_len};
-  uint8_t *tiling_device = allocCopyTiling(tiling);
+  uint8_t *tiling_device = alloc_copy_tiling(tiling);
 
   ACLRT_LAUNCH_KERNEL(vadd_custom)
   (block_dim, acl_stream, const_cast<void *>(x.storage().data()),

@@ -49,6 +49,5 @@ rm -rf build
 mkdir -p build
 cmake -B build \
     -DSOC_VERSION="${SOC_VERSION}" \
-    -DASCEND_CANN_PACKAGE_PATH="${_ASCEND_INSTALL_PATH}" \
-    -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+    -DASCEND_CANN_PACKAGE_PATH="${_ASCEND_INSTALL_PATH}"
 cmake --build build -j

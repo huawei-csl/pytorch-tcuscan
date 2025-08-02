@@ -51,7 +51,7 @@ at::Tensor run_reduce_tiles(const at::Tensor &x, int tile_len, int block_num) {
       {block_num}, at::TensorOptions().dtype(dtype_out).device(device));
 
   const ReduceTilesTiling tiling{total_len, s};
-  uint8_t *tiling_device = allocCopyTiling(tiling);
+  uint8_t *tiling_device = alloc_copy_tiling(tiling);
 
   const at::Tensor workspace_tensor = alloc_workspace(0, device);
   if (dtype == torch::kInt8) {
@@ -103,7 +103,7 @@ at::Tensor run_complete_rows(const at::Tensor &x, const at::Tensor &sums,
       {total_len}, at::TensorOptions().dtype(dtype_out).device(device));
 
   const CompleteRowsTiling tiling{total_len, width, height};
-  uint8_t *tiling_device = allocCopyTiling(tiling);
+  uint8_t *tiling_device = alloc_copy_tiling(tiling);
 
   const at::Tensor workspace_tensor = alloc_workspace(0, device);
   if (dtype == torch::kLong) {
@@ -151,7 +151,7 @@ at::Tensor run_complete_blocks(const at::Tensor &x, const at::Tensor &sums,
   const at::Tensor z = at::empty_like(x);
 
   const CompleteBlocksTiling tiling{vec_len, num_blocks, tile_len};
-  uint8_t *tiling_device = allocCopyTiling(tiling);
+  uint8_t *tiling_device = alloc_copy_tiling(tiling);
 
   const at::Tensor workspace_tensor = alloc_workspace(0, device);
   if (dtype == torch::kFloat) {

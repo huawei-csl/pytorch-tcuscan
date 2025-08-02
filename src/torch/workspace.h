@@ -29,7 +29,7 @@ namespace seg_scan {
  * @return
  */
 template <typename InputVecT, typename FlagVecT>
-constexpr uint32_t GetWorkspaceSize(uint32_t vec_len, uint32_t matmul_size) {
+constexpr uint32_t get_workspace_size(uint32_t vec_len, uint32_t matmul_size) {
   using OutputVecT = host_utils::CubeOutType_t<InputVecT>;
   using FlagOutputVecT = host_utils::CubeOutType_t<FlagVecT>;
 
@@ -63,8 +63,9 @@ namespace mc_scan {
  * @return Size of the workspace in bytes.
  */
 template <typename InputT, bool IsInclusive = true>
-constexpr uint32_t GetWorkspaceSize(uint32_t input_elems, uint32_t matmul_size,
-                                    uint32_t num_blocks) {
+constexpr uint32_t get_workspace_size(uint32_t input_elems,
+                                      uint32_t matmul_size,
+                                      uint32_t num_blocks) {
   using OutputT = host_utils::CubeOutType_t<InputT>;
 
   const uint32_t align_size = matmul_size * matmul_size;
@@ -101,11 +102,11 @@ namespace compress {
  * @return Size of the workspace in bytes.
  */
 template <typename InputT>
-constexpr uint32_t GetWorkspaceSize(const CompressTiling& tiling,
-                                    uint32_t num_blocks) {
+constexpr uint32_t get_workspace_size(const CompressTiling& tiling,
+                                      uint32_t num_blocks) {
   const uint32_t scan_res_size = host_utils::AlignUp(
       tiling.size * sizeof(int32_t), host_utils::GM_ALIGNMENT);
-  const uint32_t scan_ws_size = mc_scan::GetWorkspaceSize<int8_t>(
+  const uint32_t scan_ws_size = mc_scan::get_workspace_size<int8_t>(
       tiling.size, tiling.scan_tile_size, num_blocks);
   return scan_res_size + scan_ws_size;
 };
@@ -123,7 +124,7 @@ namespace sc_scan {
  * @return Size of the workspace in bytes.
  */
 template <typename InputT>
-constexpr uint32_t GetWorkspaceSize(const SingleCoreScanTiling& tiling) {
+constexpr uint32_t get_workspace_size(const SingleCoreScanTiling& tiling) {
   using OutputT = host_utils::CubeOutType_t<InputT>;
 
   const uint32_t total_size =
@@ -142,12 +143,12 @@ namespace split {
  * @param [in] num_blocks Number of blocks.
  * @return Size of the workspace in bytes.
  */
-constexpr uint32_t GetWorkspaceSize(size_t input_elems, size_t matmul_size,
-                                    size_t num_blocks) {
+constexpr uint32_t get_workspace_size(size_t input_elems, size_t matmul_size,
+                                      size_t num_blocks) {
   const uint32_t scan_res_size = host_utils::AlignUp(
       input_elems * sizeof(int32_t), host_utils::GM_ALIGNMENT);
   const uint32_t scan_ws_size =
-      mc_scan::GetWorkspaceSize<int8_t>(input_elems, matmul_size, num_blocks);
+      mc_scan::get_workspace_size<int8_t>(input_elems, matmul_size, num_blocks);
 
   return scan_res_size + scan_ws_size;
 }
@@ -160,8 +161,8 @@ constexpr uint32_t GetWorkspaceSize(size_t input_elems, size_t matmul_size,
  * @param [in] tiling Tiling parameters used in the kernel.
  * @return Size of the workspace in bytes.
  */
-constexpr uint32_t GetWorkspaceSize(const SplitTiling& tiling) {
-  return workspace::split::GetWorkspaceSize(
+constexpr uint32_t get_workspace_size(const SplitTiling& tiling) {
+  return workspace::split::get_workspace_size(
       tiling.num_elems, tiling.scan_matmul_size, tiling.num_blocks);
 }
 }  // namespace split
@@ -177,7 +178,7 @@ namespace radix_sort {
  * @return Size of the workspace in bytes.
  */
 template <typename InputT>
-uint32_t GetWorkspaceSize(const RadixSortTiling& t) {
+uint32_t get_workspace_size(const RadixSortTiling& t) {
   const uint32_t tmp_output_size = t.num_elems * sizeof(InputT);
   // Arrays in workspace have to be aligned to their data type size. Therefore
   // we align the size of the radices array to 4 bytes, so that the
@@ -186,7 +187,7 @@ uint32_t GetWorkspaceSize(const RadixSortTiling& t) {
       host_utils::AlignUp(t.num_elems * sizeof(uint8_t), sizeof(int32_t));
   const uint32_t indices_size = t.num_elems * sizeof(int32_t);
   const uint32_t split_ws_size =
-      split::GetWorkspaceSize(t.num_elems, t.matmul_size, t.num_blocks);
+      split::get_workspace_size(t.num_elems, t.matmul_size, t.num_blocks);
 
   const uint32_t total_size =
       tmp_output_size + radices_size + indices_size + split_ws_size;
@@ -207,8 +208,8 @@ namespace topk {
  * @return Size of the workspace in bytes.
  */
 template <typename InputT>
-constexpr uint32_t GetWorkspaceSize(size_t input_elems, size_t matmul_size,
-                                    size_t num_blocks) {
+constexpr uint32_t get_workspace_size(size_t input_elems, size_t matmul_size,
+                                      size_t num_blocks) {
   const uint32_t mask_size = host_utils::AlignUp(input_elems * sizeof(uint8_t),
                                                  host_utils::GM_ALIGNMENT);
   const uint32_t split_input_size = host_utils::AlignUp(
@@ -222,9 +223,9 @@ constexpr uint32_t GetWorkspaceSize(size_t input_elems, size_t matmul_size,
   // smaller than the workspace of the second split; so we force it to be
   // unaligned to avoid memory access errors
   const uint32_t split_ws_size =
-      is_input_size_aligned ? workspace::split::GetWorkspaceSize(
+      is_input_size_aligned ? workspace::split::get_workspace_size(
                                   input_elems + 1, matmul_size, num_blocks)
-                            : workspace::split::GetWorkspaceSize(
+                            : workspace::split::get_workspace_size(
                                   input_elems, matmul_size, num_blocks);
 
   const uint32_t total_size = mask_size + split_ws_size + indices_ws_size +

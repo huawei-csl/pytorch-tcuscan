@@ -42,35 +42,35 @@ at::Tensor run_split(const at::Tensor &x, const at::Tensor &mask, int S) {
   const auto dtype = x.options().dtype();
 
   const uint32_t matmul_size = static_cast<uint32_t>(S);
-  const uint32_t totalLength = x.numel();
+  const uint32_t total_length = x.numel();
 
   const uint32_t tile_elems = matmul_size * matmul_size;
   const uint32_t vec_tile_size = tile_elems / 2;
 
-  const uint32_t num_tiles = totalLength / tile_elems;
+  const uint32_t num_tiles = total_length / tile_elems;
 
-  uint32_t blockDim = ascendc_platform->GetCoreNum() / 2;
-  while (num_tiles % blockDim != 0) {
-    blockDim--;
+  uint32_t block_dim = ascendc_platform->GetCoreNum() / 2;
+  while (num_tiles % block_dim != 0) {
+    block_dim--;
   }
-  if (blockDim <= 1) {
-    blockDim = 1;
+  if (block_dim <= 1) {
+    block_dim = 1;
   }
 
-  const at::Tensor z =
-      at::empty({totalLength}, at::TensorOptions().dtype(dtype).device(device));
+  const at::Tensor z = at::empty(
+      {total_length}, at::TensorOptions().dtype(dtype).device(device));
 
-  const SplitTiling tiling{blockDim, totalLength, matmul_size, vec_tile_size};
-  uint8_t *tiling_device = allocCopyTiling(tiling);
+  const SplitTiling tiling{block_dim, total_length, matmul_size, vec_tile_size};
+  uint8_t *tiling_device = alloc_copy_tiling(tiling);
 
   const uint32_t user_workspace_size =
-      workspace::split::GetWorkspaceSize(tiling);
+      workspace::split::get_workspace_size(tiling);
   const at::Tensor workspace_tensor =
       alloc_workspace(user_workspace_size, device);
 
   if (dtype == torch::kHalf or dtype == torch::kInt16) {
     ACLRT_LAUNCH_KERNEL(split_uint16)
-    (blockDim, acl_stream, const_cast<void *>(x.storage().data()),
+    (block_dim, acl_stream, const_cast<void *>(x.storage().data()),
      const_cast<void *>(mask.storage().data()),
      const_cast<void *>(z.storage().data()),
      const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
@@ -103,37 +103,37 @@ std::tuple<at::Tensor, at::Tensor> run_split_ind(const at::Tensor &x,
   const auto dtype = x.options().dtype();
 
   const uint32_t matmul_size = static_cast<uint32_t>(S);
-  const uint32_t totalLength = x.numel();
+  const uint32_t total_length = x.numel();
 
   const uint32_t tile_elems = matmul_size * matmul_size;
   const uint32_t vec_tile_size = tile_elems / 2;
 
-  const uint32_t num_tiles = totalLength / tile_elems;
+  const uint32_t num_tiles = total_length / tile_elems;
 
-  uint32_t blockDim = ascendc_platform->GetCoreNum() / 2;
-  while (num_tiles % blockDim != 0) {
-    blockDim--;
+  uint32_t block_dim = ascendc_platform->GetCoreNum() / 2;
+  while (num_tiles % block_dim != 0) {
+    block_dim--;
   }
-  if (blockDim <= 1) {
-    blockDim = 1;
+  if (block_dim <= 1) {
+    block_dim = 1;
   }
 
-  const at::Tensor vec_out =
-      at::empty({totalLength}, at::TensorOptions().dtype(dtype).device(device));
+  const at::Tensor vec_out = at::empty(
+      {total_length}, at::TensorOptions().dtype(dtype).device(device));
   const at::Tensor indices_out = at::empty(
-      {totalLength}, at::TensorOptions().dtype(torch::kInt32).device(device));
+      {total_length}, at::TensorOptions().dtype(torch::kInt32).device(device));
 
-  const SplitTiling tiling{blockDim, totalLength, matmul_size, vec_tile_size};
-  uint8_t *tiling_device = allocCopyTiling(tiling);
+  const SplitTiling tiling{block_dim, total_length, matmul_size, vec_tile_size};
+  uint8_t *tiling_device = alloc_copy_tiling(tiling);
 
   const uint32_t user_workspace_size =
-      workspace::split::GetWorkspaceSize(tiling);
+      workspace::split::get_workspace_size(tiling);
   const at::Tensor workspace_tensor =
       alloc_workspace(user_workspace_size, device);
 
   if (dtype == torch::kHalf or dtype == torch::kInt16) {
     ACLRT_LAUNCH_KERNEL(split_ind_uint16)
-    (blockDim, acl_stream, const_cast<void *>(x.storage().data()),
+    (block_dim, acl_stream, const_cast<void *>(x.storage().data()),
      const_cast<void *>(mask.storage().data()),
      const_cast<void *>(indices_in.storage().data()),
      const_cast<void *>(vec_out.storage().data()),
@@ -167,19 +167,19 @@ std::tuple<at::Tensor, at::Tensor> run_topk_int16(const at::Tensor &x,
   const auto dtype = x.options().dtype();
 
   const uint32_t matmul_size = static_cast<uint32_t>(S);
-  const uint32_t totalLength = x.numel();
+  const uint32_t total_length = x.numel();
 
   const uint32_t tile_elems = matmul_size * matmul_size;
   const uint32_t vec_tile_size = tile_elems / 2;
 
-  const uint32_t num_tiles = totalLength / tile_elems;
+  const uint32_t num_tiles = total_length / tile_elems;
 
-  uint32_t blockDim = ascendc_platform->GetCoreNum() / 2;
-  while (num_tiles % blockDim != 0) {
-    blockDim--;
+  uint32_t block_dim = ascendc_platform->GetCoreNum() / 2;
+  while (num_tiles % block_dim != 0) {
+    block_dim--;
   }
-  if (blockDim <= 1) {
-    blockDim = 1;
+  if (block_dim <= 1) {
+    block_dim = 1;
   }
 
   const at::Tensor vec_out =
@@ -188,24 +188,24 @@ std::tuple<at::Tensor, at::Tensor> run_topk_int16(const at::Tensor &x,
       at::empty({k}, at::TensorOptions().dtype(torch::kInt32).device(device));
 
   const uint32_t user_workspace_size =
-      workspace::topk::GetWorkspaceSize<int32_t>(totalLength, matmul_size,
-                                                 blockDim);
+      workspace::topk::get_workspace_size<int32_t>(total_length, matmul_size,
+                                                   block_dim);
   const at::Tensor workspace_tensor =
       alloc_workspace(user_workspace_size, device);
 
   TopKTiling tiling;
-  tiling.num_elems = totalLength;
+  tiling.num_elems = total_length;
   tiling.matmul_size = matmul_size;
-  tiling.num_blocks = blockDim;
+  tiling.num_blocks = block_dim;
   tiling.vec_tile_size = vec_tile_size;
   tiling.x_min.value_i32 = static_cast<int32_t>(x_min);
   tiling.x_max.value_i32 = static_cast<int32_t>(x_max);
   tiling.k = k;
 
-  uint8_t *tiling_device = allocCopyTiling(tiling);
+  uint8_t *tiling_device = alloc_copy_tiling(tiling);
 
   ACLRT_LAUNCH_KERNEL(topk_int16)
-  (blockDim, acl_stream, const_cast<void *>(x.storage().data()),
+  (block_dim, acl_stream, const_cast<void *>(x.storage().data()),
    const_cast<void *>(vec_out.storage().data()),
    const_cast<void *>(indices_out.storage().data()),
    const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
@@ -236,19 +236,19 @@ std::tuple<at::Tensor, at::Tensor> run_topk_fp16(const at::Tensor &x,
   const auto dtype = x.options().dtype();
 
   const uint32_t matmul_size = static_cast<uint32_t>(S);
-  const uint32_t totalLength = x.numel();
+  const uint32_t total_length = x.numel();
 
   const uint32_t tile_elems = matmul_size * matmul_size;
   const uint32_t vec_tile_size = tile_elems / 2;
 
-  const uint32_t num_tiles = totalLength / tile_elems;
+  const uint32_t num_tiles = total_length / tile_elems;
 
-  uint32_t blockDim = ascendc_platform->GetCoreNum() / 2;
-  while (num_tiles % blockDim != 0) {
-    blockDim--;
+  uint32_t block_dim = ascendc_platform->GetCoreNum() / 2;
+  while (num_tiles % block_dim != 0) {
+    block_dim--;
   }
-  if (blockDim <= 1) {
-    blockDim = 1;
+  if (block_dim <= 1) {
+    block_dim = 1;
   }
 
   const at::Tensor vec_out =
@@ -257,24 +257,24 @@ std::tuple<at::Tensor, at::Tensor> run_topk_fp16(const at::Tensor &x,
       at::empty({k}, at::TensorOptions().dtype(torch::kInt32).device(device));
 
   const uint32_t user_workspace_size =
-      workspace::topk::GetWorkspaceSize<int32_t>(totalLength, matmul_size,
-                                                 blockDim);
+      workspace::topk::get_workspace_size<int32_t>(total_length, matmul_size,
+                                                   block_dim);
   const at::Tensor workspace_tensor =
       alloc_workspace(user_workspace_size, device);
 
   TopKTiling tiling;
-  tiling.num_elems = totalLength;
+  tiling.num_elems = total_length;
   tiling.matmul_size = matmul_size;
-  tiling.num_blocks = blockDim;
+  tiling.num_blocks = block_dim;
   tiling.vec_tile_size = vec_tile_size;
   tiling.x_min.value_fp32 = x_min;
   tiling.x_max.value_fp32 = x_max;
   tiling.k = k;
 
-  uint8_t *tiling_device = allocCopyTiling(tiling);
+  uint8_t *tiling_device = alloc_copy_tiling(tiling);
 
   ACLRT_LAUNCH_KERNEL(topk_fp16)
-  (blockDim, acl_stream, const_cast<void *>(x.storage().data()),
+  (block_dim, acl_stream, const_cast<void *>(x.storage().data()),
    const_cast<void *>(vec_out.storage().data()),
    const_cast<void *>(indices_out.storage().data()),
    const_cast<void *>(workspace_tensor.storage().data()), tiling_device);

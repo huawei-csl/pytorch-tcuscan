@@ -85,14 +85,14 @@ size_t byte_size(const at::Tensor &x) {
  * @return Device pointer where tiling struct is copied.
  */
 template <typename T>
-uint8_t *allocCopyTiling(const T &tiling_struct) {
-  constexpr size_t tiling_size = sizeof(T);
+uint8_t *alloc_copy_tiling(const T &tiling_struct) {
+  constexpr size_t TILIING_SIZE = sizeof(T);
   const uint8_t *tiling_host =
       reinterpret_cast<const uint8_t *>(&tiling_struct);
 
   uint8_t *tiling_device = nullptr;
-  aclrtMalloc((void **)&tiling_device, tiling_size, ACL_MEM_MALLOC_HUGE_FIRST);
-  aclrtMemcpy(tiling_device, tiling_size, tiling_host, tiling_size,
+  aclrtMalloc((void **)&tiling_device, TILIING_SIZE, ACL_MEM_MALLOC_HUGE_FIRST);
+  aclrtMemcpy(tiling_device, TILIING_SIZE, tiling_host, TILIING_SIZE,
               ACL_MEMCPY_HOST_TO_DEVICE);
 
   return tiling_device;

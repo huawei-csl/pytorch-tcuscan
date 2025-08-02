@@ -42,7 +42,7 @@ at::Tensor run_gen_lower(uint32_t matrix_size, const at::Device &device,
   const at::Tensor workspace_tensor = alloc_workspace(0, device);
 
   const GenLowerTiling tiling{matrix_size, tile_len};
-  uint8_t *tiling_device = allocCopyTiling(tiling);
+  uint8_t *tiling_device = alloc_copy_tiling(tiling);
   if (dtype == at::kHalf) {
     ACLRT_LAUNCH_KERNEL(gen_lower_fp16)
     (block_dim, acl_stream, const_cast<void *>(z.storage().data()),

@@ -37,42 +37,42 @@ std::tuple<at::Tensor, at::Tensor> run_radix_sort(const at::Tensor &x, int S) {
   const at::Device device = x.options().device();
   const auto dtype = x.options().dtype();
 
-  const uint32_t totalLength = x.numel();
+  const uint32_t total_length = x.numel();
   const uint32_t matmul_size = static_cast<uint32_t>(S);
 
   const uint32_t tile_elems = matmul_size * matmul_size;
-  const size_t num_tiles = totalLength / tile_elems;
+  const size_t num_tiles = total_length / tile_elems;
 
-  uint32_t blockDim = ascendc_platform->GetCoreNum() / 2;
-  while (num_tiles % blockDim != 0) {
-    blockDim--;
+  uint32_t block_dim = ascendc_platform->GetCoreNum() / 2;
+  while (num_tiles % block_dim != 0) {
+    block_dim--;
   }
-  if (blockDim <= 1) {
-    blockDim = 1;
+  if (block_dim <= 1) {
+    block_dim = 1;
   }
 
-  const at::Tensor vec_out =
-      at::empty({totalLength}, at::TensorOptions().dtype(dtype).device(device));
+  const at::Tensor vec_out = at::empty(
+      {total_length}, at::TensorOptions().dtype(dtype).device(device));
   const at::Tensor indices_out = at::empty(
-      {totalLength}, at::TensorOptions().dtype(torch::kInt32).device(device));
+      {total_length}, at::TensorOptions().dtype(torch::kInt32).device(device));
 
-  RadixSortTiling tiling{blockDim, totalLength, matmul_size, tile_elems / 2};
-  uint8_t *tiling_device = allocCopyTiling(tiling);
+  RadixSortTiling tiling{block_dim, total_length, matmul_size, tile_elems / 2};
+  uint8_t *tiling_device = alloc_copy_tiling(tiling);
 
   const uint32_t user_workspace_size =
-      workspace::radix_sort::GetWorkspaceSize<int16_t>(tiling);
+      workspace::radix_sort::get_workspace_size<int16_t>(tiling);
   const at::Tensor workspace_tensor =
       alloc_workspace(user_workspace_size, device);
 
   if (dtype == torch::kHalf) {
     ACLRT_LAUNCH_KERNEL(radix_sort_fp16)
-    (blockDim, acl_stream, const_cast<void *>(x.storage().data()),
+    (block_dim, acl_stream, const_cast<void *>(x.storage().data()),
      const_cast<void *>(vec_out.storage().data()),
      const_cast<void *>(indices_out.storage().data()),
      const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
   } else if (dtype == torch::kInt16) {
     ACLRT_LAUNCH_KERNEL(radix_sort_int16)
-    (blockDim, acl_stream, const_cast<void *>(x.storage().data()),
+    (block_dim, acl_stream, const_cast<void *>(x.storage().data()),
      const_cast<void *>(vec_out.storage().data()),
      const_cast<void *>(indices_out.storage().data()),
      const_cast<void *>(workspace_tensor.storage().data()), tiling_device);

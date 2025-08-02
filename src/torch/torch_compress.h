@@ -40,41 +40,41 @@ at::Tensor run_compress(const at::Tensor &x, const at::Tensor &mask, int S) {
   const auto dtype = x.options().dtype();
 
   const uint32_t matmul_size = static_cast<uint32_t>(S);
-  const uint32_t totalLength = x.numel();
+  const uint32_t total_length = x.numel();
 
   const uint32_t tile_elems = matmul_size * matmul_size;
   const uint32_t vec_tile_size = tile_elems / 2;
 
-  const uint32_t num_tiles = totalLength / tile_elems;
+  const uint32_t num_tiles = total_length / tile_elems;
 
-  uint32_t blockDim = ascendc_platform->GetCoreNum() / 2;
-  while (num_tiles % blockDim != 0) {
-    blockDim--;
+  uint32_t block_dim = ascendc_platform->GetCoreNum() / 2;
+  while (num_tiles % block_dim != 0) {
+    block_dim--;
   }
-  if (blockDim <= 1) {
-    blockDim = 1;
+  if (block_dim <= 1) {
+    block_dim = 1;
   }
 
-  const at::Tensor z =
-      at::empty({totalLength}, at::TensorOptions().dtype(dtype).device(device));
+  const at::Tensor z = at::empty(
+      {total_length}, at::TensorOptions().dtype(dtype).device(device));
 
-  const CompressTiling tiling{totalLength, matmul_size, vec_tile_size};
-  uint8_t *tiling_device = allocCopyTiling(tiling);
+  const CompressTiling tiling{total_length, matmul_size, vec_tile_size};
+  uint8_t *tiling_device = alloc_copy_tiling(tiling);
 
   const uint32_t user_workspace_size =
-      workspace::compress::GetWorkspaceSize<int8_t>(tiling, blockDim);
+      workspace::compress::get_workspace_size<int8_t>(tiling, block_dim);
   const at::Tensor workspace_tensor =
       alloc_workspace(user_workspace_size, device);
 
   if (dtype == torch::kHalf or dtype == torch::kInt16) {
     ACLRT_LAUNCH_KERNEL(compress_fp16)
-    (blockDim, acl_stream, const_cast<void *>(x.storage().data()),
+    (block_dim, acl_stream, const_cast<void *>(x.storage().data()),
      const_cast<void *>(mask.storage().data()),
      const_cast<void *>(z.storage().data()),
      const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
   } else {
     ACLRT_LAUNCH_KERNEL(compress_fp32)
-    (blockDim, acl_stream, const_cast<void *>(x.storage().data()),
+    (block_dim, acl_stream, const_cast<void *>(x.storage().data()),
      const_cast<void *>(mask.storage().data()),
      const_cast<void *>(z.storage().data()),
      const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
@@ -106,44 +106,44 @@ at::Tensor run_compress_pos(const at::Tensor &x, const at::Tensor &mask,
   const auto dtype = x.options().dtype();
 
   const uint32_t matmul_size = static_cast<uint32_t>(S);
-  const uint32_t totalLength = x.numel();
+  const uint32_t total_length = x.numel();
 
   const uint32_t tile_elems = matmul_size * matmul_size;
   const uint32_t vec_tile_size = tile_elems / 2;
 
-  const uint32_t num_tiles = totalLength / tile_elems;
+  const uint32_t num_tiles = total_length / tile_elems;
 
-  uint32_t blockDim = ascendc_platform->GetCoreNum() / 2;
-  while (num_tiles % blockDim != 0) {
-    blockDim--;
+  uint32_t block_dim = ascendc_platform->GetCoreNum() / 2;
+  while (num_tiles % block_dim != 0) {
+    block_dim--;
   }
-  if (blockDim <= 1) {
-    blockDim = 1;
+  if (block_dim <= 1) {
+    block_dim = 1;
   }
 
   // Last entry of pos tensor contains number of output elements.
   const at::Tensor z =
-      at::empty({pos[totalLength - 1].item<int32_t>()},
+      at::empty({pos[total_length - 1].item<int32_t>()},
                 at::TensorOptions().dtype(dtype).device(device));
 
-  const CompressTiling tiling{totalLength, matmul_size, vec_tile_size};
-  uint8_t *tiling_device = allocCopyTiling(tiling);
+  const CompressTiling tiling{total_length, matmul_size, vec_tile_size};
+  uint8_t *tiling_device = alloc_copy_tiling(tiling);
 
   const uint32_t user_workspace_size =
-      workspace::compress::GetWorkspaceSize<int8_t>(tiling, blockDim);
+      workspace::compress::get_workspace_size<int8_t>(tiling, block_dim);
   const at::Tensor workspace_tensor =
       alloc_workspace(user_workspace_size, device);
 
   if (dtype == torch::kHalf or dtype == torch::kInt16) {
     ACLRT_LAUNCH_KERNEL(compress_pos_fp16)
-    (blockDim, acl_stream, const_cast<void *>(x.storage().data()),
+    (block_dim, acl_stream, const_cast<void *>(x.storage().data()),
      const_cast<void *>(mask.storage().data()),
      const_cast<void *>(pos.storage().data()),
      const_cast<void *>(z.storage().data()),
      const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
   } else {
     ACLRT_LAUNCH_KERNEL(compress_pos_fp32)
-    (blockDim, acl_stream, const_cast<void *>(x.storage().data()),
+    (block_dim, acl_stream, const_cast<void *>(x.storage().data()),
      const_cast<void *>(mask.storage().data()),
      const_cast<void *>(pos.storage().data()),
      const_cast<void *>(z.storage().data()),

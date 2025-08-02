@@ -40,13 +40,13 @@ at::Tensor run_seg_scan_vec(const at::Tensor &x, const at::Tensor &f, int S) {
   const at::Device device = x.options().device();
 
   const uint32_t tile_len = static_cast<uint32_t>(S);
-  const uint32_t totalLength = x.numel();
+  const uint32_t total_length = x.numel();
 
   const at::Tensor z = at::empty(
-      {totalLength}, at::TensorOptions().dtype(at::kFloat).device(device));
+      {total_length}, at::TensorOptions().dtype(at::kFloat).device(device));
 
-  const SegScanVecSingleCoreTiling tiling{totalLength, tile_len};
-  uint8_t *tiling_device = allocCopyTiling(tiling);
+  const SegScanVecSingleCoreTiling tiling{total_length, tile_len};
+  uint8_t *tiling_device = alloc_copy_tiling(tiling);
 
   const uint32_t user_workspace_size = 0;
   const at::Tensor workspace_tensor =
@@ -110,25 +110,26 @@ at::Tensor run_seg_scan_mc_revert(const at::Tensor &x, const at::Tensor &f,
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();
 
-  const uint32_t tileLen = 4 * 1024;
-  const uint32_t totalLength = x.numel();
+  const uint32_t tile_len = 4 * 1024;
+  const uint32_t total_length = x.numel();
 
-  uint32_t blockDim =
-      static_cast<uint32_t>((totalLength + tileLen - 1) / tileLen);
-  blockDim = blockDim > 40 ? 40 : blockDim;
+  uint32_t block_dim =
+      static_cast<uint32_t>((total_length + tile_len - 1) / tile_len);
+  block_dim = block_dim > 40 ? 40 : block_dim;
 
   const at::Tensor z = at::empty(
-      {totalLength}, at::TensorOptions().dtype(at::kFloat).device(device));
+      {total_length}, at::TensorOptions().dtype(at::kFloat).device(device));
 
   const uint32_t diff_len = static_cast<uint32_t>(diff.numel());
 
-  const SegScanMcRevertTiling tiling{blockDim, totalLength, diff_len, tileLen};
-  uint8_t *tiling_device = allocCopyTiling(tiling);
+  const SegScanMcRevertTiling tiling{block_dim, total_length, diff_len,
+                                     tile_len};
+  uint8_t *tiling_device = alloc_copy_tiling(tiling);
 
   const at::Tensor workspace_tensor = alloc_workspace(0, device);
 
   ACLRT_LAUNCH_KERNEL(seg_scan_mc_revert)
-  (blockDim, acl_stream, const_cast<void *>(x.storage().data()),
+  (block_dim, acl_stream, const_cast<void *>(x.storage().data()),
    const_cast<void *>(f.storage().data()),
    const_cast<void *>(diff.storage().data()),
    const_cast<void *>(z.storage().data()),
@@ -155,17 +156,17 @@ at::Tensor run_seg_scan(const at::Tensor &x, const at::Tensor &f, int S) {
   const at::Device device = x.options().device();
 
   const uint32_t matmul_size = static_cast<uint32_t>(S);
-  const uint32_t totalLength = x.numel();
+  const uint32_t total_length = x.numel();
 
   const at::Tensor z = at::empty(
-      {totalLength}, at::TensorOptions().dtype(at::kFloat).device(device));
+      {total_length}, at::TensorOptions().dtype(at::kFloat).device(device));
 
-  const SegScanSingleCoreTiling tiling{totalLength, matmul_size};
-  uint8_t *tiling_device = allocCopyTiling(tiling);
+  const SegScanSingleCoreTiling tiling{total_length, matmul_size};
+  uint8_t *tiling_device = alloc_copy_tiling(tiling);
 
   const uint32_t user_workspace_size =
-      workspace::seg_scan::GetWorkspaceSize<int16_t /* half */, int8_t>(
-          totalLength, matmul_size);
+      workspace::seg_scan::get_workspace_size<int16_t /* half */, int8_t>(
+          total_length, matmul_size);
   const at::Tensor workspace_tensor =
       alloc_workspace(user_workspace_size, device);
 

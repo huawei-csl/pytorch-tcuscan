@@ -39,8 +39,7 @@ at::Tensor run_mc_gather(const at::Tensor &values, const at::Tensor &idxs,
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
 
   const at::Device device = values.options().device();
-  const uint32_t tileLen = tile_len;
-  const uint32_t blockDim = 20;
+  const uint32_t block_dim = 20;
 
   uint32_t values_len = values.numel();
   uint32_t idx_len = idxs.numel();
@@ -49,11 +48,11 @@ at::Tensor run_mc_gather(const at::Tensor &values, const at::Tensor &idxs,
       {idx_len}, at::TensorOptions().dtype(at::kFloat).device(device));
   const at::Tensor workspace_tensor = alloc_workspace(0, device);
 
-  const McGatherTiling tiling{blockDim, values_len, idx_len, tileLen};
-  uint8_t *tiling_device = allocCopyTiling(tiling);
+  const McGatherTiling tiling{block_dim, values_len, idx_len, tile_len};
+  uint8_t *tiling_device = alloc_copy_tiling(tiling);
 
   ACLRT_LAUNCH_KERNEL(mc_gather)
-  (blockDim, acl_stream, const_cast<void *>(values.storage().data()),
+  (block_dim, acl_stream, const_cast<void *>(values.storage().data()),
    const_cast<void *>(idxs.storage().data()),
    const_cast<void *>(z.storage().data()),
    const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
@@ -76,24 +75,24 @@ at::Tensor run_csr_gather(const at::Tensor &values, const at::Tensor &cols,
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Tensor z = at::empty_like(values);
   const at::Device device = x.options().device();
-  const uint32_t tileLen = 4 * 1024;
+  const uint32_t tile_len = 4 * 1024;
   const uint32_t values_len = values.numel();
   const uint32_t x_len = x.numel();
 
   const at::Tensor workspace_tensor = alloc_workspace(0, device);
 
-  const CSRGatherTiling tiling{values_len, x_len, tileLen};
-  uint8_t *tiling_device = allocCopyTiling(tiling);
+  const CSRGatherTiling tiling{values_len, x_len, tile_len};
+  uint8_t *tiling_device = alloc_copy_tiling(tiling);
 
-  uint32_t blockDim = host_utils::CeilDiv(values_len, tileLen);
-  blockDim = blockDim > 40 ? 40 : blockDim;
+  uint32_t block_dim = host_utils::CeilDiv(values_len, tile_len);
+  block_dim = block_dim > 40 ? 40 : block_dim;
 
-  if (blockDim <= 1) {
-    blockDim = 1;
+  if (block_dim <= 1) {
+    block_dim = 1;
   }
 
   ACLRT_LAUNCH_KERNEL(csr_gather)
-  (blockDim, acl_stream, const_cast<void *>(values.storage().data()),
+  (block_dim, acl_stream, const_cast<void *>(values.storage().data()),
    const_cast<void *>(cols.storage().data()),
    const_cast<void *>(x.storage().data()),
    const_cast<void *>(z.storage().data()),
@@ -118,8 +117,7 @@ at::Tensor run_gather_spmv(const at::Tensor &values, const at::Tensor &idxs,
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
 
   const at::Device device = values.options().device();
-  const uint32_t tileLen = tile_len;
-  const uint32_t blockDim = 20;
+  const uint32_t block_dim = 20;
 
   uint32_t values_len = values.numel();
   uint32_t idx_len = idxs.numel();
@@ -128,11 +126,11 @@ at::Tensor run_gather_spmv(const at::Tensor &values, const at::Tensor &idxs,
                 at::TensorOptions().dtype(values.scalar_type()).device(device));
   const at::Tensor workspace_tensor = alloc_workspace(0, device);
 
-  const GatherSpmvTiling tiling{blockDim, values_len, idx_len, tileLen};
-  uint8_t *tiling_device = allocCopyTiling(tiling);
+  const GatherSpmvTiling tiling{block_dim, values_len, idx_len, tile_len};
+  uint8_t *tiling_device = alloc_copy_tiling(tiling);
 
   ACLRT_LAUNCH_KERNEL(gather_spmv)
-  (blockDim, acl_stream, const_cast<void *>(values.storage().data()),
+  (block_dim, acl_stream, const_cast<void *>(values.storage().data()),
    const_cast<void *>(idxs.storage().data()),
    const_cast<void *>(z.storage().data()),
    const_cast<void *>(workspace_tensor.storage().data()), tiling_device);

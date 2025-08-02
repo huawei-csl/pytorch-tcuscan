@@ -1,5 +1,7 @@
 #!/bin/bash
 
+# Build project for clang-tidy. Enormous duplication with file `build.sh`.
+
 CURRENT_DIR=$(
     cd "$(dirname "${BASH_SOURCE:-$0}")"
     pwd

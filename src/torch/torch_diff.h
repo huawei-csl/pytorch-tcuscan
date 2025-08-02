@@ -33,35 +33,35 @@ at::Tensor run_diff(const at::Tensor &x, int64_t max_size) {
   const auto dtype = x.options().dtype();
   const at::Device device = x.options().device();
   // Tiling length must be around 10,000
-  const uint32_t tileLen = 20 * 1024 / byte_size(x);
+  const uint32_t tile_len = 20 * 1024 / byte_size(x);
 
-  uint32_t totalLength = x.numel();
+  uint32_t total_length = x.numel();
   if (max_size > 0) {
-    totalLength = max_size;
+    total_length = max_size;
   }
 
-  const at::Tensor z =
-      at::empty({totalLength}, at::TensorOptions().dtype(dtype).device(device));
+  const at::Tensor z = at::empty(
+      {total_length}, at::TensorOptions().dtype(dtype).device(device));
   const at::Tensor workspace_tensor = alloc_workspace(0, device);
 
-  uint32_t blockDim =
-      static_cast<uint32_t>((totalLength + tileLen - 1) / tileLen);
+  uint32_t block_dim =
+      static_cast<uint32_t>((total_length + tile_len - 1) / tile_len);
 
-  if (blockDim < 1) {
-    blockDim = 1;
+  if (block_dim < 1) {
+    block_dim = 1;
   }
 
-  const DiffTiling tiling{totalLength, tileLen};
-  uint8_t *tiling_device = allocCopyTiling(tiling);
+  const DiffTiling tiling{total_length, tile_len};
+  uint8_t *tiling_device = alloc_copy_tiling(tiling);
 
   if (dtype == torch::kHalf) {
     ACLRT_LAUNCH_KERNEL(diff_fp16)
-    (blockDim, acl_stream, const_cast<void *>(x.storage().data()),
+    (block_dim, acl_stream, const_cast<void *>(x.storage().data()),
      const_cast<void *>(z.storage().data()),
      const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
   } else {
     ACLRT_LAUNCH_KERNEL(diff_fp32)
-    (blockDim, acl_stream, const_cast<void *>(x.storage().data()),
+    (block_dim, acl_stream, const_cast<void *>(x.storage().data()),
      const_cast<void *>(z.storage().data()),
      const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
   }

@@ -44,17 +44,17 @@ at::Tensor matmul_cce(at::Tensor a, at::Tensor b) {
   uint8_t *a_ptr = reinterpret_cast<uint8_t *>(a.storage().data_ptr().get());
   uint8_t *b_ptr = reinterpret_cast<uint8_t *>(b.storage().data_ptr().get());
   uint8_t *c_ptr = reinterpret_cast<uint8_t *>(c.storage().data_ptr().get());
-  uint32_t blockDim = 20;  // 910B4, 20 cube cores
+  uint32_t block_dim = 20;  // 910B4, 20 cube cores
 
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
 
   MatMulCCETiling tiling{M, N, K};
-  uint8_t *tiling_device = allocCopyTiling(tiling);
+  uint8_t *tiling_device = alloc_copy_tiling(tiling);
 
   const at::Tensor workspace_tensor = alloc_workspace(0, device);
 
   ACLRT_LAUNCH_KERNEL(matmul_cce)
-  (blockDim, acl_stream, a_ptr, b_ptr, c_ptr,
+  (block_dim, acl_stream, a_ptr, b_ptr, c_ptr,
    const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
   aclrtSynchronizeStream(acl_stream);
   aclrtFree(tiling_device);
