@@ -38,7 +38,7 @@ at::Tensor run_spmv_multi_cube(const at::Tensor &vals, const at::Tensor &idx,
                                const at::Tensor &lower_strict) {
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
 
-  const at::Tensor product = asc::gather::run_csr_gather(vals, cols, x);
+  const at::Tensor product = asc::gather::run_csr_gather(vals, cols, idx, x);
   const at::Tensor scanned =
       asc::scan::run_scan_multi_cube(product, upper, lower_strict);
   const at::Tensor gathered = asc::gather::run_gather_spmv(scanned, idx, 128);
@@ -66,7 +66,7 @@ at::Tensor run_spmv(const at::Tensor &vals, const at::Tensor &idx,
                     const at::Tensor &cols, const at::Tensor &x, int s) {
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
 
-  const at::Tensor product = asc::gather::run_csr_gather(vals, cols, x);
+  const at::Tensor product = asc::gather::run_csr_gather(vals, cols, idx, x);
   const at::Tensor scanned = asc::scan::run_scan_multi_core(product, s);
   const at::Tensor gathered = asc::gather::run_gather_spmv(scanned, idx, 128);
   const at::Tensor z = torch::diff(gathered);

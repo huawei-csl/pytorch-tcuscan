@@ -68,23 +68,25 @@ at::Tensor run_mc_gather(const at::Tensor &values, const at::Tensor &idxs,
 /**
  * @brief Special CSR gather method for SpMV.
  *
- * @param values Input 1D vector.
- * @param cols Input 1D vector of indices for `x`.
+ * @param values Input values of CSR matrix.
+ * @param cols Input columns of CSR matrix.
+ * @param rows Input row pointers `row_ptr` of CSR matrix.
  * @param x Input vector
  * @return z[i] = values[i] * x[cols[i]] for i in range(len(cols)).
  */
 at::Tensor run_csr_gather(const at::Tensor &values, const at::Tensor &cols,
-                          const at::Tensor &x) {
+                          const at::Tensor &rows, const at::Tensor &x) {
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Tensor z = at::empty_like(values);
   const at::Device device = x.options().device();
   const uint32_t tile_len = 4 * 1024;
   const uint32_t values_len = values.numel();
+  const uint32_t rows_len = rows.numel();
   const uint32_t x_len = x.numel();
 
   const at::Tensor workspace_tensor = alloc_workspace(0, device);
 
-  const CSRGatherTiling tiling{values_len, x_len, tile_len};
+  const CSRGatherTiling tiling{values_len, rows_len, x_len, tile_len};
   uint8_t *tiling_device = alloc_copy_tiling(tiling);
 
   uint32_t block_dim = host_utils::CeilDiv(values_len, tile_len);
@@ -97,6 +99,7 @@ at::Tensor run_csr_gather(const at::Tensor &values, const at::Tensor &cols,
   ACLRT_LAUNCH_KERNEL(csr_gather)
   (block_dim, acl_stream, const_cast<void *>(values.storage().data()),
    const_cast<void *>(cols.storage().data()),
+   const_cast<void *>(rows.storage().data()),
    const_cast<void *>(x.storage().data()),
    const_cast<void *>(z.storage().data()),
    const_cast<void *>(workspace_tensor.storage().data()), tiling_device);

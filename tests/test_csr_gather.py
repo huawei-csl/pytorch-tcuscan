@@ -59,11 +59,15 @@ def _test_tcuscan_csr_gather(col_len, x_len):
     input_cols = torch.randint(
         low=0, high=x_len, size=(col_len,), dtype=torch.int32, device=NPU_DEVICE
     )
+    input_rows = torch.randint(
+        low=0, high=x_len, size=(x_len,), dtype=torch.int32, device=NPU_DEVICE
+    )
+    input_rows = torch.cumsum(input_rows, dim=-1)
     input_x = torch.randn(x_len, dtype=torch.float16, device=NPU_DEVICE)
 
     expected = ref_csr_gather(input_values, input_cols, input_x)
     torch.npu.synchronize()
-    actual = tcuscan_ops.run_csr_gather(input_values, input_cols, input_x)
+    actual = tcuscan_ops.run_csr_gather(input_values, input_cols, input_rows, input_x)
     torch.npu.synchronize()
 
     assert actual.shape == expected.shape, "Output shape does not match expected shape."
