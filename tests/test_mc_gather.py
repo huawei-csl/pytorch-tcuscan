@@ -39,7 +39,7 @@ if DEVICE == "npu":
 _MULTIPLIER = [1, 2, 4, 5, 10, 15, 20, 25, 30, 45, 60]
 
 
-def _test_tcuscan_mcgather(s: int, nnz: int, idx_len: int):
+def _test_tcuscan_mcgather(tile_len: int, nnz: int, idx_len: int):
     data_type = np.float32
     index_type = np.uint32
     shape = nnz
@@ -60,7 +60,7 @@ def _test_tcuscan_mcgather(s: int, nnz: int, idx_len: int):
     val_torch = torch.Tensor(input_values).to(torch.float32).npu()
     idx_torch = torch.from_numpy(input_cols).npu()
     torch.npu.synchronize()
-    actual = tcuscan_ops.run_mc_gather(val_torch, idx_torch, s)
+    actual = tcuscan_ops.run_mc_gather(val_torch, idx_torch, tile_len)
 
     assert (
         actual.shape == expected.shape
@@ -71,13 +71,13 @@ def _test_tcuscan_mcgather(s: int, nnz: int, idx_len: int):
 
     assert torch.equal(
         actual.cpu(), expected
-    ), f"Error gather mc ({expected.dtype}). s={s}"
+    ), f"Error gather mc ({expected.dtype}).tile_len={tile_len}"
 
 
-@pytest.mark.parametrize("offset", [0, 7, 11, 17])
+@pytest.mark.parametrize("offset", [0, 1, 7, 11, 17])
 @pytest.mark.parametrize("multiplier", _MULTIPLIER)
 @pytest.mark.parametrize("s", [64, 128, 256, 512])
 def test_tcuscan_mc_gather(offset: int, multiplier: int, s: int):
-    nnz = multiplier * 20 * s * s
+    nnz = multiplier * 40 * s * s
     idx_len = s * s - offset
     _test_tcuscan_mcgather(s, nnz, idx_len)

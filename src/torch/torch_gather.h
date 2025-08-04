@@ -36,10 +36,13 @@ namespace gather {
  */
 at::Tensor run_mc_gather(const at::Tensor &values, const at::Tensor &idxs,
                          const uint32_t tile_len) {
+  const auto ascendc_platform =
+      platform_ascendc::PlatformAscendCManager::GetInstance(SOC_VERSION);
+
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
 
   const at::Device device = values.options().device();
-  const uint32_t block_dim = 20;
+  const uint32_t block_dim = ascendc_platform->GetCoreNum();
 
   uint32_t values_len = values.numel();
   uint32_t idx_len = idxs.numel();
