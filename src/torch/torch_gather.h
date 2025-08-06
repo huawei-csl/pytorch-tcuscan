@@ -76,21 +76,25 @@ at::Tensor run_mc_gather(const at::Tensor &values, const at::Tensor &idxs,
  */
 at::Tensor run_csr_gather(const at::Tensor &values, const at::Tensor &cols,
                           const at::Tensor &rows, const at::Tensor &x) {
+  const auto ascendc_platform =
+      platform_ascendc::PlatformAscendCManager::GetInstance(SOC_VERSION);
+  const uint32_t max_aiv_cores = ascendc_platform->GetCoreNum();
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
-  const at::Tensor z = at::empty_like(values);
   const at::Device device = x.options().device();
+
   const uint32_t tile_len = 4 * 1024;
+
+  const at::Tensor z = at::empty_like(values);
+  const at::Tensor workspace_tensor = alloc_workspace(0, device);
+
   const uint32_t values_len = values.numel();
   const uint32_t rows_len = rows.numel();
   const uint32_t x_len = x.numel();
-
-  const at::Tensor workspace_tensor = alloc_workspace(0, device);
-
   const CSRGatherTiling tiling{values_len, rows_len, x_len, tile_len};
   uint8_t *tiling_device = alloc_copy_tiling(tiling);
 
   uint32_t block_dim = host_utils::CeilDiv(values_len, tile_len);
-  block_dim = block_dim > 40 ? 40 : block_dim;
+  block_dim = block_dim > max_aiv_cores ? max_aiv_cores : block_dim;
 
   if (block_dim <= 1) {
     block_dim = 1;
@@ -120,16 +124,20 @@ at::Tensor run_csr_gather(const at::Tensor &values, const at::Tensor &cols,
  */
 at::Tensor run_gather_spmv(const at::Tensor &values, const at::Tensor &idxs,
                            const uint32_t tile_len) {
+  const auto ascendc_platform =
+      platform_ascendc::PlatformAscendCManager::GetInstance(SOC_VERSION);
+  const uint32_t max_aiv_cores = ascendc_platform->GetCoreNum();
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
 
   const at::Device device = values.options().device();
-  const uint32_t block_dim = 20;
 
   uint32_t values_len = values.numel();
   uint32_t idx_len = idxs.numel();
-  const at::Tensor z =
-      at::empty({idx_len},
-                at::TensorOptions().dtype(values.scalar_type()).device(device));
+
+  uint32_t block_dim = host_utils::CeilDiv(values_len, tile_len);
+  block_dim = block_dim > max_aiv_cores ? max_aiv_cores : block_dim;
+
+  const at::Tensor z = at::empty({idx_len}, values.options());
   const at::Tensor workspace_tensor = alloc_workspace(0, device);
 
   const GatherSpmvTiling tiling{block_dim, values_len, idx_len, tile_len};
