@@ -6,8 +6,8 @@ BASE_SPARSE_MATRIX_PATH?=/scratch/TCUSCAN/sparse-suite-matrices/ssgetpy-download
 FULL_SPARSE_MATRIX_PATH=${BASE_SPARSE_MATRIX_PATH}${LOCAL_SPARSE_MATRIX_NAME}
 PROFILING_SCRIPTS_PATH=scripts/profiling/
 CONDA_ENV_NAME="pytorch_tcuscan"
-PYTORCH_ASCEND_WHEEL_NAME=torch_npu-2.4.0.post4-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
-PYTORCH_ASCEND_WHEEL_URL=https://gitee.com/ascend/pytorch/releases/download/v7.0.0-pytorch2.4.0/${PYTORCH_ASCEND_WHEEL_NAME}
+PYTORCH_ASCEND_WHEEL_NAME=torch_npu-2.6.0.post1-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
+PYTORCH_ASCEND_WHEEL_URL=https://gitee.com/ascend/pytorch/releases/download/v7.1.0.1-pytorch2.6.0/${PYTORCH_ASCEND_WHEEL_NAME}
 
 DEVICE_TYPE?=npu
 LD_LIBRARY_PATH := ${LD_LIBRARY_PATH}:$(shell pwd)/build/lib/
@@ -38,7 +38,7 @@ create_conda_env:
 setup_once:
 	pip3 install -r requirements.txt
 	wget -nc ${PYTORCH_ASCEND_WHEEL_URL}
-	pip3 install ${PYTORCH_ASCEND_WHEEL_NAME} --index-url https://download.pytorch.org/whl/cpu
+	pip3 install --force-reinstall ${PYTORCH_ASCEND_WHEEL_NAME} --index-url https://download.pytorch.org/whl/cpu
 
 setup_once_aarch64:
 	pip3 install -r requirements.txt
