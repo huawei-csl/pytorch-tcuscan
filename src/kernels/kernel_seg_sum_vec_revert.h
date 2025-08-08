@@ -62,7 +62,7 @@ class KernelSegSumVecRevert {
     global_in_.SetGlobalBuffer((__gm__ T *)vec_in, vec_len_);
     global_segm_in_.SetGlobalBuffer((__gm__ uint32_t *)segm_ind_in,
                                     num_segments_);
-    global_out_.SetGlobalBuffer((__gm__ T *)vec_out, vec_len_);
+    global_out_.SetGlobalBuffer((__gm__ T *)vec_out, num_segments_);
 
     pipe_.InitBuffer(in_q_, BUFFER_NUM, tile_len_ * sizeof(T));
     pipe_.InitBuffer(segm_q_, BUFFER_NUM, tile_len_ * sizeof(uint32_t));
@@ -102,6 +102,52 @@ class KernelSegSumVecRevert {
   }
 
   /**
+   * @brief Prepare for output writing of the current value on the given index.
+   *
+   * @param vec_out_lt Tile of output containing the segmented sums.
+   * @param index Tile index to write on.
+   * @param value Value to write.
+   */
+  __aicore__ inline void SafeOutWrite(LocalTensor<T> &vec_out_lt,
+                                      uint32_t index, T value) {
+    vec_out_lt.SetValue(index, value);
+  }
+
+  /**
+   * @brief Returns the index corresponding to the next segment end.
+   *
+   * Method follows the iterator pattern. At termination, returns `vec_len_`.
+   *
+   * @param segm_ind_lt Tile containing the segment-ending indices.
+   * @param index Current "local" index within the @p segm_ind_lt tile.
+   * @return Returns the next segment end.
+   */
+  __aicore__ inline uint32_t NextSegmEndIndex(
+      LocalTensor<uint32_t> &segm_ind_lt, uint32_t &index) {
+    index++;
+
+    if (segments_offset_ + index >= num_segments_) {
+      // Run out-of-segments, set the segment end to maximum
+      // vector length.
+      return vec_len_;
+    } else if (index >= tile_len_) {
+      // Run out-of-segments in the segment tiles. Just load the
+      // next segment tile and update counters/indices
+      segm_q_.FreeTensor<uint32_t>(segm_ind_lt);
+      segments_offset_ += tile_len_;
+      segm_ind_lt = LoadNextSegmentTile();
+
+      // "Local-coordinates" segment index must be zeroed and keep
+      // track of the output vector location.
+      index = 0;
+      return segm_ind_lt.GetValue(0);
+    } else {
+      // Read next segment
+      return segm_ind_lt.GetValue(index);
+    }
+  }
+
+  /**
    * @brief Run the kernel.
    */
   __aicore__ inline void Process() {
@@ -109,8 +155,8 @@ class KernelSegSumVecRevert {
     LocalTensor<T> vec_out_lt = out_q_.AllocTensor<T>();
 
     T accumulation = 0;
-    uint32_t offset = 0;
-    uint32_t out_lt_offset = 0;
+    uint32_t in_offset = 0;
+    uint32_t out_idx = 0;
     uint32_t segm_idx = 1;
     uint32_t segm_end = segm_ind_lt.GetValue(segm_idx);
 
@@ -121,53 +167,37 @@ class KernelSegSumVecRevert {
         }
       }
 
-      const uint32_t num_elems_to_process = NextTileLen(offset, vec_len_);
-      copy::CopyGmToVec(in_q_, global_in_[offset], num_elems_to_process);
+      const uint32_t num_elems_to_process = NextTileLen(in_offset, vec_len_);
+      copy::CopyGmToVec(in_q_, global_in_[in_offset], num_elems_to_process);
       LocalTensor<T> vec_in_lt = in_q_.DeQue<T>();
 
-      while (segm_end < offset + num_elems_to_process) {
+      while (segm_end < in_offset + num_elems_to_process) {
         // Last segment value. Zero if lies on tile boundary.
-        const T delta = (segm_end == offset)
+        const bool is_on_end_of_tile = segm_end == in_offset;
+        const T delta = is_on_end_of_tile
                             ? 0
-                            : vec_in_lt.GetValue(segm_end - offset - 1);
-        vec_out_lt.SetValue(out_lt_offset + segm_idx - 1, accumulation + delta);
+                            : vec_in_lt.GetValue(segm_end - in_offset - 1);
+        SafeOutWrite(vec_out_lt, out_idx, accumulation + delta);
+        out_idx++;
 
+        // Keep track of the value of the last segment's end to subtract it from
+        // the next segment (recall scan speculation within tile)
         accumulation = -delta;
-        segm_idx++;
 
-        if (segments_offset_ + segm_idx >= num_segments_) {
-          // Run out-of-segments, set the segment end to maximum
-          // vector length.
-          segm_end = vec_len_;
-          out_lt_offset = num_segments_;
-        } else if (segm_idx >= tile_len_) {
-          // Run out-of-segments in the segment tiles. Just load the
-          // next segment tile and update counters
-          segm_q_.FreeTensor<uint32_t>(segm_ind_lt);
-          segments_offset_ += tile_len_;
-          segm_ind_lt = LoadNextSegmentTile();
-
-          // "Local-coordinate" segment index must be zeroed and keep
-          // track of the output vector location.
-          segm_idx = 0;
-          out_lt_offset += tile_len_;
-          segm_end = segm_ind_lt.GetValue(0);
-        } else {
-          // Read next segment
-          segm_end = segm_ind_lt.GetValue(segm_idx);
-        }
+        // Mutates both segm_ind_lt and segm_idx
+        segm_end = NextSegmEndIndex(segm_ind_lt, segm_idx);
       }
 
       accumulation += vec_in_lt.GetValue(num_elems_to_process - 1);
 
       in_q_.FreeTensor<T>(vec_in_lt);
-      offset += num_elems_to_process;
+      in_offset += num_elems_to_process;
     }
 
     segm_q_.FreeTensor<uint32_t>(segm_ind_lt);
 
     // The last segment contains the remaining accumulation values.
-    vec_out_lt.SetValue(out_lt_offset - 1, accumulation);
+    vec_out_lt.SetValue(num_segments_ - 1, accumulation);
 
     out_q_.EnQue<T>(vec_out_lt);
     copy::CopyVecToGm(global_out_, out_q_, num_segments_);
