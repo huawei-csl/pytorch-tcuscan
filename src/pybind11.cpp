@@ -43,6 +43,8 @@ PYBIND11_MODULE(tcuscan_ops, m) {
   m.def("run_compress_pos", &asc::compress::run_compress_pos,
         "Compaction/compress with pre-computed output positions");
   m.def("run_seg_sum", &asc::seg_ops::run_seg_sum, "Segmented Sum");
+  m.def("run_seg_sum_single_core", &asc::seg_ops::run_seg_sum_single_core,
+        "Segmented Sum (single-core)");
   m.def("run_spmv", &asc::spmv::run_spmv,
         "Sparse Matrix-Vector Multiplication");
   m.def("run_spmv_multi_cube", &asc::spmv::run_spmv_multi_cube,

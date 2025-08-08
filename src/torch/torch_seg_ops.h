@@ -13,9 +13,11 @@
 #include "../tiling/tiling_seg_scan_mc_revert.h"
 #include "../tiling/tiling_seg_scan_single_core.h"
 #include "../tiling/tiling_seg_scan_vec_single_core.h"
+#include "../tiling/tiling_seg_sum_single_core.h"
 #include "aclrtlaunch_seg_scan_mc_revert.h"
 #include "aclrtlaunch_seg_scan_single_core.h"
 #include "aclrtlaunch_seg_scan_vec_single_core.h"
+#include "aclrtlaunch_seg_sum_single_core_fp16.h"
 #include "commons.h"
 #include "tiling/platform/platform_ascendc.h"
 #include "torch_npu/csrc/core/npu/NPUStream.h"
@@ -173,6 +175,48 @@ at::Tensor run_seg_scan(const at::Tensor &x, const at::Tensor &f, int S) {
   ACLRT_LAUNCH_KERNEL(seg_scan_single_core)
   (1 /* single core*/, acl_stream, const_cast<void *>(x.storage().data()),
    const_cast<void *>(f.storage().data()),
+   const_cast<void *>(z.storage().data()),
+   const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
+
+  aclrtFree(tiling_device);
+  aclrtSynchronizeStream(acl_stream);
+
+  return z;
+}
+
+/**
+ * @brief Segmented sum single core
+ *
+ * @param x Input data vector.
+ * @param indptr Input segment starts vector.
+ * @param s Tiling parameter. Typical values: 32, 64, 128.
+ * @return Segmented sum of (x, indptr).
+ */
+at::Tensor run_seg_sum_single_core(const at::Tensor &x,
+                                   const at::Tensor &indptr, int s) {
+  auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
+  const at::Device device = x.options().device();
+
+  constexpr uint32_t BLOCK_DIM = 1;  // single core
+  const uint32_t matmul_size = static_cast<uint32_t>(s);
+  const uint32_t total_length = x.numel();
+  const uint32_t num_segments = indptr.numel();
+
+  const at::Tensor z = at::empty(
+      {num_segments}, at::TensorOptions().dtype(at::kFloat).device(device));
+
+  const SegSumSingleCoreTiling tiling{total_length, num_segments, matmul_size};
+  uint8_t *tiling_device = alloc_copy_tiling(tiling);
+
+  const uint32_t user_workspace_size =
+      workspace::seg_sum::get_workspace_size(tiling);
+
+  const at::Tensor workspace_tensor =
+      alloc_workspace(user_workspace_size, device);
+
+  ACLRT_LAUNCH_KERNEL(seg_sum_single_core_fp16)
+  (BLOCK_DIM, acl_stream, const_cast<void *>(x.storage().data()),
+   const_cast<void *>(indptr.storage().data()),
    const_cast<void *>(z.storage().data()),
    const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
 

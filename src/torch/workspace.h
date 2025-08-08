@@ -14,6 +14,7 @@
 #include "../tiling/tiling_radix_sort.h"
 #include "../tiling/tiling_scan_multi_core.h"
 #include "../tiling/tiling_scan_single_core.h"
+#include "../tiling/tiling_seg_sum_single_core.h"
 #include "../tiling/tiling_split.h"
 
 namespace workspace {
@@ -234,5 +235,34 @@ constexpr uint32_t get_workspace_size(size_t input_elems, size_t matmul_size,
 }
 
 }  // namespace topk
+
+namespace seg_sum {
+
+/**
+ * @brief Calculate the workspace size for `seg_sum_single_core`.
+ *
+ * @param [in] input_elems Number of elements in the input vector.
+ * @param [in] matmul_size Size of the matmul used in scan.
+ * @return Size of the workspace in bytes.
+ */
+constexpr uint32_t get_workspace_size(size_t input_elems, size_t matmul_size) {
+  const uint32_t padded_input_len =
+      host_utils::AlignUp(input_elems, matmul_size * matmul_size);
+  const uint32_t total_size = padded_input_len * sizeof(float);
+
+  return total_size;
+}
+
+/**
+ * @brief Calculate the workspace size for `seg_sum_single_core`.
+ *
+ * @param [in] tiling Tiling parameters used in the kernel.
+ * @return Size of the workspace in bytes.
+ */
+constexpr uint32_t get_workspace_size(const SegSumSingleCoreTiling& tiling) {
+  return seg_sum::get_workspace_size(tiling.num_elems, tiling.tile_len);
+}
+
+}  // namespace seg_sum
 
 }  // namespace workspace
