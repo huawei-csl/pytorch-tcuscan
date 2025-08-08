@@ -27,16 +27,18 @@ NPU_DEVICE = os.environ.get("NPU_DEVICE", "npu:1")
 torch.npu.config.allow_internal_format = False
 torch.npu.set_device(NPU_DEVICE)
 
-_MULTIPLIER = [1, 2, 3, 4]
+_NUM_SEGMENTS = [513, 1025, 2011]  # 519, 2043 fails!
+_NUM_COLUMNS = [64 * 64 - 1, 128 * 128, 128 * 128 - 13, 128 * 128 + 13, 128 * 128 - 133]
 
 
 def uniform_rvs(shape):
     return 2 * np.random.uniform(0, 1, size=shape) - 1
 
 
-def _test_tcuscan_seg_sum_single_core(num_cols: int, s: int, density: float):
+def _test_tcuscan_seg_sum_single_core(
+    num_segments: int, num_cols: int, s: int, density: float
+):
 
-    num_segments = 513
     A = sp_random(
         num_segments,
         num_cols,
@@ -49,6 +51,7 @@ def _test_tcuscan_seg_sum_single_core(num_cols: int, s: int, density: float):
     ones = torch.ones(num_cols).half()
     values = (A.data).astype(np.float16)
     indices = (A.indptr).astype(np.uint32)
+    nnz = A.nnz
 
     expected = A @ ones
     expected = torch.from_numpy(expected.flatten())
@@ -67,9 +70,12 @@ def _test_tcuscan_seg_sum_single_core(num_cols: int, s: int, density: float):
     actual = tcuscan_ops.run_seg_sum_single_core(values_npu, indices_npu, s).cpu()
     torch.npu.synchronize()
 
-    print(f"indices: {indices}")
-    print(f"expected: {expected}")
-    print(f"actual: {actual}")
+    print(f"# of segments : {num_segments}")
+    print(f"# of columns  : {num_cols}")
+    print(f"nnz           : {nnz}")
+    print(f"indices       : {indices}")
+    print(f"expected      : {expected}")
+    print(f"actual        : {actual}")
 
     abs_error = torch.max(torch.abs(actual - expected))
     rel_error = torch.max(torch.abs((actual - expected) / expected))
@@ -85,29 +91,28 @@ def _test_tcuscan_seg_sum_single_core(num_cols: int, s: int, density: float):
     ), f"Error seg_sum ({expected.dtype}). Abs-error: {abs_error} / {rel_error}, s={s}, num_cols={num_cols}"
 
 
-@pytest.mark.parametrize("multiplier", _MULTIPLIER)
-def test_tcuscan_segmented_sum_s_32(multiplier: int):
+@pytest.mark.parametrize("num_segments", _NUM_SEGMENTS)
+@pytest.mark.parametrize("num_cols", _NUM_COLUMNS)
+def test_tcuscan_segmented_sum_s_32(num_segments: int, num_cols: int):
     s = 32
     density = 0.01
-    n = multiplier * s * s
 
-    _test_tcuscan_seg_sum_single_core(n, s, density)
+    _test_tcuscan_seg_sum_single_core(num_segments, num_cols, s, density)
 
 
-@pytest.mark.parametrize("multiplier", _MULTIPLIER)
-def test_tcuscan_segmented_sum_s_64(multiplier: int):
+@pytest.mark.parametrize("num_segments", _NUM_SEGMENTS)
+@pytest.mark.parametrize("num_cols", _NUM_COLUMNS)
+def test_tcuscan_segmented_sum_s_64(num_segments: int, num_cols: int):
     s = 64
-    segm_density = 0.01
-    n = multiplier * s * s
+    density = 0.01
 
-    _test_tcuscan_seg_sum_single_core(n, s, segm_density)
+    _test_tcuscan_seg_sum_single_core(num_segments, num_cols, s, density)
 
 
-@pytest.mark.parametrize(
-    "num_cols", [128 * 128, 128 * 128 - 13, 128 * 128 + 13, 2 * 128 * 128 + 133]
-)
-def test_tcuscan_segmented_sum_s_128(num_cols: int):
+@pytest.mark.parametrize("num_segments", _NUM_SEGMENTS)
+@pytest.mark.parametrize("num_cols", _NUM_COLUMNS)
+def test_tcuscan_segmented_sum_s_128(num_segments: int, num_cols: int):
     s = 128
-    segm_density = 0.01
+    density = 0.01
 
-    _test_tcuscan_seg_sum_single_core(num_cols, s, segm_density)
+    _test_tcuscan_seg_sum_single_core(num_segments, num_cols, s, density)

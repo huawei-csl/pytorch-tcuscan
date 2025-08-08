@@ -68,9 +68,6 @@ clang_tidy:
     - baremetal
   dependencies: []
   needs: []
-  before_script:
-    - export DEBIAN_FRONTEND=noninteractive
-    - apt-get update && apt-get install -y clang-tidy
   script:
     - make clang_tidy
 

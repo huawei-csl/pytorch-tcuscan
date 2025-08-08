@@ -47,13 +47,13 @@ __aicore__ inline void run_seg_sum_single_core(
 
   if ASCEND_IS_AIC {
     KernelRowScan<T, true> op_cube(tile_len, tile_len, padded_vec_len);
-    op_cube.Init(vec_in, upper, workspace);
+    op_cube.Init(vec_in, upper, padded_input);
     op_cube.Process();
   }
 
   if ASCEND_IS_AIV {
     KernelSegSumVecRevert<OutputT, true> op(vec_len, num_segments, tile_len);
-    op.Init(workspace, segm_ind_in, vec_out);
+    op.Init(padded_input, segm_ind_in, vec_out);
     op.Process();
   }
 }
@@ -82,9 +82,8 @@ extern "C" __global__ __aicore__ void seg_sum_single_core_fp16(
   const uint32_t num_segments = tiling.num_segments;
   const uint32_t matmul_size = tiling.tile_len;
 
-  GM_ADDR const usr_workspace = AscendC::GetUserWorkspace(workspace);
   GM_ADDR const lower = load_tril_matrix<half>(matmul_size);
 
-  run_seg_sum_single_core<half>(vec_in, lower, indptr, vec_out, usr_workspace,
+  run_seg_sum_single_core<half>(vec_in, lower, indptr, vec_out, workspace,
                                 vec_len, num_segments, matmul_size);
 }
