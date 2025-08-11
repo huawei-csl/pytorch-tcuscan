@@ -22,7 +22,7 @@ using namespace kernel_utils;
  * Given, vec_in = [1,2,3,4,5,6,7,8,9,10] and segm_ind_in = [0, 4, 7]
  * returns vec_out = (1+2+3+4, 5+6, 7+8+9+10) = (10, 11, 34)
  *
- * @tparam T
+ * @tparam T Input data type
  * @tparam SyncBefore If true, the `KernelSegSumVecRevert` (this kernel) waits
  * for the cube unit to send a synchronization signal after each matrix tile is
  * ready. Matrix tile has length `tile_len * tile_len`.
@@ -66,7 +66,7 @@ class KernelSegSumVecRevert {
 
     pipe_.InitBuffer(in_q_, BUFFER_NUM, tile_len_ * sizeof(T));
     pipe_.InitBuffer(segm_q_, BUFFER_NUM, tile_len_ * sizeof(uint32_t));
-    pipe_.InitBuffer(out_q_, BUFFER_NUM, num_segments_ * sizeof(T));
+    pipe_.InitBuffer(out_q_, BUFFER_NUM, tile_len_ * sizeof(T));
   }
 
   /**
@@ -98,19 +98,31 @@ class KernelSegSumVecRevert {
     copy::CopyGmToVec(segm_q_, global_segm_in_[segments_offset_],
                       next_tile_len);
 
-    return segm_q_.DeQue<uint32_t>();
+    return segm_q_.template DeQue<uint32_t>();
   }
 
   /**
-   * @brief Prepare for output writing of the current value on the given index.
+   * @brief Prepare for output writing of the current value on the given
+   * index.
    *
    * @param vec_out_lt Tile of output containing the segmented sums.
    * @param index Tile index to write on.
    * @param value Value to write.
    */
   __aicore__ inline void SafeOutWrite(LocalTensor<T> &vec_out_lt,
-                                      uint32_t index, T value) {
+                                      uint32_t &index, T value) {
     vec_out_lt.SetValue(index, value);
+    index++;
+    // Write tile to GM and "re-allocate" the output tile.
+    if (index >= tile_len_) {
+      out_q_.template EnQue<T>(vec_out_lt);
+      copy::CopyVecToGm(global_out_[out_offset_], out_q_, tile_len_);
+      out_offset_ += tile_len_;
+      vec_out_lt = out_q_.template AllocTensor<T>();
+
+      // "Local-coordinates" of local tensor index must be zeroed
+      index = 0;
+    }
   }
 
   /**
@@ -133,7 +145,7 @@ class KernelSegSumVecRevert {
     } else if (index >= tile_len_) {
       // Run out-of-segments in the segment tiles. Just load the
       // next segment tile and update counters/indices
-      segm_q_.FreeTensor<uint32_t>(segm_ind_lt);
+      segm_q_.template FreeTensor<uint32_t>(segm_ind_lt);
       segments_offset_ += tile_len_;
       segm_ind_lt = LoadNextSegmentTile();
 
@@ -152,7 +164,7 @@ class KernelSegSumVecRevert {
    */
   __aicore__ inline void Process() {
     LocalTensor<uint32_t> segm_ind_lt = LoadNextSegmentTile();
-    LocalTensor<T> vec_out_lt = out_q_.AllocTensor<T>();
+    LocalTensor<T> vec_out_lt = out_q_.template AllocTensor<T>();
 
     T accumulation = 0;
     uint32_t in_offset = 0;
@@ -169,7 +181,7 @@ class KernelSegSumVecRevert {
 
       const uint32_t num_elems_to_process = NextTileLen(in_offset, vec_len_);
       copy::CopyGmToVec(in_q_, global_in_[in_offset], num_elems_to_process);
-      LocalTensor<T> vec_in_lt = in_q_.DeQue<T>();
+      LocalTensor<T> vec_in_lt = in_q_.template DeQue<T>();
 
       while (segm_end < in_offset + num_elems_to_process) {
         // Last segment value. Zero if lies on tile boundary.
@@ -178,10 +190,10 @@ class KernelSegSumVecRevert {
                             ? 0
                             : vec_in_lt.GetValue(segm_end - in_offset - 1);
         SafeOutWrite(vec_out_lt, out_idx, accumulation + delta);
-        out_idx++;
 
-        // Keep track of the value of the last segment's end to subtract it from
-        // the next segment (recall scan speculation within tile)
+        // Keep track of the value of the last segment's end to subtract
+        // it from the next segment (recall scan speculation within
+        // tile)
         accumulation = -delta;
 
         // Mutates both segm_ind_lt and segm_idx
@@ -190,17 +202,18 @@ class KernelSegSumVecRevert {
 
       accumulation += vec_in_lt.GetValue(num_elems_to_process - 1);
 
-      in_q_.FreeTensor<T>(vec_in_lt);
+      in_q_.template FreeTensor<T>(vec_in_lt);
       in_offset += num_elems_to_process;
     }
 
-    segm_q_.FreeTensor<uint32_t>(segm_ind_lt);
+    segm_q_.template FreeTensor<uint32_t>(segm_ind_lt);
 
     // The last segment contains the remaining accumulation values.
-    vec_out_lt.SetValue(num_segments_ - 1, accumulation);
+    vec_out_lt.SetValue(out_idx, accumulation);
 
-    out_q_.EnQue<T>(vec_out_lt);
-    copy::CopyVecToGm(global_out_, out_q_, num_segments_);
+    const uint32_t tail_len = out_idx + 1;
+    out_q_.template EnQue<T>(vec_out_lt);
+    copy::CopyVecToGm(global_out_[out_offset_], out_q_, tail_len);
   }
 
  private:
@@ -222,4 +235,5 @@ class KernelSegSumVecRevert {
   const uint32_t num_tiles_;
 
   uint32_t segments_offset_ = 0;
+  uint32_t out_offset_ = 0;
 };
