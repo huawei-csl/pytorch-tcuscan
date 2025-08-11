@@ -74,5 +74,6 @@ at::Tensor run_spmv(const at::Tensor &vals, const at::Tensor &idx,
 
   return z;
 }
+
 }  // namespace spmv
 }  // namespace asc

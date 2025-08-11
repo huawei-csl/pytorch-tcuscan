@@ -797,6 +797,8 @@ if __name__ == "__main__":  # noqa
     parser.add_argument("--max_size", type=int, default=1e8, required=False)
     parser.add_argument("--num_cores", type=int, default=20, required=False)
     parser.add_argument("--density", type=float, default=None, required=False)
+    parser.add_argument("--min-iter-index", type=int, default=1, required=False)
+    parser.add_argument("--iter-step-multiplier", type=int, default=1, required=False)
     args = parser.parse_args()
 
     bench = args.bench
@@ -806,6 +808,8 @@ if __name__ == "__main__":  # noqa
     s = args.s
     k = args.k
     density = args.density
+    min_iter_index = args.min_iter_index
+    iter_step_multiplier = args.iter_step_multiplier
 
     if DEVICE == "npu":
         device = Device(torch.npu, NPU_DEVICE)
@@ -816,13 +820,15 @@ if __name__ == "__main__":  # noqa
 
     # Maximum number of iterations
     max_iters = ceil(max_size / (num_cores * s * s))
-    iters = range(1, max_iters, 16 * 128 // s)
+    iters = range(min_iter_index, max_iters, iter_step_multiplier * 16 * 128 // s)
 
     logger.info("*******************************")
     logger.info(f"* bench          : {bench}")
     logger.info(f"* dtype          : {dtype}")
     logger.info(f"* max_size       : {max_size}")
     logger.info(f"* # of Iters     : {len(iters)}")
+    logger.info(f"* min_iter_index : {min_iter_index}")
+    logger.info(f"* iter_step_multiplier : {iter_step_multiplier}")
     logger.info(f"* num_cores      : {num_cores}")
     logger.info(f"* s              : {s}")
     logger.info(f"* K              : {k}")

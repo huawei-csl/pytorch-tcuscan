@@ -35,6 +35,7 @@ int main(int argc, char* argv[]) {
 
   std::cout << "Reading matrix: " << matrixfile << std::endl;
 
+  std::string omp_num_threads = std::getenv("OMP_NUM_THREADS");
   std::ifstream mtx_file(matrixfile);
 
   SparseMatrixRowMajor mat;
@@ -52,8 +53,9 @@ int main(int argc, char* argv[]) {
   const std::string newDelimiter = ".";
   const std::string matname = token.substr(0, token.find(newDelimiter));
 
-  std::ofstream fout("bench_results_eigen_spmv_" + matname + ".csv",
-                     std::ios::app);
+  std::ofstream fout(
+      "bench_results_eigen_spmv_" + omp_num_threads + "T_" + matname + ".csv",
+      std::ios::app);
   fout << "benchname,size,time_us" << std::endl;
 
   for (int i = 0; i < n_execs; i++) {

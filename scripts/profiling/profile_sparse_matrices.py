@@ -285,6 +285,36 @@ def spmv_multi_cube_benchmark(device: Device, B: csr_matrix, s: int):
     return _run_benchmark(device, run_spmv_multi_cube), len(vals)
 
 
+def spmv_vec_only_benchmark(device: Device, B: csr_matrix, s: int):
+    """
+    Benchmark TCUSCAN SpMV kernel.
+
+    Args:
+        device: Device to run benchmark on.
+        B: Input CSR Matrix
+        s: Matrix size tiling parameter.
+
+    Returns:
+        Average time in microseconds.
+    """
+    rng = np.random.default_rng(seed=42)
+    vals = torch.from_numpy((B.data).astype(np.float16))
+    idx = torch.from_numpy((B.indptr).astype(np.uint32))
+    cols = torch.from_numpy((B.indices).astype(np.uint32))
+    vector = torch.from_numpy(rng.uniform(1, 9, len(idx) - 1).astype(np.float16))
+    vals_npu = vals.npu()
+    idx_npu = idx.npu()
+    col_npu = cols.npu()
+    vec_npu = vector.npu()
+
+    torch.npu.synchronize()
+
+    def run_spmv():
+        _ = tcuscan_ops.run_spmv_vec_only(vals_npu, idx_npu, col_npu, vec_npu, s)
+
+    return _run_benchmark(device, run_spmv), len(vals)
+
+
 def spmv_benchmark(device: Device, B: csr_matrix, s: int):
     """
     Benchmark TCUSCAN SpMV kernel.
@@ -382,7 +412,13 @@ def benchmark(
         fn: Function to benchmark.
         benchname: name of the benchmark used
     """
-    filename = f"bench_results_{op_name}_{dtype}_{benchname}.csv"
+    report_path = os.getenv("TCUSCAN_BENCHMARK_REPORT_PATH", "./")
+    if not os.path.exists(report_path):
+        os.makedirs(report_path)
+    logger.info(f"Directory that reports are stored: {report_path}")
+    filename = os.path.join(
+        report_path, f"bench_results_{op_name}_{dtype}_{benchname}.csv"
+    )
     with open(filename, "w", encoding="UTF-8") as fd:
         fd.write("benchname,operator,dtype,nnz,time_us\n")
 
