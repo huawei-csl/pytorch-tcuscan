@@ -82,18 +82,19 @@ at::Tensor run_csr_gather(const at::Tensor &values, const at::Tensor &cols,
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();
 
-  const uint32_t tile_len = 4 * 1024;
-
   const at::Tensor z = at::empty_like(values);
   const at::Tensor workspace_tensor = alloc_workspace(0, device);
 
   const uint32_t values_len = values.numel();
   const uint32_t rows_len = rows.numel();
   const uint32_t x_len = x.numel();
-  const CSRGatherTiling tiling{values_len, rows_len, x_len, tile_len};
+
+  constexpr uint32_t TILE_LEN = 1024;
+
+  const CSRGatherTiling tiling{values_len, rows_len, x_len, TILE_LEN};
   uint8_t *tiling_device = alloc_copy_tiling(tiling);
 
-  uint32_t block_dim = host_utils::CeilDiv(values_len, tile_len);
+  uint32_t block_dim = host_utils::CeilDiv(values_len, TILE_LEN);
   block_dim = block_dim > max_aiv_cores ? max_aiv_cores : block_dim;
 
   if (block_dim <= 1) {

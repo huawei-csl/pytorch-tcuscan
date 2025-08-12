@@ -8,8 +8,8 @@ PROFILING_SCRIPTS_PATH=scripts/profiling/
 CONDA_ENV_NAME="pytorch_tcuscan"
 
 TORCH_NPU_URL=https://gitee.com/ascend/pytorch/releases/download
-PT_WHEEL_NAME=torch_npu-2.4.0.post4-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
-PT_WHEEL_URL=${TORCH_NPU_URL}/v7.0.0-pytorch2.4.0/${PT_WHEEL_NAME}
+PT_WHEEL_NAME=torch_npu-2.6.0.post1-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
+PT_WHEEL_URL=https://gitee.com/ascend/pytorch/releases/download/v7.1.0.1-pytorch2.6.0/${PT_WHEEL_NAME}
 
 PT_WHEEL_AARCH_NAME=torch_npu-2.4.0.post4-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl
 PT_WHEEL_AARCH_URL=${TORCH_NPU_URL}/v7.0.0-pytorch2.4.0/${PT_WHEEL_AARCH_NAME}
@@ -44,8 +44,8 @@ create_conda_env:
 
 setup_once:
 	pip3 install -r requirements.txt
-	wget -nc ${PYTORCH_ASCEND_WHEEL_URL}
-	pip3 install --force-reinstall ${PYTORCH_ASCEND_WHEEL_NAME} --index-url https://download.pytorch.org/whl/cpu
+	wget -nc ${PT_WHEEL_URL}
+	pip3 install --force-reinstall ${PT_WHEEL_NAME} --index-url https://download.pytorch.org/whl/cpu
 
 # For 910B2 experiments, you need to update the L2_SIZE (constexpr) and SOC_VERSION (const static char*) in the code
 setup_once_aarch64:

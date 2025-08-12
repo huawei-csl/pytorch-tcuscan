@@ -38,7 +38,7 @@ _CSR_GATHER_SIZES = [
     1024 * 1024 - 31,
 ]
 
-_X_LENS = [256, 512, 1024, 2048]
+_X_LENS = [256, 512, 1024, 2048, 70000]
 
 
 def get_profiling_lengths():

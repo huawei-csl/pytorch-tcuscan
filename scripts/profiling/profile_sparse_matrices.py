@@ -279,7 +279,7 @@ def spmv_multi_cube_benchmark(device: Device, B: csr_matrix, s: int):
 
     def run_spmv_multi_cube():
         _ = tcuscan_ops.run_spmv_multi_cube(
-            vals_npu, idx_npu, col_npu, vec_npu, s, upper, lower_strict
+            vals_npu, idx_npu, col_npu, vec_npu, upper, lower_strict
         )
 
     return _run_benchmark(device, run_spmv_multi_cube), len(vals)

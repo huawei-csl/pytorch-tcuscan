@@ -156,7 +156,7 @@ class KernelCSRGather {
   const uint32_t rows_in_len_;
   const uint32_t x_in_len_;
   const uint32_t tile_len_;
-  const uint16_t num_tiles_;
+  const uint32_t num_tiles_;
   const uint32_t max_num_tiles_per_block_;
 };
 
