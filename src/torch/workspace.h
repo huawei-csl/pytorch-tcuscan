@@ -241,14 +241,19 @@ namespace seg_sum {
 /**
  * @brief Calculate the workspace size for `seg_sum_single_core`.
  *
+ * @tparam InputT Element input data type
+ * @tparam OutputT Element output data type
  * @param [in] input_elems Number of elements in the input vector.
  * @param [in] matmul_size Size of the matmul used in scan.
  * @return Size of the workspace in bytes.
  */
+template <typename InputT, typename OutputT>
 constexpr uint32_t get_workspace_size(size_t input_elems, size_t matmul_size) {
   const uint32_t padded_input_len =
       host_utils::AlignUp(input_elems, matmul_size * matmul_size);
-  const uint32_t total_size = padded_input_len * sizeof(float);
+  // Keep a copy of the input (padded) and the output.
+  const uint32_t total_size =
+      padded_input_len * (sizeof(InputT) + sizeof(OutputT));
 
   return total_size;
 }
@@ -256,11 +261,15 @@ constexpr uint32_t get_workspace_size(size_t input_elems, size_t matmul_size) {
 /**
  * @brief Calculate the workspace size for `seg_sum_single_core`.
  *
+ * @tparam InputT Element input data type
+ * @tparam OutputT Element output data type
  * @param [in] tiling Tiling parameters used in the kernel.
  * @return Size of the workspace in bytes.
  */
+template <typename InputT, typename OutputT>
 constexpr uint32_t get_workspace_size(const SegSumSingleCoreTiling& tiling) {
-  return seg_sum::get_workspace_size(tiling.num_elems, tiling.tile_len);
+  return seg_sum::get_workspace_size<InputT, OutputT>(tiling.num_elems,
+                                                      tiling.tile_len);
 }
 
 }  // namespace seg_sum

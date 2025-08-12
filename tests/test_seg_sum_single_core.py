@@ -36,20 +36,21 @@ def uniform_rvs(shape):
 
 
 def _test_tcuscan_seg_sum_single_core(
-    num_segments: int, num_cols: int, s: int, density: float
+    num_segments: int, num_cols: int, s: int, density: float, dtype: torch.dtype
 ):
+    sp_dtype = np.float32 if dtype == torch.float16 else np.int32
 
     A = sp_random(
         num_segments,
         num_cols,
         density=density,
         format="csr",
-        dtype=np.float32,
+        dtype=sp_dtype,
         data_rvs=uniform_rvs,
     )
 
-    ones = torch.ones(num_cols).half()
-    values = (A.data).astype(np.float16)
+    ones = np.ones(num_cols).astype(sp_dtype)
+    values = (A.data).astype(sp_dtype)
     indices = (A.indptr).astype(np.uint32)
     nnz = A.nnz
 
@@ -63,7 +64,7 @@ def _test_tcuscan_seg_sum_single_core(
         len(indices) == num_segments
     ), f"Number of segments. vals: {len(values)}, indices: {len(indices)}"
 
-    values_npu = torch.from_numpy(values).npu().half()
+    values_npu = torch.from_numpy(values).npu().to(dtype)
     indices_npu = torch.from_numpy(indices).npu().to(torch.uint32)
 
     torch.npu.synchronize()
@@ -93,26 +94,10 @@ def _test_tcuscan_seg_sum_single_core(
 
 @pytest.mark.parametrize("num_segments", _NUM_SEGMENTS)
 @pytest.mark.parametrize("num_cols", _NUM_COLUMNS)
-def test_tcuscan_segmented_sum_s_32(num_segments: int, num_cols: int):
-    s = 32
+@pytest.mark.parametrize("s", [32, 64, 128])  # 32, 64,
+@pytest.mark.parametrize("dtype", [torch.int8, torch.float16], ids=str)
+def test_tcuscan_segmented_sum(
+    num_segments: int, num_cols: int, s: int, dtype: torch.dtype
+):
     density = 0.01
-
-    _test_tcuscan_seg_sum_single_core(num_segments, num_cols, s, density)
-
-
-@pytest.mark.parametrize("num_segments", _NUM_SEGMENTS)
-@pytest.mark.parametrize("num_cols", _NUM_COLUMNS)
-def test_tcuscan_segmented_sum_s_64(num_segments: int, num_cols: int):
-    s = 64
-    density = 0.01
-
-    _test_tcuscan_seg_sum_single_core(num_segments, num_cols, s, density)
-
-
-@pytest.mark.parametrize("num_segments", _NUM_SEGMENTS)
-@pytest.mark.parametrize("num_cols", _NUM_COLUMNS)
-def test_tcuscan_segmented_sum_s_128(num_segments: int, num_cols: int):
-    s = 128
-    density = 0.01
-
-    _test_tcuscan_seg_sum_single_core(num_segments, num_cols, s, density)
+    _test_tcuscan_seg_sum_single_core(num_segments, num_cols, s, density, dtype)

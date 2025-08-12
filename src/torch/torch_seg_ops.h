@@ -18,6 +18,7 @@
 #include "aclrtlaunch_seg_scan_single_core.h"
 #include "aclrtlaunch_seg_scan_vec_single_core.h"
 #include "aclrtlaunch_seg_sum_single_core_fp16.h"
+#include "aclrtlaunch_seg_sum_single_core_int8.h"
 #include "commons.h"
 #include "tiling/platform/platform_ascendc.h"
 #include "torch_npu/csrc/core/npu/NPUStream.h"
@@ -196,6 +197,9 @@ at::Tensor run_seg_sum_single_core(const at::Tensor &x,
                                    const at::Tensor &indptr, int s) {
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();
+  const auto dtype = x.options().dtype();
+  const auto dtype_out =
+      dtype == torch::kHalf ? torch::kFloat32 : torch::kInt32;
 
   constexpr uint32_t BLOCK_DIM = 1;  // single core
   const uint32_t matmul_size = static_cast<uint32_t>(s);
@@ -203,22 +207,36 @@ at::Tensor run_seg_sum_single_core(const at::Tensor &x,
   const uint32_t num_segments = indptr.numel();
 
   const at::Tensor z = at::empty(
-      {num_segments}, at::TensorOptions().dtype(at::kFloat).device(device));
+      {num_segments}, at::TensorOptions().dtype(dtype_out).device(device));
 
   const SegSumSingleCoreTiling tiling{total_length, num_segments, matmul_size};
   uint8_t *tiling_device = alloc_copy_tiling(tiling);
 
-  const uint32_t user_workspace_size =
-      workspace::seg_sum::get_workspace_size(tiling);
+  if (dtype == torch::kHalf) {
+    const uint32_t user_workspace_size =
+        workspace::seg_sum::get_workspace_size<int16_t /* half */, float>(
+            tiling);
 
-  const at::Tensor workspace_tensor =
-      alloc_workspace(user_workspace_size, device);
+    const at::Tensor workspace_tensor =
+        alloc_workspace(user_workspace_size, device);
 
-  ACLRT_LAUNCH_KERNEL(seg_sum_single_core_fp16)
-  (BLOCK_DIM, acl_stream, const_cast<void *>(x.storage().data()),
-   const_cast<void *>(indptr.storage().data()),
-   const_cast<void *>(z.storage().data()),
-   const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
+    ACLRT_LAUNCH_KERNEL(seg_sum_single_core_fp16)
+    (BLOCK_DIM, acl_stream, const_cast<void *>(x.storage().data()),
+     const_cast<void *>(indptr.storage().data()),
+     const_cast<void *>(z.storage().data()),
+     const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
+  } else {
+    const uint32_t user_workspace_size =
+        workspace::seg_sum::get_workspace_size<int8_t, int32_t>(tiling);
+
+    const at::Tensor workspace_tensor =
+        alloc_workspace(user_workspace_size, device);
+    ACLRT_LAUNCH_KERNEL(seg_sum_single_core_int8)
+    (BLOCK_DIM, acl_stream, const_cast<void *>(x.storage().data()),
+     const_cast<void *>(indptr.storage().data()),
+     const_cast<void *>(z.storage().data()),
+     const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
+  }
 
   aclrtFree(tiling_device);
   aclrtSynchronizeStream(acl_stream);

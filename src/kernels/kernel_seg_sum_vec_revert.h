@@ -22,12 +22,12 @@ using namespace kernel_utils;
  * Given, vec_in = [1,2,3,4,5,6,7,8,9,10] and segm_ind_in = [0, 4, 7]
  * returns vec_out = (1+2+3+4, 5+6, 7+8+9+10) = (10, 11, 34)
  *
- * @tparam T Input data type
+ * @tparam T Input data type. Supports `float` and `int32_t`.
  * @tparam SyncBefore If true, the `KernelSegSumVecRevert` (this kernel) waits
  * for the cube unit to send a synchronization signal after each matrix tile is
  * ready. Matrix tile has length `tile_len * tile_len`.
  */
-template <typename T = float, bool SyncBefore = false>
+template <typename T, bool SyncBefore = false>
 class KernelSegSumVecRevert {
   constexpr static uint32_t BUFFER_NUM = 2;
 
@@ -110,7 +110,7 @@ class KernelSegSumVecRevert {
    * @param value Value to write.
    */
   __aicore__ inline void SafeOutWrite(LocalTensor<T> &vec_out_lt,
-                                      uint32_t &index, T value) {
+                                      uint32_t &index, const T value) {
     vec_out_lt.SetValue(index, value);
     index++;
     // Write tile to GM and "re-allocate" the output tile.
