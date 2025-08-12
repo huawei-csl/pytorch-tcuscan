@@ -43,7 +43,7 @@ std::tuple<at::Tensor, at::Tensor> run_radix_sort(const at::Tensor &x, int S) {
   const uint32_t tile_elems = matmul_size * matmul_size;
   const size_t num_tiles = total_length / tile_elems;
 
-  uint32_t block_dim = ascendc_platform->GetCoreNum() / 2;
+  uint32_t block_dim = ascendc_platform->GetCoreNumAic();
   while (num_tiles % block_dim != 0) {
     block_dim--;
   }

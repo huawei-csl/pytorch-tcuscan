@@ -161,7 +161,7 @@ at::Tensor run_scan_multi_core(const at::Tensor &x, int S) {
   const uint32_t tile_elems = matmul_size * matmul_size;
   const size_t num_tiles = host_utils::CeilDiv(total_length, tile_elems);
 
-  uint32_t block_dim = ascendc_platform->GetCoreNum() / 2;
+  uint32_t block_dim = ascendc_platform->GetCoreNumAic();
   if (num_tiles < block_dim) {
     block_dim = num_tiles;
   }
@@ -224,7 +224,7 @@ at::Tensor run_scan_multi_core_no_l2(const at::Tensor &x, int S) {
   const uint32_t tile_elems = matmul_size * matmul_size;
   const size_t num_tiles = host_utils::CeilDiv(total_length, tile_elems);
 
-  uint32_t block_dim = ascendc_platform->GetCoreNum() / 2;
+  uint32_t block_dim = ascendc_platform->GetCoreNumAic();
   if (num_tiles < block_dim) {
     block_dim = num_tiles;
   }
@@ -286,7 +286,7 @@ at::Tensor run_row_scan(const at::Tensor &x, int S) {
 
   const size_t num_tiles = M;
 
-  uint32_t block_dim = ascendc_platform->GetCoreNum() / 2;
+  uint32_t block_dim = ascendc_platform->GetCoreNumAic();
   if (num_tiles < block_dim) {
     block_dim = num_tiles;
   }
@@ -338,7 +338,7 @@ at::Tensor run_block_scan(const at::Tensor &x, const at::Tensor &upper,
   const uint32_t tile_elems = s * s;
   const size_t num_tiles = host_utils::CeilDiv(total_len, tile_elems);
 
-  uint32_t block_dim = ascendc_platform->GetCoreNum() / 2;
+  uint32_t block_dim = ascendc_platform->GetCoreNumAic();
   if (num_tiles < block_dim) {
     block_dim = num_tiles;
   }
@@ -392,7 +392,7 @@ at::Tensor run_scan_multi_cube(const at::Tensor &x, const at::Tensor &upper,
   const uint32_t tile_elems = s * s;
   const size_t num_tiles = host_utils::CeilDiv(total_len, tile_elems);
 
-  uint32_t block_dim = ascendc_platform->GetCoreNum() / 2;
+  uint32_t block_dim = ascendc_platform->GetCoreNumAic();
   if (num_tiles < block_dim) {
     block_dim = num_tiles;
   }

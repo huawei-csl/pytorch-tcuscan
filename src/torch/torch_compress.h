@@ -47,7 +47,7 @@ at::Tensor run_compress(const at::Tensor &x, const at::Tensor &mask, int S) {
 
   const uint32_t num_tiles = total_length / tile_elems;
 
-  uint32_t block_dim = ascendc_platform->GetCoreNum() / 2;
+  uint32_t block_dim = ascendc_platform->GetCoreNumAic();
   while (num_tiles % block_dim != 0) {
     block_dim--;
   }
@@ -113,7 +113,7 @@ at::Tensor run_compress_pos(const at::Tensor &x, const at::Tensor &mask,
 
   const uint32_t num_tiles = total_length / tile_elems;
 
-  uint32_t block_dim = ascendc_platform->GetCoreNum() / 2;
+  uint32_t block_dim = ascendc_platform->GetCoreNumAic();
   while (num_tiles % block_dim != 0) {
     block_dim--;
   }

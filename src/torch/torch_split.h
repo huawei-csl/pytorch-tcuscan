@@ -243,7 +243,7 @@ std::tuple<at::Tensor, at::Tensor> run_topk_fp16(const at::Tensor &x,
 
   const uint32_t num_tiles = total_length / tile_elems;
 
-  uint32_t block_dim = ascendc_platform->GetCoreNum() / 2;
+  uint32_t block_dim = ascendc_platform->GetCoreNumAic();
   while (num_tiles % block_dim != 0) {
     block_dim--;
   }
