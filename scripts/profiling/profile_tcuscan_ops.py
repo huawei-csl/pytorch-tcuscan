@@ -205,7 +205,7 @@ def topk_benchmark(device: Device, size: int, dtype: torch.dtype, k: int) -> flo
         k: topk parameter.
 
     Returns:
-        Average time in microseconds.
+        Returns 2-tuple of average time in microseconds and k.
     """
     if dtype in {torch.float16, torch.float32}:
         x = torch.rand(size, device=device.str, dtype=dtype)
@@ -222,6 +222,41 @@ def topk_benchmark(device: Device, size: int, dtype: torch.dtype, k: int) -> flo
         _, _ = torch.topk(x, k)
 
     return _run_benchmark(device, run_topk), k
+
+
+def topk_tcuscan_benchmark(
+    device: Device, size: int, dtype: torch.dtype, k: int, s: int
+) -> float:
+    """
+    Benchmark TCUSCAN topk kernel.
+
+    Args:
+        device: Device to run benchmark on.
+        size: Size of the arrays to use.
+        dtype: Data type of the input/output arrays.
+        k: topk parameter.
+        s: Matrix size tiling parameter.
+
+    Returns:
+        Average time in microseconds.
+    """
+    if dtype in {torch.float16, torch.float32}:
+        x = torch.rand(size, device=device.str, dtype=dtype)
+    else:
+        x = torch.randint(
+            torch.iinfo(dtype).min,
+            torch.iinfo(dtype).max,
+            (size,),
+            device=device.str,
+            dtype=dtype,
+        )
+
+    def run_tcuscan_topk() -> None:
+        min_x = torch.min(x)
+        max_x = torch.max(x)
+        _, _ = tcuscan_ops.run_topk_int16(x, k, min_x, max_x, s)
+
+    return _run_benchmark(device, run_tcuscan_topk), k
 
 
 def sample_top_p(probs, p):
@@ -774,6 +809,7 @@ if __name__ == "__main__":  # noqa
             "scscan",
             "seg_scan_mc_revert",
             "topk",
+            "tcuscan_topk",
             "topp",
             "mcgather",
             "gather_spmv",
@@ -1033,6 +1069,18 @@ if __name__ == "__main__":  # noqa
             partial(topk_benchmark, dtype=tdtype, k=k),
             sizes,
         )
+    elif bench == "tcuscan_topk" and dtype in ["int16"]:
+        k = args.k
+        tdtype = STR_TO_DTYPE[dtype]
+
+        benchmark(
+            device,
+            f"tcuscan_topk_{k}_{s}",
+            dtype,
+            partial(topk_tcuscan_benchmark, dtype=tdtype, s=s, k=k),
+            sizes,
+        )
+
     elif bench == "top_p" and dtype in ["fp16"]:
         tdtype = STR_TO_DTYPE[dtype]
 

@@ -244,4 +244,10 @@ profile_int16_radix_sort:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench radix_sort --dtype int16 --s 64 --num_cores 20
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench radix_sort --dtype int16 --s 128 --num_cores 20
 
+profile_int16_topk:
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench topk --dtype int16 --s 128 --num_cores 20
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench tcuscan_topk --dtype int16 --s 32 --num_cores 20
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench tcuscan_topk --dtype int16 --s 64 --num_cores 20
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench tcuscan_topk --dtype int16 --s 128 --num_cores 20
+
 include Makefile.spaa.mk Makefile.spmv.mk
