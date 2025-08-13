@@ -14,15 +14,16 @@ import typing
 from dataclasses import dataclass
 from functools import partial
 from typing import Optional
+
 import numpy as np
-import torch
 import torch.nn.functional as F
-from scipy.sparse import random, csr_matrix
+from scipy.sparse import csr_matrix, random
+
+import torch
 
 
 def power_law_rvs(shape, exponent=2.0):
-    u = np.random.uniform(0, 1, size=shape)
-    return u ** (-1.0 / (exponent - 1))
+    return np.random.power(exponent, size=shape)
 
 
 def uniform_rvs(shape):
@@ -309,6 +310,7 @@ def benchmark(  # noqa
     density: Optional[float],
     nnr: int,
     distr: str,
+    alpha: float,
 ) -> None:
     """
     Benchmark a given function.
@@ -328,6 +330,11 @@ def benchmark(  # noqa
         density_str = "density,"
     else:
         density_str = ""
+
+    if distr == "PowerLaw":
+        alpha_str = "alpha,"
+    else:
+        alpha_str = ""
     filename = f"random_matrices_{distr}_{op_name}_{dtype}_{ '' if (density is None) else str(density)}.csv"
     with open(
         filename,
@@ -336,15 +343,15 @@ def benchmark(  # noqa
     ) as fd:
         global once
         if once is True:
-            fd.write(f"operator,dtype,size,nrow,{density_str}time_us\n")
+            fd.write(f"operator,dtype,size,nrow,{alpha_str}{density_str}time_us\n")
             once = False
         time = fn(device)
         op_name = f"{op_name}" + f"{'' if (density is None) else '_' + str(density)}"
-        fd.write(
-            f"{op_name},{dtype},{size},{nnr},{'' if (density is None) else str(density)+','}{time:.2f}\n"
-        )
+        density_str = "" if (density is None) else "f{density},"
+        dist_str = "" if (distr == "Uniform") else str(alpha)
+        fd.write(f"{op_name},{dtype},{size},{nnr},{dist_str}{density_str}{time:.2f}\n")
         logger.info(
-            f" OP:{op_name}, dtype: {dtype}, device: {device.str}, density: { None if (density is None) else str(density)} size: {size}"
+            f" OP:{op_name}, dtype: {dtype}, device: {device.str}, density: {density} size: {size}"
         )
     fd.close()
 
@@ -375,12 +382,13 @@ if __name__ == "__main__":
     parser.add_argument("--max_size", type=int, default=1e8, required=False)
     parser.add_argument("--num_cores", type=int, default=20, required=False)
     parser.add_argument("--density", type=float, default=1)
+    parser.add_argument("--alpha", type=float, default=2)
     parser.add_argument(
         "--prob", type=str, choices=["PowerLaw", "Uniform"], default="Uniform"
     )
 
     args = parser.parse_args()
-
+    alpha = args.alpha
     distr = args.prob
     dtype = args.dtype
     bench = args.bench
@@ -396,7 +404,7 @@ if __name__ == "__main__":
         device = Device(torch, "cpu")
     else:
         device = Device(torch.cuda, "cuda:0")
-
+    # 71680 is the maximum supported nnr for spmv
     for nnr in range(s * num_cores, 71680, s * 20):
         vec_len = nnr * nnr * density
         B = []
@@ -417,7 +425,7 @@ if __name__ == "__main__":
                 density=density,
                 format="csr",
                 dtype=np.float32,
-                data_rvs=lambda shape: power_law_rvs(shape, exponent=2.5),
+                data_rvs=lambda shape: power_law_rvs(shape, exponent=alpha),
             )
         my_x = torch.tensor(B.data).to(torch.float16)
         f = np.zeros(B.nnz + 1)
@@ -437,6 +445,7 @@ if __name__ == "__main__":
                 density,
                 nnr,
                 distr,
+                alpha,
             )
         elif bench == "custom_copy" and dtype in ["fp32", "fp16"]:
             tdtype = STR_TO_DTYPE[dtype]
@@ -449,6 +458,7 @@ if __name__ == "__main__":
                 density,
                 nnr,
                 distr,
+                alpha,
             )
         elif bench == "vec_seg_scan_sc" and dtype in ["fp16"]:
             benchmark(
@@ -460,6 +470,7 @@ if __name__ == "__main__":
                 density,
                 nnr,
                 distr,
+                alpha,
             )
         elif bench == "compress" and dtype in ["fp16", "fp32"]:
             benchmark(
@@ -471,6 +482,7 @@ if __name__ == "__main__":
                 density,
                 nnr,
                 distr,
+                alpha,
             )
         elif bench == "mcscan" and dtype in ["fp16"]:
             benchmark(
@@ -482,6 +494,7 @@ if __name__ == "__main__":
                 density,
                 nnr,
                 distr,
+                alpha,
             )
         elif bench == "diff" and dtype in ["fp16", "fp32"]:
             my_x = pad_to_multiple(my_x, s)
@@ -495,6 +508,7 @@ if __name__ == "__main__":
                 density,
                 nnr,
                 distr,
+                alpha,
             )
         elif bench == "gather_spmv" and dtype in ["fp32"]:
             values = (B.data).astype(np.float32)
@@ -513,11 +527,12 @@ if __name__ == "__main__":
                 density,
                 nnr,
                 distr,
+                alpha,
             )
         elif bench == "spmv" and dtype in ["fp16"]:
             benchmark(
                 device,
-                f"spmv_{s}",
+                f"spmv_{alpha}_{s}",
                 dtype,
                 partial(
                     baseline_spmv,
@@ -528,6 +543,7 @@ if __name__ == "__main__":
                 density,
                 nnr,
                 distr,
+                alpha,
             )
         else:
             raise RuntimeError(
