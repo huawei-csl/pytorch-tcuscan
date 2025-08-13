@@ -20,5 +20,7 @@ struct MultiCoreScanTiling {
   uint32_t num_elems;
   /// @brief Size of the matmul tile used in the cube part.
   uint32_t matmul_size;
+  /// @brief L2 cache size between cores and global memory.
+  uint64_t l2_cache_size;
 };
 #pragma pack(pop)

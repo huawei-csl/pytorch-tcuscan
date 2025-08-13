@@ -34,7 +34,7 @@ namespace compress {
  */
 at::Tensor run_compress(const at::Tensor &x, const at::Tensor &mask, int S) {
   const auto ascendc_platform =
-      platform_ascendc::PlatformAscendCManager::GetInstance(SOC_VERSION);
+      platform_ascendc::PlatformAscendCManager::GetInstance();
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();
   const auto dtype = x.options().dtype();
@@ -100,7 +100,7 @@ at::Tensor run_compress(const at::Tensor &x, const at::Tensor &mask, int S) {
 at::Tensor run_compress_pos(const at::Tensor &x, const at::Tensor &mask,
                             const at::Tensor &pos, int S) {
   const auto ascendc_platform =
-      platform_ascendc::PlatformAscendCManager::GetInstance(SOC_VERSION);
+      platform_ascendc::PlatformAscendCManager::GetInstance();
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();
   const auto dtype = x.options().dtype();

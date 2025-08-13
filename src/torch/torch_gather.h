@@ -37,7 +37,7 @@ namespace gather {
 at::Tensor run_mc_gather(const at::Tensor &values, const at::Tensor &idxs,
                          const uint32_t tile_len) {
   const auto ascendc_platform =
-      platform_ascendc::PlatformAscendCManager::GetInstance(SOC_VERSION);
+      platform_ascendc::PlatformAscendCManager::GetInstance();
 
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
 
@@ -77,7 +77,7 @@ at::Tensor run_mc_gather(const at::Tensor &values, const at::Tensor &idxs,
 at::Tensor run_csr_gather(const at::Tensor &values, const at::Tensor &cols,
                           const at::Tensor &rows, const at::Tensor &x) {
   const auto ascendc_platform =
-      platform_ascendc::PlatformAscendCManager::GetInstance(SOC_VERSION);
+      platform_ascendc::PlatformAscendCManager::GetInstance();
   const uint32_t max_aiv_cores = ascendc_platform->GetCoreNumAiv();
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();
@@ -126,7 +126,7 @@ at::Tensor run_csr_gather(const at::Tensor &values, const at::Tensor &cols,
 at::Tensor run_gather_spmv(const at::Tensor &values, const at::Tensor &idxs,
                            const uint32_t tile_len) {
   const auto ascendc_platform =
-      platform_ascendc::PlatformAscendCManager::GetInstance(SOC_VERSION);
+      platform_ascendc::PlatformAscendCManager::GetInstance();
   const uint32_t max_aiv_cores = ascendc_platform->GetCoreNumAiv();
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
 

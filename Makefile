@@ -11,8 +11,8 @@ TORCH_NPU_URL=https://gitee.com/ascend/pytorch/releases/download
 PT_WHEEL_NAME=torch_npu-2.6.0.post1-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
 PT_WHEEL_URL=https://gitee.com/ascend/pytorch/releases/download/v7.1.0.1-pytorch2.6.0/${PT_WHEEL_NAME}
 
-PT_WHEEL_AARCH_NAME=torch_npu-2.4.0.post4-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl
-PT_WHEEL_AARCH_URL=${TORCH_NPU_URL}/v7.0.0-pytorch2.4.0/${PT_WHEEL_AARCH_NAME}
+PT_WHEEL_AARCH_NAME=torch_npu-2.5.1.post2-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl
+PT_WHEEL_AARCH_URL=${TORCH_NPU_URL}/v7.1.0.1-pytorch2.5.1/${PT_WHEEL_AARCH_NAME}
 
 
 ASCEND_DEVICE=Ascend910B4
@@ -121,29 +121,20 @@ profile_mcscan_int8:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench mcscan --s 128 --dtype int8
 
 
-profile_mcscan:
+profile_mcscan: profile_all_s_fp16_mcscan
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench copy --dtype fp16
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench scan --s 128 --dtype fp16
-	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench mcscan --s 32 --dtype fp16
-	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench mcscan --s 64 --dtype fp16
-	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench mcscan --s 128 --dtype fp16
 
 profile_mcscan_no_l2: profile_mcscan
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench mcscan_no_l2 --s 32 --dtype fp16
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench mcscan_no_l2 --s 64 --dtype fp16
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench mcscan_no_l2 --s 128 --dtype fp16
 
-profile_row_scan:
+profile_row_scan: profile_all_s_fp16_row_scan
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench cast --dtype fp16
-	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench row_scan --s 32 --dtype fp16
-	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench row_scan --s 64 --dtype fp16
-	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench row_scan --s 128 --dtype fp16
 
-profile_block_scan:
+profile_block_scan: profile_all_s_fp16_block_scan
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench cast --dtype fp16
-	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench block_scan --s 32 --dtype fp16
-	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench block_scan --s 64 --dtype fp16
-	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench block_scan --s 128 --dtype fp16
 
 profile_down_sweep:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench copy --dtype fp32

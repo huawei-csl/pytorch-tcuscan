@@ -32,7 +32,7 @@ namespace sort {
  */
 std::tuple<at::Tensor, at::Tensor> run_radix_sort(const at::Tensor &x, int S) {
   const auto ascendc_platform =
-      platform_ascendc::PlatformAscendCManager::GetInstance(SOC_VERSION);
+      platform_ascendc::PlatformAscendCManager::GetInstance();
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();
   const auto dtype = x.options().dtype();

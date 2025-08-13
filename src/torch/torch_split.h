@@ -36,7 +36,7 @@ namespace split {
  */
 at::Tensor run_split(const at::Tensor &x, const at::Tensor &mask, int S) {
   const auto ascendc_platform =
-      platform_ascendc::PlatformAscendCManager::GetInstance(SOC_VERSION);
+      platform_ascendc::PlatformAscendCManager::GetInstance();
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();
   const auto dtype = x.options().dtype();
@@ -97,7 +97,7 @@ std::tuple<at::Tensor, at::Tensor> run_split_ind(const at::Tensor &x,
                                                  const at::Tensor &indices_in,
                                                  int S) {
   const auto ascendc_platform =
-      platform_ascendc::PlatformAscendCManager::GetInstance(SOC_VERSION);
+      platform_ascendc::PlatformAscendCManager::GetInstance();
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();
   const auto dtype = x.options().dtype();
@@ -161,7 +161,7 @@ std::tuple<at::Tensor, at::Tensor> run_topk_int16(const at::Tensor &x,
                                                   uint32_t k, int16_t x_min,
                                                   int16_t x_max, int S) {
   const auto ascendc_platform =
-      platform_ascendc::PlatformAscendCManager::GetInstance(SOC_VERSION);
+      platform_ascendc::PlatformAscendCManager::GetInstance();
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();
   const auto dtype = x.options().dtype();
@@ -230,7 +230,7 @@ std::tuple<at::Tensor, at::Tensor> run_topk_fp16(const at::Tensor &x,
                                                  uint32_t k, float x_min,
                                                  float x_max, int S) {
   const auto ascendc_platform =
-      platform_ascendc::PlatformAscendCManager::GetInstance(SOC_VERSION);
+      platform_ascendc::PlatformAscendCManager::GetInstance();
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();
   const auto dtype = x.options().dtype();

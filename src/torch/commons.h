@@ -14,8 +14,6 @@
 #include "tiling/platform/platform_ascendc.h"
 #include "torch_npu/csrc/core/npu/NPUStream.h"
 
-const static char *SOC_VERSION = "Ascend910B4";
-
 namespace asc {
 /**
  * @brief Allocates a torch tensor for AscendC kernel working space.
@@ -26,7 +24,7 @@ namespace asc {
  */
 at::Tensor alloc_workspace(uint32_t user_workspace_size, at::Device device) {
   const auto ascendc_platform =
-      platform_ascendc::PlatformAscendCManager::GetInstance(SOC_VERSION);
+      platform_ascendc::PlatformAscendCManager::GetInstance();
   const uint32_t system_workspace_size =
       static_cast<uint32_t>(ascendc_platform->GetLibApiWorkSpaceSize());
   const uint32_t workspace_size = user_workspace_size + system_workspace_size;
@@ -47,7 +45,7 @@ at::Tensor alloc_workspace(uint32_t user_workspace_size, at::Device device) {
 at::Tensor alloc_zeros_workspace(uint32_t user_workspace_size,
                                  at::Device device) {
   const auto ascendc_platform =
-      platform_ascendc::PlatformAscendCManager::GetInstance(SOC_VERSION);
+      platform_ascendc::PlatformAscendCManager::GetInstance();
   const uint32_t system_workspace_size =
       static_cast<uint32_t>(ascendc_platform->GetLibApiWorkSpaceSize());
   const uint32_t workspace_size = user_workspace_size + system_workspace_size;

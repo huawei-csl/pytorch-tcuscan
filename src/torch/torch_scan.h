@@ -145,7 +145,7 @@ at::Tensor run_scan_batch(const at::Tensor &x, int S) {
  */
 at::Tensor run_scan_multi_core(const at::Tensor &x, int S) {
   const auto ascendc_platform =
-      platform_ascendc::PlatformAscendCManager::GetInstance(SOC_VERSION);
+      platform_ascendc::PlatformAscendCManager::GetInstance();
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();
   const auto dtype = x.options().dtype();
@@ -166,7 +166,12 @@ at::Tensor run_scan_multi_core(const at::Tensor &x, int S) {
     block_dim = num_tiles;
   }
 
-  const MultiCoreScanTiling tiling{block_dim, total_length, matmul_size};
+  uint64_t l2_cache_size;
+  ascendc_platform->GetCoreMemSize(platform_ascendc::CoreMemType::L2,
+                                   l2_cache_size);
+
+  const MultiCoreScanTiling tiling{block_dim, total_length, matmul_size,
+                                   l2_cache_size};
   uint8_t *tiling_device = alloc_copy_tiling(tiling);
 
   if (dtype == torch::kHalf) {
@@ -208,7 +213,7 @@ at::Tensor run_scan_multi_core(const at::Tensor &x, int S) {
  */
 at::Tensor run_scan_multi_core_no_l2(const at::Tensor &x, int S) {
   const auto ascendc_platform =
-      platform_ascendc::PlatformAscendCManager::GetInstance(SOC_VERSION);
+      platform_ascendc::PlatformAscendCManager::GetInstance();
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();
   const auto dtype = x.options().dtype();
@@ -271,7 +276,7 @@ at::Tensor run_scan_multi_core_no_l2(const at::Tensor &x, int S) {
  */
 at::Tensor run_row_scan(const at::Tensor &x, int S) {
   const auto ascendc_platform =
-      platform_ascendc::PlatformAscendCManager::GetInstance(SOC_VERSION);
+      platform_ascendc::PlatformAscendCManager::GetInstance();
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();
   const auto dtype = x.options().dtype();
@@ -322,7 +327,7 @@ at::Tensor run_row_scan(const at::Tensor &x, int S) {
 at::Tensor run_block_scan(const at::Tensor &x, const at::Tensor &upper,
                           const at::Tensor &lower_strict) {
   const auto ascendc_platform =
-      platform_ascendc::PlatformAscendCManager::GetInstance(SOC_VERSION);
+      platform_ascendc::PlatformAscendCManager::GetInstance();
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();
   const auto dtype = x.options().dtype();
@@ -376,7 +381,7 @@ at::Tensor run_block_scan(const at::Tensor &x, const at::Tensor &upper,
 at::Tensor run_scan_multi_cube(const at::Tensor &x, const at::Tensor &upper,
                                const at::Tensor &lower_strict) {
   const auto ascendc_platform =
-      platform_ascendc::PlatformAscendCManager::GetInstance(SOC_VERSION);
+      platform_ascendc::PlatformAscendCManager::GetInstance();
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();
   const auto dtype = x.options().dtype();
@@ -397,7 +402,11 @@ at::Tensor run_scan_multi_cube(const at::Tensor &x, const at::Tensor &upper,
     block_dim = num_tiles;
   }
 
-  const ScanMultiCubeTiling tiling{block_dim, total_len, s};
+  uint64_t l2_cache_size;
+  ascendc_platform->GetCoreMemSize(platform_ascendc::CoreMemType::L2,
+                                   l2_cache_size);
+
+  const ScanMultiCubeTiling tiling{block_dim, total_len, s, l2_cache_size};
   uint8_t *tiling_device = alloc_copy_tiling(tiling);
 
   if (dtype == torch::kHalf) {

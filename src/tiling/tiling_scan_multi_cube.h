@@ -23,5 +23,7 @@ struct ScanMultiCubeTiling {
   /// @brief Matmul size used. Each block has length `matmul_size *
   /// matmul_size`.
   uint32_t matmul_size;
+  /// @brief L2 cache size between cores and global memory. Unit: bytes
+  uint64_t l2_cache_size;
 };
 #pragma pack(pop)
