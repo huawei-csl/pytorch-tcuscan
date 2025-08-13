@@ -42,12 +42,17 @@ class KernelSegSumVecRevert {
   __aicore__ inline KernelSegSumVecRevert(uint32_t vec_len,
                                           uint32_t num_segments,
                                           uint32_t tile_len)
-      : vec_core_num_(GetBlockNum() * GetTaskRation()),
+      : num_blocks_(GetBlockNum() * GetTaskRation()),
         vec_len_(vec_len),
         num_segments_(num_segments),
         tile_len_(tile_len),
         matrix_tile_len_(tile_len * tile_len),
-        num_tiles_(scalar::CeilDiv(vec_len_, tile_len_)) {}
+        num_tiles_(scalar::CeilDiv(vec_len_, tile_len_)),
+        max_num_tiles_per_block_(scalar::CeilDiv(num_tiles_, num_blocks_)) {
+    constexpr bool IS_DT_SUPPORTED =
+        std::is_same_v<T, float> || std::is_same_v<T, int32_t>;
+    static_assert(IS_DT_SUPPORTED, "Unsupported data type.");
+  }
 
   /**
    * @brief Initialize global and local memory structures.
@@ -163,6 +168,24 @@ class KernelSegSumVecRevert {
    * @brief Run the kernel.
    */
   __aicore__ inline void Process() {
+    if (GetSubBlockIdx() == 0) {
+      PipelineProcessWithCube();
+    } else {
+      SyncWithCubeNoop();
+    }
+  }
+
+ private:
+  __aicore__ inline void SyncWithCubeNoop() {
+    for (uint32_t tile_idx = 0; tile_idx < num_tiles_; tile_idx++) {
+      if constexpr (SyncBefore) {
+        if ((tile_idx * tile_len_) % matrix_tile_len_ == 0) {
+          sync::SyncGroup<sync::GroupSyncDirection::FULL>();
+        }
+      }
+    }
+  }
+  __aicore__ inline void PipelineProcessWithCube() {
     LocalTensor<uint32_t> segm_ind_lt = LoadNextSegmentTile();
     LocalTensor<T> vec_out_lt = out_q_.template AllocTensor<T>();
 
@@ -191,9 +214,9 @@ class KernelSegSumVecRevert {
                             : vec_in_lt.GetValue(segm_end - in_offset - 1);
         SafeOutWrite(vec_out_lt, out_idx, accumulation + delta);
 
-        // Keep track of the value of the last segment's end to subtract
-        // it from the next segment (recall scan speculation within
-        // tile)
+        // Keep track of the value of the last segment's end to
+        // subtract it from the next segment (recall scan
+        // speculation within tile)
         accumulation = -delta;
 
         // Mutates both segm_ind_lt and segm_idx
@@ -216,7 +239,6 @@ class KernelSegSumVecRevert {
     copy::CopyVecToGm(global_out_[out_offset_], out_q_, tail_len);
   }
 
- private:
   TPipe pipe_;
 
   TQue<QuePosition::VECIN, BUFFER_NUM> in_q_;
@@ -227,12 +249,13 @@ class KernelSegSumVecRevert {
   GlobalTensor<uint32_t> global_segm_in_;
   GlobalTensor<T> global_out_;
 
-  const uint32_t vec_core_num_;
+  const uint32_t num_blocks_;
   const uint32_t vec_len_;
   const uint32_t num_segments_;
   const uint32_t tile_len_;
   const uint32_t matrix_tile_len_;
   const uint32_t num_tiles_;
+  const uint32_t max_num_tiles_per_block_;
 
   uint32_t segments_offset_ = 0;
   uint32_t out_offset_ = 0;
