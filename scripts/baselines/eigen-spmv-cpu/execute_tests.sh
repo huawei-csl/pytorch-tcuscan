@@ -1,8 +1,9 @@
 #!/bin/bash
 
+
 # You must download the sparse suite matrices first using `sparse-suite-downloader`.
 BASE=/scratch/TCUSCAN/sparse-suite-matrices/ssgetpy-downloaded-matrices
-#BASE=${HOME}/.ssgetpy/MM
+# BASE=${HOME}/.ssgetpy/
 
 # Sparse suite matrices from DASP paper.
 ./build/spmv_sparsesuite ${BASE}/pwtk/pwtk.mtx

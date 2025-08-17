@@ -10,5 +10,8 @@ compile: clean
 run: compile
 	./build/${EXECUTABLE} ${SPARSE_SUITE_HOME}/${SS_MATRIX}
 
+run-all: compile
+	./execute_tests.sh
+
 clean:
 	rm -rf build ${EXECUTABLE}

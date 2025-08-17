@@ -5,6 +5,7 @@ set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fopenmp -O3 -Wall")
 find_package(OpenMP REQUIRED)
 
+find_package(OpenMP REQUIRED)
 FIND_PACKAGE (Eigen3 3.3 REQUIRED NO_MODULE)
 
 set(FMM_USE_FAST_FLOAT OFF)
@@ -25,3 +26,4 @@ FetchContent_MakeAvailable(fast_matrix_market)
 add_executable(spmv_sparsesuite sparsesuite.cpp)
 target_link_libraries (spmv_sparsesuite Eigen3::Eigen)
 target_link_libraries(spmv_sparsesuite fast_matrix_market::fast_matrix_market)
+target_link_libraries(spmv_sparsesuite pthread)
