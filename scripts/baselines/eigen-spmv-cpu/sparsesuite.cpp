@@ -9,6 +9,7 @@
 #include <Eigen/Sparse>
 #include <chrono>
 #include <fast_matrix_market/app/Eigen.hpp>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -29,11 +30,12 @@ int main(int argc, char* argv[]) {
     std::cerr << "Usage: " << argv[0] << " <matrixpath>" << std::endl;
     return 1;
   }
-  int n_execs = 10;
+
+  constexpr int n_execs = 1;
   std::string matrixfile = argv[1];
   std::cout << "Reading matrix: " << matrixfile << std::endl;
 
-  std::string omp_num_threads = std::getenv("OMP_NUM_THREADS");
+  const std::string omp_num_threads = std::getenv("OMP_NUM_THREADS");
   std::ifstream mtx_file(matrixfile);
 
   SparseMatrixRowMajor mat;
@@ -49,12 +51,21 @@ int main(int argc, char* argv[]) {
   const std::string delimiter = "/";
   const std::string token = matrixfile.substr(matrixfile.rfind(delimiter) + 1);
   const std::string newDelimiter = ".";
-  const std::string matname = token.substr(0, token.find(newDelimiter));
+  const std::string mat_name = token.substr(0, token.find(newDelimiter));
 
-  std::ofstream fout(
-      "bench_results_eigen_spmv_" + omp_num_threads + "T_" + matname + ".csv",
-      std::ios::app);
-  fout << "benchname,size,time_us" << std::endl;
+  const std::string filename =
+      "bench_results_eigen_spmv_" + omp_num_threads + "T.csv";
+  const bool file_is_empty = !std::filesystem::exists(filename) ||
+                             std::filesystem::file_size(filename) == 0;
+
+  std::ofstream fout(filename, std::ios::app);
+  if (!fout) {
+    std::cerr << "[ERROR] Cannot Open file: " << filename << "\n";
+    return -1;
+  }
+  if (file_is_empty) {
+    fout << "benchname,size,omp_num_threads,time_us" << std::endl;
+  }
 
   for (int i = 0; i < n_execs; i++) {
     const auto start = std::chrono::high_resolution_clock::now();
@@ -62,9 +73,10 @@ int main(int argc, char* argv[]) {
     const auto end = std::chrono::high_resolution_clock::now();
     const auto elapsed_us =
         std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-    fout << matname << "," << mat.nonZeros() << "," << elapsed_us.count()
-         << std::endl;
+    fout << mat_name << "," << mat.nonZeros() << "," << omp_num_threads << ","
+         << elapsed_us.count() << std::endl;
   }
+
   fout.close();
   return 0;
 }

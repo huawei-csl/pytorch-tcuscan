@@ -178,6 +178,7 @@ int main(int argc, char *argv[]) {
   std::vector<int> col_idx;
   std::vector<float> values;
 
+  const std::string omp_num_threads = std::getenv("OMP_NUM_THREADS");
   const std::string matrixfile = static_cast<std::string>(argv[1]);
   std::string matrix_name =
       matrixfile.substr(matrixfile.find_last_of("/\\") + 1);
@@ -195,9 +196,10 @@ int main(int argc, char *argv[]) {
   std::cout << "Matrix loaded successfully!" << std::endl;
   triplet_to_csr(smat, row_ptr, col_idx, values);
   std::cout << "Triple to CSR converted successfully!" << std::endl;
-  const int64_t exec_time = run_spmv_kml(row_ptr, col_idx, values);
+  const int64_t time_us = run_spmv_kml(row_ptr, col_idx, values);
 
-  const std::string filename = "bench_results_boostkit_spmv.csv";
+  const std::string filename =
+      "bench_results_boostkit_spmv_" + omp_num_threads + "T.csv";
   const bool file_is_empty = !std::filesystem::exists(filename) ||
                              std::filesystem::file_size(filename) == 0;
 
@@ -207,10 +209,11 @@ int main(int argc, char *argv[]) {
     return -1;
   }
   if (file_is_empty) {
-    fout << "benchname,size,time_us" << std::endl;
+    fout << "benchname,size,omp_num_threads,time_us" << std::endl;
   }
 
-  fout << matrix_name << "," << values.size() << "," << exec_time << std::endl;
+  fout << matrix_name << "," << values.size() << "," << omp_num_threads << ","
+       << time_us << std::endl;
 
   fout.close();
   return 0;
