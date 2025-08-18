@@ -13,6 +13,7 @@ import types
 import typing
 from dataclasses import dataclass
 from functools import partial
+from pathlib import Path
 
 import numpy as np
 import torch.nn.functional as F
@@ -35,7 +36,7 @@ def pad_to_multiple(x: torch.Tensor, s: int):
 def convert_to_segments(fullpath):
     "Converts a sparse matrix from ssget into a segmented sum/scan input (x, f)"
 
-    filename = fullpath + ".mtx"
+    filename = f"{fullpath}.mtx"
     A = mmread(filename)
 
     B = csr_matrix(A)
@@ -127,11 +128,11 @@ def _run_benchmark(
     # doesn't contain any input data before the run
     # Copied from https://github.com/triton-lang/triton/blob/v2.1.0/python/triton/testing.py#L110
 
-    # cache_size = 256 * 1024 * 1024
-    # cache = torch.ones(cache_size, dtype=torch.int8, device=device.str)
+    cache_size = 256 * 1024 * 1024
+    cache = torch.ones(cache_size, dtype=torch.int8, device=device.str)
 
     for i in range(benchmark_iters):
-        # cache.zero_()
+        cache.zero_()
         device.sync()
         start_events[i].record()
         fn()
@@ -416,12 +417,13 @@ def benchmark(
     if not os.path.exists(report_path):
         os.makedirs(report_path)
     logger.info(f"Directory that reports are stored: {report_path}")
-    filename = os.path.join(
-        report_path, f"bench_results_{op_name}_{dtype}_{benchname}.csv"
-    )
-    with open(filename, "w", encoding="UTF-8") as fd:
-        fd.write("benchname,operator,dtype,nnz,time_us\n")
+    filename = os.path.join(report_path, f"bench_results_{op_name}_{dtype}.csv")
+    file = Path(filename)
+    if not file.is_file():
+        with open(filename, "w", encoding="UTF-8") as fd:
+            fd.write("benchname,operator,dtype,nnz,time_us\n")
 
+    with open(filename, "a", encoding="UTF-8") as fd:
         logger.info(
             f"Benchmark: {benchname}, OP:{op_name}, dtype: {dtype}, device: {device.str}"
         )

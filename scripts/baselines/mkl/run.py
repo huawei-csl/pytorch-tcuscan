@@ -2,6 +2,7 @@ import csv
 import os
 import sys
 import time
+from pathlib import Path
 
 import numpy as np
 from scipy.io import mmread
@@ -16,7 +17,7 @@ if __name__ == "__main__":
     b = np.random.rand(
         n,
     ).astype(np.float32)
-    n_execs = 50
+    n_execs = 1
     num_threads = os.getenv("MKL_NUM_THREADS", "1")
     timings = []
     print(f"Matrix name: {matrix_name}")
@@ -24,16 +25,21 @@ if __name__ == "__main__":
 
     for i in range(n_execs):
         # print(f"Running iteration {i} out or {n_execs}")
-        t = time.time()
+        tic = time.perf_counter_ns()
         x_mkl = dot_product_mkl(A, b)
-        t_mkl = time.time() - t
-        timings.append(t_mkl * 1000000)
+        toc = time.perf_counter_ns()
+        timings.append((toc - tic) * 0.001)  # nanoseconds to microseconds
 
-    csv_filename = f"bench_results_mkl_spmv_{num_threads}T_{matrix_name}.csv"
-    header = ["benchname", "size", "time_us"]
-    with open(csv_filename, "w", encoding="utf8") as f:
+    csv_filename = f"bench_results_mkl_spmv_{num_threads}T.csv"
+    header = ["benchname", "size", "mkl_num_threads", "time_us"]
+
+    if not Path(csv_filename).is_file():
+        with open(csv_filename, "w", encoding="UTF-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(header)
+
+    with open(csv_filename, "a", encoding="UTF-8") as f:
         writer = csv.writer(f)
-        writer.writerow(header)
         for timing in timings:
-            row = [matrix_name, nnz, timing]
+            row = [matrix_name, nnz, num_threads, timing]
             writer.writerow(row)

@@ -15,6 +15,7 @@ conda env create -f environment.yml
 The `environment.yml` was generated as follows:
 ```
 conda create -n baseline-mkl python=3.12
+conda activate baseline-mkl
 conda install -c conda-forge sparse_dot_mkl
 conda env export > environment.yml
 ```
