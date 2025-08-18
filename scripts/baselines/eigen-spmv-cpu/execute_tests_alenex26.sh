@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # You must download the sparse suite matrices first using `sparse-suite-downloader`.
-BASE="/scratch/asobczyk/datasets/suite-sparse-alenex26"
+BASE="/scratch/TCUSCAN/sparse-suite-matrices/ssgetpy-downloaded-matrices"
 export OMP_PLACES=cores
 
 export OMP_NUM_THREADS=1
@@ -34,7 +34,7 @@ export OMP_NUM_THREADS=1
 ./build/spmv_sparsesuite "${BASE}"/srb1/srb1.mtx
 ./build/spmv_sparsesuite "${BASE}"/cant/cant.mtx
 
-export OMP_NUM_THREADS=32
+export OMP_NUM_THREADS=96
 ./build/spmv_sparsesuite "${BASE}"/vsp_bcsstk30_500sep_10in_1Kout/vsp_bcsstk30_500sep_10in_1Kout.mtx
 ./build/spmv_sparsesuite "${BASE}"/kron_g500-logn16/kron_g500-logn16.mtx
 ./build/spmv_sparsesuite "${BASE}"/enron/enron.mtx

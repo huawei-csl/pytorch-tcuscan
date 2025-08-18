@@ -3,7 +3,7 @@
  * @brief SpMV using Kunpeng's KML sparseblas SpMV.
  * @date 2025-05-21
  *
- * @copyright Copyright (c) 2025
+ * @copyright Huawei Technologies Switzerland (c) 2025
  *
  */
 #include <kspblas.h>
@@ -16,6 +16,7 @@
 #include <random>
 #include <sstream>
 #include <vector>
+
 using namespace std;
 
 template <typename IT, typename VT>
@@ -110,33 +111,6 @@ void convert_to_kml_format(const std::vector<int> &row_ptr,
   }
 }
 
-void dummy_kml_spmv_example() {
-  kml_sparse_operation_t opt = KML_SPARSE_OPERATION_NON_TRANSPOSE;
-
-  KML_INT m = 4;
-  KML_INT k = 4;
-  float alpha = 0.5;
-  float beta = 1.2;
-  string matdescra = "G00F";  // General matrix with one-based indexing
-  float val[9] = {2, -3, 7, 1, -6, 8, -4, 5, 9};
-  KML_INT indx[9] = {1, 2, 4, 3, 4, 1, 3, 4, 1};
-  KML_INT pntrb[4] = {1, 4, 6, 9};
-  KML_INT pntre[4] = {4, 6, 9, 10};
-  float x[4] = {1, 3, -2, 5};
-  float y[4] = {-1, 1, 5, 3};
-
-  // SpMV operation: y = A * x
-  kml_sparse_status_t status = kml_sparse_scsrmv(
-      opt, m, k, alpha, matdescra.c_str(), val, indx, pntrb, pntre, x, beta, y);
-
-  cout << " KML_SPARSE_STATUS: " << status << endl;
-
-  printf("Result y = A * x:\n");
-  for (int i = 0; i < m; ++i) {
-    printf("y[%d] = %.2f\n", i, y[i]);
-  }
-}
-
 std::vector<float> generate_random_vector(int size, float min = -1.0f,
                                           float max = 1.0f) {
   std::random_device rd;
@@ -155,9 +129,9 @@ int64_t run_spmv_kml(std::vector<int> &row_ptr, std::vector<int> &col_idx,
   kml_sparse_operation_t opt = KML_SPARSE_OPERATION_NON_TRANSPOSE;
   KML_INT m = row_ptr.size() - 1;
   KML_INT k = m;
-  float alpha = 1.0f;
-  float beta = 0.0f;
-  std::string matdescra =
+  constexpr float alpha = 1.0f;
+  constexpr float beta = 0.0f;
+  const std::string matdescra =
       "G00F";  // General matrix, one-based indexing (KML expects 1-based)
 
   std::vector<float> x = generate_random_vector(k);
@@ -165,13 +139,14 @@ int64_t run_spmv_kml(std::vector<int> &row_ptr, std::vector<int> &col_idx,
   std::vector<int> indx, pntrb, pntre;
   convert_to_kml_format(row_ptr, col_idx, indx, pntrb, pntre);
 
-  auto start = std::chrono::high_resolution_clock::now();
+  const auto start = std::chrono::high_resolution_clock::now();
 
   kml_sparse_status_t status = kml_sparse_scsrmv(
       opt, m, k, alpha, matdescra.c_str(), vals.data(), indx.data(),
       pntrb.data(), pntre.data(), x.data(), beta, y.data());
-  auto end = std::chrono::high_resolution_clock::now();
-  auto duration_us =
+  const auto end = std::chrono::high_resolution_clock::now();
+
+  const auto duration_us =
       std::chrono::duration_cast<std::chrono::microseconds>(end - start)
           .count();
 
@@ -202,10 +177,12 @@ int main(int argc, char *argv[]) {
   std::vector<int> row_ptr;
   std::vector<int> col_idx;
   std::vector<float> values;
-  std::string matrixfile = static_cast<std::string>(argv[1]);
+
+  const std::string matrixfile = static_cast<std::string>(argv[1]);
   std::string matrix_name =
       matrixfile.substr(matrixfile.find_last_of("/\\") + 1);
-  size_t dot_pos = matrix_name.find_last_of('.');
+  const size_t dot_pos = matrix_name.find_last_of('.');
+
   if (dot_pos != std::string::npos && matrix_name.substr(dot_pos) == ".mtx") {
     matrix_name = matrix_name.substr(0, dot_pos);
   }
@@ -218,11 +195,11 @@ int main(int argc, char *argv[]) {
   std::cout << "Matrix loaded successfully!" << std::endl;
   triplet_to_csr(smat, row_ptr, col_idx, values);
   std::cout << "Triple to CSR converted successfully!" << std::endl;
-  int64_t exec_time = run_spmv_kml(row_ptr, col_idx, values);
+  const int64_t exec_time = run_spmv_kml(row_ptr, col_idx, values);
 
-  std::string filename = "bench_results_boostkit_spmv.csv";
-  bool file_is_empty = !std::filesystem::exists(filename) ||
-                       std::filesystem::file_size(filename) == 0;
+  const std::string filename = "bench_results_boostkit_spmv.csv";
+  const bool file_is_empty = !std::filesystem::exists(filename) ||
+                             std::filesystem::file_size(filename) == 0;
 
   std::ofstream fout(filename, std::ios::app);
   if (!fout) {

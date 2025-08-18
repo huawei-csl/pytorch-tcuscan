@@ -3,7 +3,7 @@
  * @brief SpMV using Eigen's SparseMatrix<T, RowMajor> container.
  * @date 2025-03-28
  *
- * @copyright Copyright (c) 2025
+ * @copyright Copyright Huawei Technologies Switzerland (c) 2025
  *
  */
 #include <Eigen/Sparse>
@@ -31,8 +31,6 @@ int main(int argc, char* argv[]) {
   }
   int n_execs = 10;
   std::string matrixfile = argv[1];
-  std::cout << "Handling matrix: " << matrixfile << std::endl;
-
   std::cout << "Reading matrix: " << matrixfile << std::endl;
 
   std::string omp_num_threads = std::getenv("OMP_NUM_THREADS");

@@ -3,10 +3,10 @@ project(eigen_spmv)
 
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fopenmp -O3 -Wall")
-find_package(OpenMP REQUIRED)
+
 
 find_package(OpenMP REQUIRED)
-FIND_PACKAGE (Eigen3 3.3 REQUIRED NO_MODULE)
+find_package (Eigen3 3.3 REQUIRED NO_MODULE)
 
 set(FMM_USE_FAST_FLOAT OFF)
 set(FMM_USE_DRAGONBOX OFF)
