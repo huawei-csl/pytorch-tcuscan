@@ -53,6 +53,7 @@ BENCH_ITERS = 100
 STR_TO_DTYPE = {
     "fp16": torch.float16,
     "int16": torch.int16,
+    "int32": torch.int32,
     "int8": torch.int8,
     "fp32": torch.float32,
 }
@@ -749,6 +750,18 @@ def gen_lower_benchmark(
     return _run_benchmark(device, run_gen_lower), size * size
 
 
+def hist_benchmark(device: Device, size: int, dtype: torch.dtype) -> Tuple[float, int]:
+    if dtype in {torch.float32}:
+        x = torch.rand(size, device=device.str, dtype=dtype)
+    else:
+        raise ValueError("histogram benchmark only supports float32 for now")
+
+    def run_hist() -> None:
+        _ = torch.histogram(x, bins=20)
+
+    return _run_benchmark(device, run_hist), size
+
+
 def benchmark(
     device: Device,
     op_name: str,
@@ -825,6 +838,7 @@ if __name__ == "__main__":  # noqa
             "complete_blocks",
             "complete_rows",
             "scan_multi_cube",
+            "hist",
         ],
     )
     parser.add_argument("--dtype", choices=["int8", "fp16", "int16", "int32", "fp32"])
@@ -895,6 +909,16 @@ if __name__ == "__main__":  # noqa
             "cast",
             dtype,
             partial(cast_benchmark, dtype=tdtype),
+            sizes,
+            density,
+        )
+    elif bench == "hist" and dtype in ["fp32"]:
+        tdtype = STR_TO_DTYPE[dtype]
+        benchmark(
+            device,
+            "hist",
+            dtype,
+            partial(hist_benchmark, dtype=tdtype),
             sizes,
             density,
         )

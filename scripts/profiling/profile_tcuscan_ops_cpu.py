@@ -34,7 +34,13 @@ logger = logging.getLogger(__name__)
 WARMUP_ITERS = 10
 BENCH_ITERS = 100
 
-STR_TO_DTYPE = {"fp16": torch.float16, "int16": torch.int16, "int8": torch.int8}
+STR_TO_DTYPE = {
+    "fp16": torch.float16,
+    "int16": torch.int16,
+    "int8": torch.int8,
+    "int32": torch.int32,
+    "fp32": torch.float32,
+}
 
 
 # Input array size to benchmark sort
@@ -271,6 +277,18 @@ def top_p_benchmark(device: Device, size: int, dtype: torch.dtype) -> float:
     return _run_benchmark(run_top_p)
 
 
+def hist_benchmark(device: Device, size: int, dtype: torch.dtype) -> float:
+    if dtype in {torch.float32}:
+        x = torch.rand(size, device=device.str, dtype=dtype)
+    else:
+        raise ValueError("histogram benchmark only supports fp32 for now")
+
+    def run_hist() -> None:
+        _ = torch.histogram(x, bins=20)
+
+    return _run_benchmark(run_hist)
+
+
 def benchmark(
     device: Device,
     op_name: str,
@@ -375,7 +393,7 @@ def benchmark_batch(
             fd.write(f"{op_name},{dtype},{batch_size},{size},{time:.2f}\n")
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # noqa
     parser = argparse.ArgumentParser(
         prog="torch_profile", description="Profiler for torch with CPU backend"
     )
@@ -394,9 +412,10 @@ if __name__ == "__main__":
             "abs",
             "multinomial",
             "topk",
+            "hist",
         ],
     )
-    parser.add_argument("--dtype", choices=["int8", "fp16", "int16"])
+    parser.add_argument("--dtype", choices=["int8", "fp16", "int16", "int32", "fp32"])
     parser.add_argument("--s", type=int, default=64, required=False)
     parser.add_argument("--k", type=int, default=4096, required=False)
     parser.add_argument("--max_size", type=int, default=1e8, required=False)
@@ -441,6 +460,14 @@ if __name__ == "__main__":
             "cast",
             dtype,
             partial(cast_benchmark, dtype=tdtype),
+            sizes,
+        )
+    elif bench == "hist" and dtype in ["fp32"]:
+        benchmark(
+            device,
+            "hist",
+            dtype,
+            partial(hist_benchmark, dtype=tdtype),
             sizes,
         )
     elif bench == "abs" and dtype in ["int16", "fp16"]:

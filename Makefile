@@ -77,11 +77,8 @@ test_%:
 
 profile_%: profile_fp32_$* profile_fp16_$* profile_int16_$*
 
-profile_fp16_%:
-	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench $* --dtype fp16
-
-profile_fp32_%:
-	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench $* --dtype fp32
+profile_int8_%:
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench $* --dtype int8
 
 profile_int16_%:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench $* --dtype int16
@@ -89,10 +86,20 @@ profile_int16_%:
 profile_int32_%:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench $* --dtype int32
 
+profile_fp16_%:
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench $* --dtype fp16
+
+profile_fp32_%:
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench $* --dtype fp32
+
 profile_all_s_fp16_%:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench $* --s 32 --dtype fp16
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench $* --s 64 --dtype fp16
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench $* --s 128 --dtype fp16
+
+
+profile_cpu_fp32_%:
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops_cpu.py --bench $* --dtype fp32
 
 profile_cpu:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops_cpu.py --bench copy --dtype fp16
