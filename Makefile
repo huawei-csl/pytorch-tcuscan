@@ -2,8 +2,8 @@
 
 DENSITY?=0.001
 LOCAL_SPARSE_MATRIX_NAME?='Williams/pdb1HYS/pdb1HYS'
-BASE_SPARSE_MATRIX_PATH?=/scratch/TCUSCAN/sparse-suite-matrices/ssgetpy-downloaded-matrices/
-FULL_SPARSE_MATRIX_PATH=${BASE_SPARSE_MATRIX_PATH}${LOCAL_SPARSE_MATRIX_NAME}
+BASE_SPARSE_MATRIX_PATH?=/scratch/TCUSCAN/sparse-suite-matrices/ssgetpy-downloaded-matrices
+FULL_SPARSE_MATRIX_PATH=${BASE_SPARSE_MATRIX_PATH}/${LOCAL_SPARSE_MATRIX_NAME}
 PROFILING_SCRIPTS_PATH=scripts/profiling/
 CONDA_ENV_NAME="pytorch_tcuscan"
 

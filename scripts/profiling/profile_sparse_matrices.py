@@ -16,6 +16,7 @@ from functools import partial
 from pathlib import Path
 
 import numpy as np
+import scipy
 import torch.nn.functional as F
 import torch_npu  # noqa
 from scipy.io import mmread
@@ -33,22 +34,16 @@ def pad_to_multiple(x: torch.Tensor, s: int):
     return padded_x
 
 
-def convert_to_segments(fullpath):
-    "Converts a sparse matrix from ssget into a segmented sum/scan input (x, f)"
-
-    filename = f"{fullpath}.mtx"
-    A = mmread(filename)
-
-    B = csr_matrix(A)
-
-    # Data vector
+def convert_to_segments(B: scipy.sparse.csr_matrix):
+    "Converts a CSR sparse matrix from ssget into a segmented sum/scan input (x, f)"
+    # Sparse matrix nnzs
     x = B.data
 
     # Flags vector
     f = np.zeros(B.nnz + 1)
     # The last value of the row_ptr should not be in f.
     f[B.indptr] = 1
-    return x, f[:-1], B
+    return x, f[:-1]
 
 
 file_handler = logging.FileHandler(filename="torch_profiler.log")
@@ -459,7 +454,9 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     fullpath = args.matrixpath
-    my_x, my_f, B = convert_to_segments(fullpath)
+    A = mmread(f"{fullpath}.mtx")
+    B = csr_matrix(A)
+    my_x, my_f = convert_to_segments(B)
     my_x = torch.Tensor(my_x)
     my_f = torch.Tensor(my_f)
 
