@@ -189,6 +189,11 @@ profile_fp16_segmented_sum:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench segmented_sum --density ${DENSITY} --s 64 --dtype fp16
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench segmented_sum --density ${DENSITY} --s 128 --dtype fp16
 
+profile_fp16_sc_segmented_sum:
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench sc_segmented_sum --density ${DENSITY} --s 32 --dtype fp16 --num_cores 1 --max_size 1000000
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench sc_segmented_sum --density ${DENSITY} --s 64 --dtype fp16 --num_cores 1 --max_size 2000000
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench sc_segmented_sum --density ${DENSITY} --s 128 --dtype fp16 --num_cores 1 --max_size 4000000
+
 profile_fp32_custom_copy:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench custom_copy --dtype fp32 --num_cores 1
 

@@ -13,11 +13,12 @@ import types
 import typing
 from dataclasses import dataclass
 from functools import partial
-from math import ceil
+from math import ceil, sqrt
 from typing import Optional, Tuple
 
 import numpy as np
 import torch.nn.functional as F
+from scipy.sparse import random as sp_random
 
 import torch
 
@@ -495,7 +496,42 @@ def compress_benchmark(
     return _run_benchmark(device, run_compress), outputsize
 
 
-def segmented_sum_benchmark(
+def sc_segmented_sum_benchmark(
+    device: Device, vec_len: int, dtype: torch.dtype, segm_density: float, s: int
+) -> Tuple[float, int]:
+
+    def uniform_rvs(shape):
+        return 2 * np.random.uniform(0, 1, size=shape) - 1
+
+    # nnz = vec_len = num_cols * num_segm * segm_density
+    num_cols = sqrt(vec_len / segm_density)
+    sp_dtype = np.float32 if dtype == torch.float16 else np.int32
+
+    A = sp_random(
+        num_cols,
+        num_cols,
+        density=segm_density,
+        format="csr",
+        dtype=sp_dtype,
+        data_rvs=uniform_rvs,
+    )
+
+    values = (A.data).astype(sp_dtype)
+    indices = (A.indptr).astype(np.uint32)
+
+    indices = indices[:-1]
+
+    values_npu = torch.from_numpy(values).npu().to(dtype)
+    indices_npu = torch.from_numpy(indices).npu().to(torch.uint32)
+    outputsize = indices.size
+
+    def run_seg_sum() -> None:
+        _ = tcuscan_ops.run_seg_sum_single_core(values_npu, indices_npu, s)
+
+    return _run_benchmark(device, run_seg_sum), outputsize
+
+
+def mc_segmented_sum_benchmark(
     device: Device, vec_len: int, dtype: torch.dtype, segm_density: float, s: int
 ) -> Tuple[float, int]:
 
@@ -817,6 +853,7 @@ if __name__ == "__main__":  # noqa
             "mcscan_no_l2",
             "compress",
             "segmented_sum",
+            "sc_segmented_sum",
             "custom_copy",
             "vec_seg_scan_sc",
             "scscan",
@@ -989,7 +1026,21 @@ if __name__ == "__main__":  # noqa
             device,
             f"segmented_sum_{s}_{density}",
             dtype,
-            partial(segmented_sum_benchmark, dtype=tdtype, s=s, segm_density=density),
+            partial(
+                mc_segmented_sum_benchmark, dtype=tdtype, s=s, segm_density=density
+            ),
+            sizes,
+            density,
+        )
+    elif bench == "sc_segmented_sum" and dtype in ["fp16"]:
+        tdtype = STR_TO_DTYPE[dtype]
+        benchmark(
+            device,
+            f"sc_segmented_sum_{s}_{density}",
+            dtype,
+            partial(
+                sc_segmented_sum_benchmark, dtype=tdtype, s=s, segm_density=density
+            ),
             sizes,
             density,
         )
@@ -1085,7 +1136,6 @@ if __name__ == "__main__":  # noqa
     elif bench == "topk" and dtype in ["int16", "int32", "fp16"]:
         k = args.k
         tdtype = STR_TO_DTYPE[dtype]
-
         benchmark(
             device,
             f"topk_{k}",
@@ -1096,7 +1146,6 @@ if __name__ == "__main__":  # noqa
     elif bench == "tcuscan_topk" and dtype in ["int16"]:
         k = args.k
         tdtype = STR_TO_DTYPE[dtype]
-
         benchmark(
             device,
             f"tcuscan_topk_{k}_{s}",
@@ -1107,7 +1156,6 @@ if __name__ == "__main__":  # noqa
 
     elif bench == "top_p" and dtype in ["fp16"]:
         tdtype = STR_TO_DTYPE[dtype]
-
         benchmark(
             device,
             "top_p",

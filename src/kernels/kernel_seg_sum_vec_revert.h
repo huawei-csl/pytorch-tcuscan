@@ -47,8 +47,7 @@ class KernelSegSumVecRevert {
         num_segments_(num_segments),
         tile_len_(tile_len),
         matrix_tile_len_(tile_len * tile_len),
-        num_tiles_(scalar::CeilDiv(vec_len_, tile_len_)),
-        max_num_tiles_per_block_(scalar::CeilDiv(num_tiles_, num_blocks_)) {
+        num_tiles_(scalar::CeilDiv(vec_len_, matrix_tile_len_)) {
     constexpr bool IS_DT_SUPPORTED =
         std::is_same_v<T, float> || std::is_same_v<T, int32_t>;
     static_assert(IS_DT_SUPPORTED, "Unsupported data type.");
@@ -69,25 +68,28 @@ class KernelSegSumVecRevert {
                                     num_segments_);
     global_out_.SetGlobalBuffer((__gm__ T *)vec_out, num_segments_);
 
-    pipe_.InitBuffer(in_q_, BUFFER_NUM, tile_len_ * sizeof(T));
+    pipe_.InitBuffer(in_q_, BUFFER_NUM, matrix_tile_len_ * sizeof(T));
     pipe_.InitBuffer(segm_q_, BUFFER_NUM, tile_len_ * sizeof(uint32_t));
     pipe_.InitBuffer(out_q_, BUFFER_NUM, tile_len_ * sizeof(T));
   }
 
   /**
    * @brief Returns the next tile length, given the global memory offset. The
-   * returned tile length equals typically to `tile_len_`, expect the last
-   * iteration where the tile length is smaller than `tile_len_`.
+   * returned tile length equals typically to `tile_len`, expect the last
+   * iteration where the tile length is smaller than `tile_len`.
    *
+   * @param tile_len Tile length
    * @param global_offset Global memory offset
-   * @param length Total vector length
+   * @param total_vector_length Total vector length
    * @return Length of "next" tile, given the current global memory offset.
    */
-  __aicore__ inline uint32_t NextTileLen(uint32_t global_offset,
-                                         uint32_t length) {
-    const bool full_tile = global_offset + tile_len_ <= length;
+  __aicore__ inline uint32_t NextTileLen(uint32_t tile_len,
+                                         uint32_t global_offset,
+                                         uint32_t total_vector_length) {
+    const bool full_tile = global_offset + tile_len <= total_vector_length;
+    if ((int)total_vector_length - (int)global_offset < 0) return 0;
     const uint32_t num_elems_to_process =
-        full_tile ? tile_len_ : length - global_offset;
+        full_tile ? tile_len : total_vector_length - global_offset;
 
     return num_elems_to_process;
   }
@@ -99,7 +101,8 @@ class KernelSegSumVecRevert {
    * @return Segments index vector of tile length at most `tile_len_`.
    */
   __aicore__ inline LocalTensor<uint32_t> LoadNextSegmentTile() {
-    const uint32_t next_tile_len = NextTileLen(segments_offset_, num_segments_);
+    const uint32_t next_tile_len =
+        NextTileLen(tile_len_, segments_offset_, num_segments_);
     copy::CopyGmToVec(segm_q_, global_segm_in_[segments_offset_],
                       next_tile_len);
 
@@ -179,9 +182,7 @@ class KernelSegSumVecRevert {
   __aicore__ inline void SyncWithCubeNoop() {
     for (uint32_t tile_idx = 0; tile_idx < num_tiles_; tile_idx++) {
       if constexpr (SyncBefore) {
-        if ((tile_idx * tile_len_) % matrix_tile_len_ == 0) {
-          sync::SyncGroup<sync::GroupSyncDirection::FULL>();
-        }
+        sync::SyncGroup<sync::GroupSyncDirection::FULL>();
       }
     }
   }
@@ -190,43 +191,59 @@ class KernelSegSumVecRevert {
     LocalTensor<T> vec_out_lt = out_q_.template AllocTensor<T>();
 
     T accumulation = 0;
-    uint32_t in_offset = 0;
+    uint32_t global_in_offset = 0;
     uint32_t out_idx = 0;
     uint32_t segm_idx = 1;
     uint32_t segm_end = segm_ind_lt.GetValue(segm_idx);
 
-    for (uint32_t tile_idx = 0; tile_idx < num_tiles_; tile_idx++) {
+    for (uint32_t matrix_tile_idx = 0; matrix_tile_idx < num_tiles_;
+         matrix_tile_idx++) {
       if constexpr (SyncBefore) {
-        if ((tile_idx * tile_len_) % matrix_tile_len_ == 0) {
-          sync::SyncGroup<sync::GroupSyncDirection::FULL>();
-        }
+        sync::SyncGroup<sync::GroupSyncDirection::FULL>();
       }
 
-      const uint32_t num_elems_to_process = NextTileLen(in_offset, vec_len_);
-      copy::CopyGmToVec(in_q_, global_in_[in_offset], num_elems_to_process);
+      const uint32_t num_elems_to_copy =
+          NextTileLen(matrix_tile_len_, global_in_offset, vec_len_);
+      copy::CopyGmToVec(in_q_, global_in_[global_in_offset], num_elems_to_copy);
       LocalTensor<T> vec_in_lt = in_q_.template DeQue<T>();
 
-      while (segm_end < in_offset + num_elems_to_process) {
-        // Last segment value. Zero if lies on tile boundary.
-        const bool is_on_end_of_tile = segm_end == in_offset;
-        const T delta = is_on_end_of_tile
-                            ? 0
-                            : vec_in_lt.GetValue(segm_end - in_offset - 1);
-        SafeOutWrite(vec_out_lt, out_idx, accumulation + delta);
+      uint32_t matrix_tile_offset = 0;
+      uint32_t num_elems_to_process =
+          NextTileLen(tile_len_, matrix_tile_offset, num_elems_to_copy);
 
-        // Keep track of the value of the last segment's end to
-        // subtract it from the next segment (recall scan
-        // speculation within tile)
-        accumulation = -delta;
+      while (num_elems_to_process > 0) {
+        while (segm_end < global_in_offset + num_elems_to_process) {
+          // Index of the segment end relative to the matrix tile
+          const uint32_t matrix_tile_segm_end =
+              matrix_tile_offset + segm_end - global_in_offset;
 
-        // Mutates both segm_ind_lt and segm_idx
-        segm_end = NextSegmEndIndex(segm_ind_lt, segm_idx);
+          // Last segment value. Zero if lies on tile boundary.
+          const bool is_on_end_of_tile = segm_end == global_in_offset;
+          const T delta = is_on_end_of_tile
+                              ? 0
+                              : vec_in_lt.GetValue(matrix_tile_segm_end - 1);
+          SafeOutWrite(vec_out_lt, out_idx, accumulation + delta);
+
+          // Keep track of the value of the last segment's end to
+          // subtract it from the next segment (recall scan
+          // speculation within tile)
+          accumulation = -delta;
+
+          // Mutates both segm_ind_lt and segm_idx
+          segm_end = NextSegmEndIndex(segm_ind_lt, segm_idx);
+        }
+
+        global_in_offset += num_elems_to_process;
+        matrix_tile_offset += num_elems_to_process;
+
+        accumulation += vec_in_lt.GetValue(matrix_tile_offset - 1);
+
+        // Number of element to process in the next iteration
+        num_elems_to_process =
+            NextTileLen(tile_len_, matrix_tile_offset, num_elems_to_copy);
       }
 
-      accumulation += vec_in_lt.GetValue(num_elems_to_process - 1);
-
       in_q_.template FreeTensor<T>(vec_in_lt);
-      in_offset += num_elems_to_process;
     }
 
     segm_q_.template FreeTensor<uint32_t>(segm_ind_lt);
@@ -255,7 +272,6 @@ class KernelSegSumVecRevert {
   const uint32_t tile_len_;
   const uint32_t matrix_tile_len_;
   const uint32_t num_tiles_;
-  const uint32_t max_num_tiles_per_block_;
 
   uint32_t segments_offset_ = 0;
   uint32_t out_offset_ = 0;
