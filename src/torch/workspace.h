@@ -15,6 +15,7 @@
 #include "../tiling/tiling_scan_multi_core.h"
 #include "../tiling/tiling_scan_single_core.h"
 #include "../tiling/tiling_seg_sum_single_core.h"
+#include "../tiling/tiling_seg_sum_single_cube.h"
 #include "../tiling/tiling_split.h"
 
 namespace workspace {
@@ -239,7 +240,8 @@ constexpr uint32_t get_workspace_size(size_t input_elems, size_t matmul_size,
 namespace seg_sum {
 
 /**
- * @brief Calculate the workspace size for `seg_sum_single_core`.
+ * @brief Calculate the workspace size for `seg_sum_single_core` and
+ * `seg_sum_single_cube`.
  *
  * @tparam InputT Element input data type
  * @tparam OutputT Element output data type
@@ -268,6 +270,20 @@ constexpr uint32_t get_workspace_size(size_t input_elems, size_t matmul_size) {
  */
 template <typename InputT, typename OutputT>
 constexpr uint32_t get_workspace_size(const SegSumSingleCoreTiling& tiling) {
+  return seg_sum::get_workspace_size<InputT, OutputT>(tiling.num_elems,
+                                                      tiling.tile_len);
+}
+
+/**
+ * @brief Calculate the workspace size for `seg_sum_single_cube`.
+ *
+ * @tparam InputT Element input data type
+ * @tparam OutputT Element output data type
+ * @param [in] tiling Tiling parameters used in the kernel.
+ * @return Size of the workspace in bytes.
+ */
+template <typename InputT, typename OutputT>
+constexpr uint32_t get_workspace_size(const SegSumSingleCubeTiling& tiling) {
   return seg_sum::get_workspace_size<InputT, OutputT>(tiling.num_elems,
                                                       tiling.tile_len);
 }

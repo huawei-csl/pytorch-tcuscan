@@ -503,7 +503,7 @@ def sc_segmented_sum_benchmark(
     def uniform_rvs(shape):
         return 2 * np.random.uniform(0, 1, size=shape) - 1
 
-    # nnz = vec_len = num_cols * num_segm * segm_density
+    # nnz = vec_len = num_cols * num_segm * density
     num_cols = sqrt(vec_len / segm_density)
     sp_dtype = np.float32 if dtype == torch.float16 else np.int32
 
@@ -527,6 +527,47 @@ def sc_segmented_sum_benchmark(
 
     def run_seg_sum() -> None:
         _ = tcuscan_ops.run_seg_sum_single_core(values_npu, indices_npu, s)
+
+    return _run_benchmark(device, run_seg_sum), outputsize
+
+
+def cube_segmented_sum_benchmark(
+    device: Device, vec_len: int, dtype: torch.dtype, segm_density: float, s: int
+) -> Tuple[float, int]:
+
+    def uniform_rvs(shape):
+        return 2 * np.random.uniform(0, 1, size=shape) - 1
+
+    # nnz = vec_len = num_cols * num_segm * density
+    num_cols = sqrt(vec_len / segm_density)
+    sp_dtype = np.float32 if dtype == torch.float16 else np.int32
+
+    A = sp_random(
+        num_cols,
+        num_cols,
+        density=segm_density,
+        format="csr",
+        dtype=sp_dtype,
+        data_rvs=uniform_rvs,
+    )
+
+    values = (A.data).astype(sp_dtype)
+    indices = (A.indptr).astype(np.uint32)
+
+    indices = indices[:-1]
+
+    values_npu = torch.from_numpy(values).npu().to(dtype)
+    indices_npu = torch.from_numpy(indices).npu().to(torch.uint32)
+    ones_npu = torch.ones((s, s), dtype=dtype, device=device.str)
+    upper_npu = torch.triu(ones_npu)
+    lower_strict_npu = torch.tril(ones_npu, -1)
+
+    outputsize = indices.size
+
+    def run_seg_sum() -> None:
+        _ = tcuscan_ops.run_seg_sum_single_cube(
+            values_npu, upper_npu, lower_strict_npu, indices_npu, s
+        )
 
     return _run_benchmark(device, run_seg_sum), outputsize
 
@@ -854,6 +895,7 @@ if __name__ == "__main__":  # noqa
             "compress",
             "segmented_sum",
             "sc_segmented_sum",
+            "cube_segmented_sum",
             "custom_copy",
             "vec_seg_scan_sc",
             "scscan",
@@ -1040,6 +1082,18 @@ if __name__ == "__main__":  # noqa
             dtype,
             partial(
                 sc_segmented_sum_benchmark, dtype=tdtype, s=s, segm_density=density
+            ),
+            sizes,
+            density,
+        )
+    elif bench == "cube_segmented_sum" and dtype in ["fp16"]:
+        tdtype = STR_TO_DTYPE[dtype]
+        benchmark(
+            device,
+            f"cube_segmented_sum_{s}_{density}",
+            dtype,
+            partial(
+                cube_segmented_sum_benchmark, dtype=tdtype, s=s, segm_density=density
             ),
             sizes,
             density,

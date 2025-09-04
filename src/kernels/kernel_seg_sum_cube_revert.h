@@ -1,7 +1,7 @@
 /**
  * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
  *
- * @file kernel_seg_sum_vec_revert.h
+ * @file kernel_seg_sum_cube_revert.h
  * @brief Kernel implementing a revert speculation of segmented sum cube
  * operation.
  */
@@ -14,8 +14,8 @@ using namespace AscendC;
 using namespace kernel_utils;
 
 /**
- * @brief Corrects the (speculative block scan) output of the `KernelRowScan` so
- * that the segmented sum of a vector is returned.
+ * @brief Corrects the (speculative block scan) output of the `KernelBlockScan`
+ * so that the segmented sum of a vector is returned.
  *
  *
  * ### Example:
@@ -23,12 +23,12 @@ using namespace kernel_utils;
  * returns vec_out = (1+2+3+4, 5+6, 7+8+9+10) = (10, 11, 34)
  *
  * @tparam T Input data type. Supports `float` and `int32_t`.
- * @tparam SyncBefore If true, the `KernelSegSumVecRevert` (this kernel) waits
+ * @tparam SyncBefore If true, the `KernelSegSumCubeRevert` (this kernel) waits
  * for the cube unit to send a synchronization signal after each matrix tile is
  * ready. Matrix tile has length `tile_len * tile_len`.
  */
 template <typename T, bool SyncBefore = false>
-class KernelSegSumVecRevert {
+class KernelSegSumCubeRevert {
   constexpr static uint32_t BUFFER_NUM = 2;
 
  public:
@@ -39,15 +39,16 @@ class KernelSegSumVecRevert {
    * @param [in] num_segments Number of segments.
    * @param [in] tile_len Tile length.
    */
-  __aicore__ inline KernelSegSumVecRevert(uint32_t vec_len,
-                                          uint32_t num_segments,
-                                          uint32_t tile_len)
+  __aicore__ inline KernelSegSumCubeRevert(uint32_t vec_len,
+                                           uint32_t num_segments,
+                                           uint32_t tile_len)
       : num_blocks_(GetBlockNum() * GetTaskRation()),
         vec_len_(vec_len),
         num_segments_(num_segments),
         tile_len_(tile_len),
         matrix_tile_len_(tile_len * tile_len),
-        num_tiles_(scalar::CeilDiv(vec_len_, matrix_tile_len_)) {
+        num_tiles_(scalar::CeilDiv(vec_len_, matrix_tile_len_)),
+        max_num_tiles_per_block_(scalar::CeilDiv(num_tiles_, num_blocks_)) {
     constexpr bool IS_DT_SUPPORTED =
         std::is_same_v<T, float> || std::is_same_v<T, int32_t>;
     static_assert(IS_DT_SUPPORTED, "Unsupported data type.");
@@ -170,59 +171,43 @@ class KernelSegSumVecRevert {
     LocalTensor<T> vec_out_lt = out_q_.template AllocTensor<T>();
 
     T accumulation = 0;
-    uint32_t global_in_offset = 0;
+    uint32_t in_offset = 0;
     uint32_t out_idx = 0;
     uint32_t segm_idx = 1;
     uint32_t segm_end = segm_ind_lt.GetValue(segm_idx);
 
-    for (uint32_t matrix_tile_idx = 0; matrix_tile_idx < num_tiles_;
-         matrix_tile_idx++) {
+    for (uint32_t tile_idx = 0; tile_idx < num_tiles_; tile_idx++) {
       if constexpr (SyncBefore) {
         sync::SyncGroup<sync::GroupSyncDirection::FULL>();
       }
 
-      const uint32_t num_elems_to_copy =
-          scalar::NextTileLen(matrix_tile_len_, global_in_offset, vec_len_);
-      copy::CopyGmToVec(in_q_, global_in_[global_in_offset], num_elems_to_copy);
+      const uint32_t num_elems_to_process =
+          scalar::NextTileLen(matrix_tile_len_, in_offset, vec_len_);
+
+      copy::CopyGmToVec(in_q_, global_in_[in_offset], num_elems_to_process);
       LocalTensor<T> vec_in_lt = in_q_.template DeQue<T>();
 
-      uint32_t matrix_tile_offset = 0;
-      uint32_t num_elems_to_process =
-          scalar::NextTileLen(tile_len_, matrix_tile_offset, num_elems_to_copy);
+      while (segm_end < in_offset + num_elems_to_process) {
+        // Last segment value. Zero if lies on tile boundary.
+        const bool is_on_end_of_tile = segm_end == in_offset;
+        const T delta = is_on_end_of_tile
+                            ? 0
+                            : vec_in_lt.GetValue(segm_end - in_offset - 1);
+        SafeOutWrite(vec_out_lt, out_idx, accumulation + delta);
 
-      while (num_elems_to_process > 0) {
-        while (segm_end < global_in_offset + num_elems_to_process) {
-          // Index of the segment end relative to the matrix tile
-          const uint32_t matrix_tile_segm_end =
-              matrix_tile_offset + segm_end - global_in_offset;
+        // Keep track of the value of the last segment's end to
+        // subtract it from the next segment (recall scan
+        // speculation within tile)
+        accumulation = -delta;
 
-          // Last segment value. Zero if lies on tile boundary.
-          const bool is_on_end_of_tile = segm_end == global_in_offset;
-          const T delta = is_on_end_of_tile
-                              ? 0
-                              : vec_in_lt.GetValue(matrix_tile_segm_end - 1);
-          SafeOutWrite(vec_out_lt, out_idx, accumulation + delta);
-
-          // Keep track of the value of the last segment's end to
-          // subtract it from the next segment (recall scan
-          // speculation within tile)
-          accumulation = -delta;
-
-          // Mutates both segm_ind_lt and segm_idx
-          segm_end = NextSegmEndIndex(segm_ind_lt, segm_idx);
-        }
-
-        global_in_offset += num_elems_to_process;
-        matrix_tile_offset += num_elems_to_process;
-
-        accumulation += vec_in_lt.GetValue(matrix_tile_offset - 1);
-
-        // Number of element to process in the next iteration
-        num_elems_to_process = scalar::NextTileLen(
-            tile_len_, matrix_tile_offset, num_elems_to_copy);
+        // Mutates both segm_ind_lt and segm_idx
+        segm_end = NextSegmEndIndex(segm_ind_lt, segm_idx);
       }
 
+      accumulation += vec_in_lt.GetValue(num_elems_to_process - 1);
+
       in_q_.template FreeTensor<T>(vec_in_lt);
+      in_offset += num_elems_to_process;
     }
 
     segm_q_.template FreeTensor<uint32_t>(segm_ind_lt);
@@ -251,6 +236,7 @@ class KernelSegSumVecRevert {
   const uint32_t tile_len_;
   const uint32_t matrix_tile_len_;
   const uint32_t num_tiles_;
+  const uint32_t max_num_tiles_per_block_;
 
   uint32_t segments_offset_ = 0;
   uint32_t out_offset_ = 0;

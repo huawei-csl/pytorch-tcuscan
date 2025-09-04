@@ -1340,6 +1340,27 @@ __aicore__ inline T1 FloorDiv(T1 value, T2 divisor) {
 }
 
 /**
+ * @brief Returns the next tile length, given the global memory offset. The
+ * returned tile length equals typically to `tile_len`, expect the last
+ * iteration where the tile length is smaller than `tile_len`.
+ *
+ * @param tile_len Tile length
+ * @param global_offset Global memory offset
+ * @param length Total vector length
+ * @return Length of "next" tile, given the current global memory offset.
+ */
+__aicore__ inline uint32_t NextTileLen(uint32_t tile_len,
+                                       uint32_t global_offset,
+                                       uint32_t length) {
+  const bool full_tile = global_offset + tile_len <= length;
+  if ((int)length - (int)global_offset < 0) return 0;
+  const uint32_t num_elems_to_process =
+      full_tile ? tile_len : length - global_offset;
+
+  return num_elems_to_process;
+}
+
+/**
  * @brief Defines how the workload should be distributed among cores.
  *
  * The function returns the number of tiles to be processed by each block so

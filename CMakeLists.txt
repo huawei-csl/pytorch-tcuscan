@@ -35,6 +35,7 @@ ascendc_library(scan_kernels SHARED
     src/seg_scan_vec_single_core.cpp
     src/seg_scan_mc_revert.cpp
     src/seg_sum_single_core.cpp
+    src/seg_sum_single_cube.cpp
     src/row_scan.cpp
     src/block_scan.cpp
     src/scan_multi_cube.cpp
