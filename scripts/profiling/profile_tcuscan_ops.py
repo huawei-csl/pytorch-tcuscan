@@ -334,7 +334,7 @@ def copy_benchmark(
 def clone_benchmark(device: Device, size: int, dtype: torch.dtype) -> Tuple[float, int]:
     if dtype in {torch.float16, torch.float32}:
         x = torch.rand(size, device=device.str, dtype=dtype)
-    elif dtype == torch.int16:
+    elif dtype in {torch.int16, torch.int32}:
         x = torch.randint(0, 2**7 - 1, (size,), device=device.str, dtype=dtype)
     else:
         raise ValueError("Incorrect copy data type")
@@ -839,6 +839,27 @@ def hist_benchmark(device: Device, size: int, dtype: torch.dtype) -> Tuple[float
     return _run_benchmark(device, run_hist), size
 
 
+def searchsorted_benchmark(
+    device: Device, size: int, dtype: torch.dtype
+) -> Tuple[float, int]:
+    if dtype in {torch.int32}:
+        x = torch.randint(1, 100, (size,), device=device.str).to(torch.int32)
+        x = torch.cumsum(x, dim=-1)
+    else:
+        raise ValueError("searchsorted benchmark only supports int32 for now")
+
+    num_partitions = 20
+    search_vals = torch.randint(10, 1000, (num_partitions,), device=device.str).to(
+        torch.int32
+    )
+    search_vals = torch.cumsum(search_vals, dim=-1)
+
+    def run_searchsorted() -> None:
+        _ = torch.searchsorted(x, search_vals)
+
+    return _run_benchmark(device, run_searchsorted), num_partitions
+
+
 def benchmark(
     device: Device,
     op_name: str,
@@ -918,6 +939,7 @@ if __name__ == "__main__":  # noqa
             "complete_rows",
             "scan_multi_cube",
             "hist",
+            "searchsorted",
         ],
     )
     parser.add_argument("--dtype", choices=["int8", "fp16", "int16", "int32", "fp32"])
@@ -971,7 +993,7 @@ if __name__ == "__main__":  # noqa
 
     if bench == "vadd":
         benchmark(device, "vadd", "fp16", vadd_benchmark, sizes)
-    elif bench == "copy" and dtype in ["int16", "fp16", "fp32"]:
+    elif bench == "copy" and dtype in ["int16", "fp16", "fp32", "int32"]:
         tdtype = STR_TO_DTYPE[dtype]
         benchmark(
             device,
@@ -998,6 +1020,16 @@ if __name__ == "__main__":  # noqa
             "hist",
             dtype,
             partial(hist_benchmark, dtype=tdtype),
+            sizes,
+            density,
+        )
+    elif bench == "searchsorted" and dtype in ["int32"]:
+        tdtype = STR_TO_DTYPE[dtype]
+        benchmark(
+            device,
+            "searchsorted",
+            dtype,
+            partial(searchsorted_benchmark, dtype=tdtype),
             sizes,
             density,
         )
