@@ -11,6 +11,7 @@ from sparse_dot_mkl import dot_product_mkl
 if __name__ == "__main__":
     matrix_file = sys.argv[1]
     matrix_name = os.path.split(matrix_file)[1].split(".")[0]
+    print(f"Reading matrix: {matrix_file}")
     A = mmread(matrix_file).astype(np.float32).tocsr()
     n = A.shape[0]
     nnz = A.nnz

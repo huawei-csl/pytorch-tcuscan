@@ -1,7 +1,5 @@
 #!/bin/bash
 
-export OMP_NUM_THREADS=32
-
 # You must download the sparse suite matrices first using `sparse-suite-downloader`.
 BASE="/scratch/asobczyk/datasets/suite-sparse-alenex26"
 EXECUTABLE=run.py
