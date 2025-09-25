@@ -62,3 +62,30 @@ extern "C" __global__ __aicore__ void scan_single_core_fp16(GM_ADDR vec_in,
   run_scan_single_core<half>(vec_in, lower, vec_out, vec_len, matmul_size,
                              usrWorkspace, running_sum);
 }
+
+/**
+ * @brief Run the `scan_single_core` kernel with float/float32 dtype.
+ *
+ * @param [in] vec_in Pointer to the input vector.
+ * @param [in] vec_out Pointer to the output vector.
+ * @param [in] workspace Pointer to workspace.
+ * @param [in] tilingGm Pointer to the tiling buffer.
+ */
+
+extern "C" __global__ __aicore__ void scan_single_core_fp32(GM_ADDR vec_in,
+                                                            GM_ADDR vec_out,
+                                                            GM_ADDR workspace,
+                                                            GM_ADDR tilingGm) {
+  SingleCoreScanTiling tiling;
+  tiling::GetTilingData(&tiling, tilingGm);
+
+  const uint32_t vec_len = tiling.num_elems;
+  const uint32_t matmul_size = tiling.matmul_size;
+  const float running_sum = tiling.running_sum.float_value;
+
+  GM_ADDR const usrWorkspace = AscendC::GetUserWorkspace(workspace);
+  GM_ADDR const lower = load_tril_matrix<float>(matmul_size);
+
+  run_scan_single_core<float>(vec_in, lower, vec_out, vec_len, matmul_size,
+                              usrWorkspace, running_sum);
+}

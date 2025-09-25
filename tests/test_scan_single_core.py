@@ -23,11 +23,16 @@ def _test_single_core_scan(vec_len: int, s: int, dtype: torch.dtype):
             0, 6, size=(vec_len,), dtype=torch.int8, device=NPU_DEVICE
         ).half()
         out_dtype = torch.float32
+    elif dtype == torch.float32:
+        x = torch.randint(
+            0, 6, size=(vec_len,), dtype=torch.int8, device=NPU_DEVICE
+        ).float()
+        out_dtype = torch.float32
     elif dtype == torch.int8:
         x = torch.randint(0, 2, size=(vec_len,), dtype=torch.int8, device=NPU_DEVICE)
         out_dtype = torch.int32
     else:
-        assert False, f"SingleCoreScan supports only fp16/int8. Got {dtype}."
+        assert False, f"SingleCoreScan supports only fp16/fp32/int8. Got {dtype}."
 
     torch.npu.synchronize()
     x_cpu = x.cpu()
@@ -50,7 +55,7 @@ def _test_single_core_scan(vec_len: int, s: int, dtype: torch.dtype):
 
 @pytest.mark.parametrize("multiplier", [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])
 @pytest.mark.parametrize("s", [32, 64, 128])
-@pytest.mark.parametrize("dtype", [torch.int8, torch.float16], ids=str)
+@pytest.mark.parametrize("dtype", [torch.int8, torch.float16, torch.float32], ids=str)
 @pytest.mark.parametrize("offset", [1, 3, 7, 17, 23, 33, 53, 113])
 def test_single_core_scan_minus(
     offset: int, multiplier: int, s: int, dtype: torch.dtype
@@ -61,7 +66,7 @@ def test_single_core_scan_minus(
 
 @pytest.mark.parametrize("multiplier", [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])
 @pytest.mark.parametrize("s", [32, 64, 128])
-@pytest.mark.parametrize("dtype", [torch.int8, torch.float16], ids=str)
+@pytest.mark.parametrize("dtype", [torch.int8, torch.float16, torch.float32], ids=str)
 @pytest.mark.parametrize("offset", [1, 3, 7, 17, 23, 33, 53, 113])
 def test_single_core_scan_plus(
     offset: int, multiplier: int, s: int, dtype: torch.dtype

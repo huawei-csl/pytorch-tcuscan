@@ -30,10 +30,7 @@ constexpr int32_t GM_ALIGNMENT = 256;
  */
 template <typename T>
 constexpr __aicore__ inline uint16_t GetFractalK() {
-  if constexpr (sizeof(T) == 2) {
-    return 16;
-  }
-  return 32;
+  return 32 / sizeof(T);
 }
 
 /**
@@ -1538,22 +1535,56 @@ namespace cube_unit {
  */
 template <typename DataType>
 constexpr bool IsCubeSupported =
-    std::is_same_v<DataType, half> || std::is_same_v<DataType, int8_t> ||
-    std::is_same_v<DataType, uint8_t>;
+    std::is_same_v<DataType, half> || std::is_same_v<DataType, float> ||
+    std::is_same_v<DataType, int8_t> || std::is_same_v<DataType, uint8_t>;
 
 /**
- * @brief A type metafunction for Cube's input / output types. For input type
- * half returns float, otherwise int32_t.
+ * @brief A type metafunction for Cube's input / output types. The following
+ * type pairs are supported:(half, float), (float, float), (int8_t, int32_t),
+ * (uint8_t, uint32_t)
  *
- * @tparam InputT Input cube type. Must be half or int8_t.
+ * @tparam InputT Input cube type. Must be int8_t, uint8_t, half, or float.
  */
 template <typename InputT>
 struct CubeOutType {
-  /// Type trait
-  using type = typename std::conditional<
-      std::is_same_v<InputT, half>, float,
-      typename std::conditional<std::is_same_v<InputT, int8_t>, int32_t,
-                                uint32_t>::type>::type;
+  /// @brief Type
+  using type = InputT;
+};
+
+/**
+ * @brief Cube data type map int8_t -> int32_t.
+ */
+template <>
+struct CubeOutType<int8_t> {
+  /// @brief Type
+  using type = int32_t;
+};
+
+/**
+ * @brief Cube data type map uint8_t -> uint32_t.
+ */
+template <>
+struct CubeOutType<uint8_t> {
+  /// @brief Type
+  using type = uint32_t;
+};
+
+/**
+ * @brief Cube data type map half -> float.
+ */
+template <>
+struct CubeOutType<half> {
+  /// @brief Type
+  using type = float;
+};
+
+/**
+ * @brief Cube data type map float -> float.
+ */
+template <>
+struct CubeOutType<float> {
+  /// @brief Type
+  using type = float;
 };
 
 /**
