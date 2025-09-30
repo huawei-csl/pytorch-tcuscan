@@ -164,9 +164,9 @@ def scan_benchmark(device: Device, size: int, dtype: torch.dtype) -> float:
     return _run_benchmark(device, run_scan), size
 
 
-def scan_batch_benchmark(
-    device: Device, shape: Tuple[int, int], dtype: torch.dtype
-) -> float:
+def scan_batch_benchmark(device: Device, size: int, dtype: torch.dtype) -> float:
+    VEC_LEN = 65536
+    shape = (int(size / VEC_LEN), VEC_LEN)
     if dtype in {torch.int8, torch.float16}:
         x = torch.rand(shape, device=device.str, dtype=dtype)
     else:
@@ -176,6 +176,24 @@ def scan_batch_benchmark(
 
     def run_scan() -> None:
         _ = torch.cumsum(x, dim=1, dtype=torch.float)
+
+    return _run_benchmark(device, run_scan), x.numel()
+
+
+def scan_batch_tcuscan_benchmark(
+    device: Device, size: int, dtype: torch.dtype, s: int
+) -> float:
+    VEC_LEN = 65536
+    shape = (int(size / VEC_LEN), VEC_LEN)
+    if dtype in {torch.int8, torch.float16}:
+        x = torch.rand(shape, device=device.str, dtype=dtype)
+    else:
+        raise RuntimeError(
+            f"dtype {dtype} is not supported in TCUSCAN batch scan operator"
+        )
+
+    def run_scan() -> None:
+        _ = tcuscan_ops.run_scan_batch(x, s)
 
     return _run_benchmark(device, run_scan), x.numel()
 
@@ -940,6 +958,8 @@ if __name__ == "__main__":  # noqa
             "scan_multi_cube",
             "hist",
             "searchsorted",
+            "scan_batch",
+            "scan_batch_tcuscan",
         ],
     )
     parser.add_argument("--dtype", choices=["int8", "fp16", "int16", "int32", "fp32"])
@@ -1337,6 +1357,26 @@ if __name__ == "__main__":  # noqa
                 dtype=tdtype,
                 s=s,
             ),
+            sizes,
+            density,
+        )
+    elif bench == "scan_batch" and dtype in ["fp16"]:
+        tdtype = STR_TO_DTYPE[dtype]
+        benchmark(
+            device,
+            "scan_batch",
+            dtype,
+            partial(scan_batch_benchmark, dtype=tdtype),
+            sizes,
+            density,
+        )
+    elif bench == "scan_batch_tcuscan" and dtype in ["fp16"]:
+        tdtype = STR_TO_DTYPE[dtype]
+        benchmark(
+            device,
+            f"scan_batch_tcuscan_{s}",
+            dtype,
+            partial(scan_batch_tcuscan_benchmark, dtype=tdtype, s=s),
             sizes,
             density,
         )

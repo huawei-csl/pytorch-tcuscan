@@ -168,6 +168,13 @@ profile_compress_paper:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench compress --s 128 --density 0.1 --dtype fp16
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench compress --s 128 --density 0.1 --dtype fp32
 
+profile_scan_batch:
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench scan_batch --dtype fp16 --min-iter-index 16
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench scan_batch_tcuscan --s 16 --dtype fp16 --iter-step-multiplier 8
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench scan_batch_tcuscan --s 32 --dtype fp16 --iter-step-multiplier 4
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench scan_batch_tcuscan --s 64 --dtype fp16 --iter-step-multiplier 2
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench scan_batch_tcuscan --s 128 --dtype fp16
+
 profile_fp16_compress:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench compress --s 32  --density ${DENSITY} --dtype fp16
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench compress --s 64  --density ${DENSITY} --dtype fp16
