@@ -59,6 +59,9 @@ clang_tidy: build_tidy
 build: build.sh
 	./build.sh -v ${ASCEND_DEVICE}
 
+pypackage:
+	./build-pypackage.sh -v ${ASCEND_DEVICE}
+
 build_tidy: build-tidy.sh
 	./build-tidy.sh -v ${ASCEND_DEVICE}
 

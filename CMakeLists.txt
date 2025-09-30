@@ -5,6 +5,12 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_BUILD_TYPE "Release")  # "Debug"
 
+option(PIP_INSTALL "True if building via pip" OFF)
+
+find_package(PythonLibs REQUIRED)
+find_package(pybind11 CONFIG REQUIRED)
+find_package(Torch REQUIRED)
+
 
 # user-defined configuration
 set(SOC_VERSION "Ascend910B4" CACHE STRING "system on chip type")
@@ -24,6 +30,22 @@ else()
 endif()
 
 include(${ASCENDC_CMAKE_DIR}/ascendc.cmake)
+
+# TORCH_NPU_PATH is the location where PyTorch Ascend Adapter (torch_npu) is installed.
+if(NOT DEFINED ENV{TORCH_NPU_PATH})
+  message(FATAL_ERROR "TORCH_NPU_PATH is not set")
+else()
+  set(TORCH_NPU_PATH $ENV{TORCH_NPU_PATH})
+endif()
+
+
+message("***********************************************************")
+message("* ASCEND_CANN_PACKAGE_PATH : ${ASCEND_CANN_PACKAGE_PATH}")
+message("* TORCH_INSTALL_PREFIX     : ${TORCH_INSTALL_PREFIX}")
+message("* TORCH_NPU_PATH           : ${TORCH_NPU_PATH}")
+message("* TORCH_LIBRARIES          : ${TORCH_LIBRARIES}")
+message("***********************************************************")
+
 
 # ascendc_library use to add kernel file to generate AscendC library
 ascendc_library(scan_kernels SHARED
@@ -136,11 +158,11 @@ target_link_libraries(split_kernels PRIVATE
     ascendalog
 )
 
+pybind11_add_module(tcuscan_ops src/pybind11.cpp)
 
-add_library(pybind11_lib SHARED src/pybind11.cpp)
-target_link_libraries(pybind11_lib PRIVATE
+target_link_libraries(tcuscan_ops PUBLIC
+  ${TORCH_LIBRARIES}
   c10
-  torch
   torch_cpu
   torch_npu
   torch_python
@@ -150,58 +172,51 @@ target_link_libraries(pybind11_lib PRIVATE
   split_kernels
 )
 
-# Sets the PyTorch installation path on env variable 'TORCH_PATH'
-execute_process(COMMAND python3 -c "import os; import torch; print(os.path.dirname(torch.__file__))"
-  OUTPUT_STRIP_TRAILING_WHITESPACE
-  OUTPUT_VARIABLE TORCH_PATH
-)
-
-
-# Set the Ascend PyTorch (torch_npu) installation path on env variable 'TORCH_NPU_PATH'
-set(ENV{ASCEND_HOME_PATH} ${ASCEND_CANN_PACKAGE_PATH})
-execute_process(COMMAND python3 -c "import os; import torch_npu; print(os.path.dirname(torch_npu.__file__))"
-  OUTPUT_STRIP_TRAILING_WHITESPACE
-  OUTPUT_VARIABLE TORCH_NPU_PATH
-)
-
-
-# Set the pybind11 include dir on env variable 'PYBIND11_INC'
-execute_process(COMMAND python3 -m pybind11 --includes
-  OUTPUT_STRIP_TRAILING_WHITESPACE
-  OUTPUT_VARIABLE PYBIND11_INC
-)
-string(REPLACE " " ";" PYBIND11_INC ${PYBIND11_INC})
-
-message("***********************************************************")
-message("* ASCEND_CANN_PACKAGE_PATH : ${ASCEND_CANN_PACKAGE_PATH}")
-message("* TORCH_PATH               : ${TORCH_PATH}")
-message("* TORCH_NPU_PATH           : ${TORCH_NPU_PATH}")
-message("* PYBIND11_INC             : ${PYBIND11_INC}")
-message("***********************************************************")
-
-target_link_directories(pybind11_lib PRIVATE
-  ${TORCH_PATH}/lib
+target_link_directories(tcuscan_ops PRIVATE
+  ${TORCH_INSTALL_PREFIX}/lib
   ${TORCH_NPU_PATH}/lib
 )
-target_include_directories(pybind11_lib PRIVATE
+target_include_directories(tcuscan_ops PRIVATE
   ${TORCH_NPU_PATH}/include
-  ${TORCH_PATH}/include
-  ${TORCH_PATH}/include/torch/csrc/api/include
+  ${TORCH_INCLUDE_DIRS}
 )
 
-target_compile_options(pybind11_lib PRIVATE
-  ${PYBIND11_INC}
+target_compile_options(tcuscan_ops PRIVATE
   -D_GLIBCXX_USE_CXX11_ABI=0
 )
 
-execute_process(COMMAND python3-config --extension-suffix
-  OUTPUT_STRIP_TRAILING_WHITESPACE
-  OUTPUT_VARIABLE PYBIND11_SUFFIX
-)
-set_target_properties(pybind11_lib PROPERTIES
-  OUTPUT_NAME tcuscan_ops${PYBIND11_SUFFIX}
-  PREFIX "" SUFFIX ""
-)
+if ( PIP_INSTALL )
+	message ( STATUS ">>> Running under scikit-build-core (pip install)" )
 
-set_target_properties(pybind11_lib PROPERTIES
-  LIBRARY_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+   set_target_properties(tcuscan_ops PROPERTIES
+          BUILD_WITH_INSTALL_RPATH TRUE
+          INSTALL_RPATH_USE_LINK_PATH TRUE
+	  INSTALL_RPATH "$ORIGIN/libs"
+          LINK_OPTIONS "-Wl,--disable-new-dtags"
+  )
+
+  # install tcuscan_ops.so under site-packages/tcuscan
+  install(TARGETS tcuscan_ops
+          LIBRARY DESTINATION
+                  tcuscan
+  )
+
+
+  # install dynamic libraries under site-packages/tcuscan/libs
+  install(TARGETS scan_kernels
+                  vector_kernels
+                  split_kernels
+          LIBRARY DESTINATION
+                  tcuscan/libs
+  )
+else ()
+  message( STATUS ">>>======================================================")
+	message ( STATUS ">>> Ignoring dynamic libraries COPY inside Python wheel." )
+  message( STATUS ">>>======================================================")
+
+  set_target_properties(tcuscan_ops PROPERTIES
+    LIBRARY_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}
+  )
+
+endif ()

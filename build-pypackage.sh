@@ -1,8 +1,5 @@
 #!/bin/bash
 
-# Build project for clang-tidy. Enormous duplication with file `build.sh`.
-
-
 CURRENT_DIR=$(
     cd "$(dirname "${BASH_SOURCE:-$0}")"
     pwd
@@ -47,25 +44,20 @@ fi
 source "$_ASCEND_INSTALL_PATH"/bin/setenv.bash
 echo "Current compile soc version is ${SOC_VERSION}"
 
+CMAKE_PREFIX_PATH=$(python3 -c "import torch; print(torch.utils.cmake_prefix_path)")
+export CMAKE_PREFIX_PATH
 
 # TORCH_NPU_PATH is the location where PyTorch Ascend Adapter (torch_npu) is installed.
 TORCH_NPU_PATH=$(python3 -c "import os; import torch_npu; print(os.path.dirname(torch_npu.__file__))")
 export TORCH_NPU_PATH
 
-# See https://docs.pytorch.org/cppdocs/installing.html
-CMAKE_PREFIX_PATH=$(python3 -c "import torch; print(torch.utils.cmake_prefix_path)")
-export CMAKE_PREFIX_PATH
+echo "CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}"
+echo "TORCH_NPU_PATH=${TORCH_NPU_PATH}"
+
 
 
 set -e
-rm -rf build
-mkdir -p build
-# Configure
-cmake -B build \
-    -DSOC_VERSION="${SOC_VERSION}" \
-    -DASCEND_CANN_PACKAGE_PATH="${_ASCEND_INSTALL_PATH}" \
-    -DTORCH_NPU_PATH="${TORCH_NPU_PATH}" \
-    -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
-# Compile
-cmake --build build --target scan_kernels vector_kernels split_kernels -j
+export CMAKE_GENERATOR="Unix Makefiles"
+pip install -v . --extra-index-url https://download.pytorch.org/whl/cpu \
+                 --config-settings=cmake.define.TORCH_NPU_PATH="${TORCH_NPU_PATH}"

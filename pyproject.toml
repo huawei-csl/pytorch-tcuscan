@@ -1,0 +1,26 @@
+[build-system]
+requires = ["scikit-build-core", "pybind11"]
+build-backend = "scikit_build_core.build"
+
+[tool.scikit-build.cmake.define]
+PIP_INSTALL="ON"
+SOC_VERSION = {env="SOC_VERSION", default="Ascend910B4"}
+ASCEND_CANN_PACKAGE_PATH = {env="ASCEND_CANN_PACKAGE_PATH", default="/usr/local/Ascend/ascend-toolkit/latest"}
+
+[project]
+name = "tcuscan"
+version = "0.1.0"
+description="Parallel Scan on Ascend AI Accelerators"
+readme = "README.md"
+requires-python = ">=3.10"
+classifiers = [
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.10",
+]
+dependencies = [
+  "pybind11==3.0.1",
+  "torch-npu @ file://localhost/scratch/TCUSCAN/wheels/torch_npu-2.6.0.post1-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl"
+]
+
+[tool.scikit-build]
+wheel.packages = ["python/tcuscan"]

@@ -1,5 +1,6 @@
 #!/bin/bash
 
+
 CURRENT_DIR=$(
     cd "$(dirname "${BASH_SOURCE:-$0}")"
     pwd
@@ -44,10 +45,24 @@ fi
 source "$_ASCEND_INSTALL_PATH"/bin/setenv.bash
 echo "Current compile soc version is ${SOC_VERSION}"
 
+# See https://docs.pytorch.org/cppdocs/installing.html
+CMAKE_PREFIX_PATH=$(python3 -c "import torch; print(torch.utils.cmake_prefix_path)")
+export CMAKE_PREFIX_PATH
+
+# TORCH_NPU_PATH is the location where PyTorch Ascend Adapter (torch_npu) is installed.
+TORCH_NPU_PATH=$(python3 -c "import os; import torch_npu; print(os.path.dirname(torch_npu.__file__))")
+export TORCH_NPU_PATH
+
+
+echo "CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}"
+echo "TORCH_NPU_PATH=${TORCH_NPU_PATH}"
+
+
 set -e
 rm -rf build
 mkdir -p build
 cmake -B build \
     -DSOC_VERSION="${SOC_VERSION}" \
     -DASCEND_CANN_PACKAGE_PATH="${_ASCEND_INSTALL_PATH}"
+
 cmake --build build -j
