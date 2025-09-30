@@ -93,8 +93,8 @@ profile_fp32_%:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench $* --dtype fp32
 
 profile_all_s_fp16_%:
-	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench $* --s 32 --dtype fp16
-	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench $* --s 64 --dtype fp16
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench $* --s 32 --dtype fp16 --iter-step-multiplier 4
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench $* --s 64 --dtype fp16 --iter-step-multiplier 2
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench $* --s 128 --dtype fp16
 
 
@@ -130,7 +130,6 @@ profile_mcscan_int8:
 
 profile_mcscan: profile_all_s_fp16_mcscan
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench copy --dtype fp16
-	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench scan --s 128 --dtype fp16
 
 profile_mcscan_no_l2: profile_mcscan
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench mcscan_no_l2 --s 32 --dtype fp16
@@ -242,14 +241,14 @@ profile_radix_sort: profile_fp16_radix_sort profile_int16_radix_sort
 
 profile_fp16_radix_sort:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench sort --dtype fp16 --s 128 --num_cores 20
-	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench radix_sort --dtype fp16 --s 32 --num_cores 20
-	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench radix_sort --dtype fp16 --s 64 --num_cores 20
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench radix_sort --dtype fp16 --s 32 --num_cores 20 --iter-step-multiplier 4
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench radix_sort --dtype fp16 --s 64 --num_cores 20 --iter-step-multiplier 2
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench radix_sort --dtype fp16 --s 128 --num_cores 20
 
 profile_int16_radix_sort:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench sort --dtype int16 --s 128 --num_cores 20
-	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench radix_sort --dtype int16 --s 32 --num_cores 20
-	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench radix_sort --dtype int16 --s 64 --num_cores 20
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench radix_sort --dtype int16 --s 32 --num_cores 20 --iter-step-multiplier 4
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench radix_sort --dtype int16 --s 64 --num_cores 20 --iter-step-multiplier 2
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench radix_sort --dtype int16 --s 128 --num_cores 20
 
 profile_int16_topk:
