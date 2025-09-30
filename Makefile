@@ -7,12 +7,13 @@ FULL_SPARSE_MATRIX_PATH=${BASE_SPARSE_MATRIX_PATH}/${LOCAL_SPARSE_MATRIX_NAME}
 PROFILING_SCRIPTS_PATH=scripts/profiling/
 CONDA_ENV_NAME="pytorch_tcuscan"
 
-TORCH_NPU_URL=https://gitee.com/ascend/pytorch/releases/download
-PT_WHEEL_NAME=torch_npu-2.6.0.post1-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
-PT_WHEEL_URL=https://gitee.com/ascend/pytorch/releases/download/v7.1.0.1-pytorch2.6.0/${PT_WHEEL_NAME}
+TORCH_NPU_URL=https://gitcode.com/Ascend/pytorch/releases/download
+PT_WHEEL_NAME=torch_npu-2.6.0.post2-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
+PT_WHEEL_URL=${TORCH_NPU_URL}/v7.1.0.2-pytorch2.6.0/${PT_WHEEL_NAME}
 
-PT_WHEEL_AARCH_NAME=torch_npu-2.5.1.post2-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl
-PT_WHEEL_AARCH_URL=${TORCH_NPU_URL}/v7.1.0.1-pytorch2.5.1/${PT_WHEEL_AARCH_NAME}
+
+PT_WHEEL_AARCH_NAME=torch_npu-2.5.1.post3-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl
+PT_WHEEL_AARCH_URL=${TORCH_NPU_URL}/v7.1.0.2-pytorch2.5.1/${PT_WHEEL_AARCH_NAME}
 
 
 ASCEND_DEVICE=Ascend910B4
