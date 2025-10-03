@@ -18,7 +18,6 @@ PT_WHEEL_AARCH_URL=${TORCH_NPU_URL}/v7.1.0.2-pytorch2.5.1/${PT_WHEEL_AARCH_NAME}
 
 ASCEND_DEVICE=Ascend910B4
 DEVICE_TYPE?=npu
-LD_LIBRARY_PATH := ${LD_LIBRARY_PATH}:$(shell pwd)/build/lib/
 
 all: build test
 

@@ -158,7 +158,9 @@ target_link_libraries(split_kernels PRIVATE
     ascendalog
 )
 
+
 pybind11_add_module(tcuscan_ops src/pybind11.cpp)
+
 
 target_link_libraries(tcuscan_ops PUBLIC
   ${TORCH_LIBRARIES}
@@ -188,13 +190,8 @@ target_compile_options(tcuscan_ops PRIVATE
 if ( PIP_INSTALL )
 	message ( STATUS ">>> Running under scikit-build-core (pip install)" )
 
+   target_link_options(tcuscan_ops PRIVATE "LINKER:-no-as-needed")
 
-   set_target_properties(tcuscan_ops PROPERTIES
-          BUILD_WITH_INSTALL_RPATH TRUE
-          INSTALL_RPATH_USE_LINK_PATH TRUE
-	  INSTALL_RPATH "$ORIGIN/libs"
-          LINK_OPTIONS "-Wl,--disable-new-dtags"
-  )
 
   # install tcuscan_ops.so under site-packages/tcuscan
   install(TARGETS tcuscan_ops
@@ -202,13 +199,20 @@ if ( PIP_INSTALL )
                   tcuscan
   )
 
+  # Set RPATH to $ORIGIN/lib (See Python package layout)
+  set_target_properties(tcuscan_ops PROPERTIES
+          BUILD_WITH_INSTALL_RPATH TRUE
+          INSTALL_RPATH_USE_LINK_PATH TRUE
+	        LINK_FLAGS "-Wl,-rpath,\${ORIGIN}/lib"
+)
+
 
   # install dynamic libraries under site-packages/tcuscan/libs
   install(TARGETS scan_kernels
                   vector_kernels
                   split_kernels
           LIBRARY DESTINATION
-                  tcuscan/libs
+                  tcuscan/lib
   )
 else ()
   message( STATUS ">>>======================================================")
@@ -217,6 +221,13 @@ else ()
 
   set_target_properties(tcuscan_ops PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}
+  )
+
+  # Set RPATH to $(pwd)/build/lib
+  set_target_properties(tcuscan_ops PROPERTIES
+          BUILD_WITH_INSTALL_RPATH TRUE
+          INSTALL_RPATH_USE_LINK_PATH TRUE
+	        LINK_FLAGS "-Wl,-rpath,\${ORIGIN}/build/lib"
   )
 
 endif ()
