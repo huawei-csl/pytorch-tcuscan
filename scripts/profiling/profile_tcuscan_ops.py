@@ -279,6 +279,47 @@ def topk_tcuscan_benchmark(
     return _run_benchmark(device, run_tcuscan_topk), k
 
 
+def tcuscan_top_p(probs, p, s):
+    """
+    Perform top-p (nucleus) sampling on a probability distribution.
+
+    Args:
+        probs (torch.Tensor): Probability distribution tensor.
+        p (float): Probability threshold for top-p sampling.
+        s: Matrix size tiling parameter.
+
+    Returns:
+        torch.Tensor: Sampled token indices.
+
+    Note:
+        Top-p sampling selects the smallest set of tokens whose cumulative probability mass
+        exceeds the threshold p. The distribution is renormalized based on the selected tokens.
+    """
+    probs_sort, probs_idx = tcuscan_ops.run_radix_sort(probs, s)
+    probs_sum = tcuscan_ops.run_scan_multi_core(probs_sort, s)
+    mask = probs_sum - probs_sort > p
+    probs_sort[mask] = 0.0
+    probs_sort.div_(probs_sort.sum(dim=-1, keepdim=True))
+    next_token = torch.multinomial(probs_sort, num_samples=1)
+    next_token = torch.gather(probs_idx, -1, next_token)
+    return next_token
+
+
+def tcuscan_top_p_benchmark(
+    device: Device, size: int, dtype: torch.dtype, s: int
+) -> float:
+    threshold = 0.1
+    if dtype == torch.float16:
+        probs = torch.rand(size, device=device.str, dtype=dtype)
+    else:
+        raise RuntimeError(f"dtype {dtype} is not supported in sample_top_p operator")
+
+    def run_tcuscan_top_p() -> None:
+        _ = tcuscan_top_p(probs, threshold, s)
+
+    return _run_benchmark(device, run_tcuscan_top_p), 1
+
+
 def sample_top_p(probs, p):
     """
     Perform top-p (nucleus) sampling on a probability distribution.
@@ -942,6 +983,7 @@ if __name__ == "__main__":  # noqa
             "topk",
             "tcuscan_topk",
             "topp",
+            "tcuscan_topp",
             "mcgather",
             "gather_spmv",
             "sort",
@@ -970,6 +1012,7 @@ if __name__ == "__main__":  # noqa
     parser.add_argument("--density", type=float, default=None, required=False)
     parser.add_argument("--min-iter-index", type=int, default=1, required=False)
     parser.add_argument("--iter-step-multiplier", type=int, default=1, required=False)
+    parser.add_argument("--iter-step-divider", type=int, default=1, required=False)
     args = parser.parse_args()
 
     bench = args.bench
@@ -981,6 +1024,7 @@ if __name__ == "__main__":  # noqa
     density = args.density
     min_iter_index = args.min_iter_index
     iter_step_multiplier = args.iter_step_multiplier
+    iter_step_divider = args.iter_step_divider
 
     if DEVICE == "npu":
         device = Device(torch.npu, NPU_DEVICE)
@@ -991,7 +1035,11 @@ if __name__ == "__main__":  # noqa
 
     # Maximum number of iterations
     max_iters = ceil(max_size / (num_cores * s * s))
-    iters = range(min_iter_index, max_iters, iter_step_multiplier * 16 * 128 // s)
+    iters = range(
+        min_iter_index,
+        max_iters,
+        iter_step_multiplier * 16 * 128 // iter_step_divider // s,
+    )
 
     logger.info("*******************************")
     logger.info(f"* bench          : {bench}")
@@ -1000,6 +1048,7 @@ if __name__ == "__main__":  # noqa
     logger.info(f"* # of Iters     : {len(iters)}")
     logger.info(f"* min_iter_index : {min_iter_index}")
     logger.info(f"* iter_step_multiplier : {iter_step_multiplier}")
+    logger.info(f"* iter_step_divider : {iter_step_divider}")
     logger.info(f"* num_cores      : {num_cores}")
     logger.info(f"* s              : {s}")
     logger.info(f"* K              : {k}")
@@ -1010,6 +1059,7 @@ if __name__ == "__main__":  # noqa
 
     # Input sizes to benchmark
     sizes = [i * num_cores * s * s for i in iters]
+    print(sizes)
 
     if bench == "vadd":
         benchmark(device, "vadd", "fp16", vadd_benchmark, sizes)
@@ -1260,13 +1310,22 @@ if __name__ == "__main__":  # noqa
             sizes,
         )
 
-    elif bench == "top_p" and dtype in ["fp16"]:
+    elif bench == "topp" and dtype in ["fp16"]:
         tdtype = STR_TO_DTYPE[dtype]
         benchmark(
             device,
-            "top_p",
+            "topp",
             dtype,
             partial(top_p_benchmark, dtype=tdtype),
+            sizes,
+        )
+    elif bench == "tcuscan_topp" and dtype in ["fp16"]:
+        tdtype = STR_TO_DTYPE[dtype]
+        benchmark(
+            device,
+            f"tcuscan_topp_{s}",
+            dtype,
+            partial(tcuscan_top_p_benchmark, dtype=tdtype, s=s),
             sizes,
         )
     elif bench == "scan" and dtype in ["int8", "fp16"]:

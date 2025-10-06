@@ -109,21 +109,21 @@ profile_cpu:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops_cpu.py --bench scan --dtype fp16
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops_cpu.py --bench sort --dtype fp16
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops_cpu.py --bench masked_select --dtype fp16
-	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops_cpu.py --bench top_p --dtype fp16
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops_cpu.py --bench topp --dtype fp16
 
 profile_cuda:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops_gpu.py --bench copy --dtype fp16
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops_gpu.py --bench scan --dtype fp16
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops_gpu.py --bench sort --dtype fp16
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops_gpu.py --bench masked_select --dtype fp16
-	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops_gpu.py --bench top_p --dtype fp16
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops_gpu.py --bench topp --dtype fp16
 
 profile_baselines:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench copy --dtype fp16
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench scan --dtype fp16
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench sort --dtype fp16
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench masked_select --dtype fp16
-	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench top_p --dtype fp16
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench topp --dtype fp16
 
 profile_mcscan_int8:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench copy --dtype fp16
@@ -266,5 +266,11 @@ profile_int16_topk:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench tcuscan_topk --dtype int16 --s 32 --num_cores 20
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench tcuscan_topk --dtype int16 --s 64 --num_cores 20
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench tcuscan_topk --dtype int16 --s 128 --num_cores 20
+
+profile_topp:
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench topp --dtype fp16 --s 128 --num_cores 20 --max_size 16000000 --iter-step-divider 8
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench tcuscan_topp --dtype fp16 --s 32 --num_cores 20 --max_size 16000000 --iter-step-divider 2
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench tcuscan_topp --dtype fp16 --s 64 --num_cores 20 --max_size 16000000 --iter-step-divider 4
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench tcuscan_topp --dtype fp16 --s 128 --num_cores 20 --max_size 16000000 --iter-step-divider 8
 
 include Makefile.spaa.mk Makefile.spmv.mk
