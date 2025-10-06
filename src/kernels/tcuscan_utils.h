@@ -1398,17 +1398,42 @@ __aicore__ inline uint32_t GetWorkDistribution(uint32_t vec_len,
  *
  * @param [in] batch_size Number of elements.
  * @param [in] block_n Number of blocks.
+ * @param [in] core_idx Core index.
  *
  * @return Number of elements assigned to the block calling the function.
  */
 __aicore__ inline uint32_t GetBatchDistribution(uint32_t batch_size,
-                                                uint32_t block_n) {
-  // ISSUE: GetTaskRation() doesn't work for CPU
-  const uint32_t ai_core_idx = GetBlockIdx() / GetTaskRation();
-  if (ai_core_idx < batch_size % block_n)
+                                                uint32_t block_n,
+                                                uint32_t core_idx) {
+  if (core_idx < batch_size % block_n)
     return scalar::CeilDiv(batch_size, block_n);
   else
     return scalar::FloorDiv(batch_size, block_n);
+}
+
+/**
+ * @brief Returns how many batches are assigned to previous blocks using
+ * `GetBatchDistribution`.
+ *
+ * The function returns the number of elements to be processed by each block so
+ * that the depth of execution is minimized. If the workload is not balanced it
+ * will assign one more element starting from the first block
+ *
+ * @param [in] batch_size Number of elements.
+ * @param [in] block_n Number of blocks.
+ *
+ * @return Number of elements assigned to the block calling the function.
+ */
+__aicore__ inline uint32_t GetBatchOffset(uint32_t batch_size,
+                                          uint32_t block_n) {
+  uint32_t core_idx = GetBlockIdx();
+  uint32_t offset = 0;
+
+  for (uint32_t i = 0; i < core_idx; i++) {
+    offset += GetBatchDistribution(batch_size, block_n, i);
+  }
+
+  return offset;
 }
 
 /**

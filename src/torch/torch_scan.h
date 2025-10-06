@@ -18,7 +18,8 @@
 #include "../tiling/tiling_scan_single_core.h"
 #include "aclrtlaunch_block_scan_fp16.h"
 #include "aclrtlaunch_row_scan_fp16.h"
-#include "aclrtlaunch_scan_batch.h"
+#include "aclrtlaunch_scan_batch_fp16.h"
+#include "aclrtlaunch_scan_batch_fp32.h"
 #include "aclrtlaunch_scan_multi_core_fp16.h"
 #include "aclrtlaunch_scan_multi_core_fp16_no_l2.h"
 #include "aclrtlaunch_scan_multi_core_int8.h"
@@ -117,12 +118,14 @@ at::Tensor run_scan_single_core(const at::Tensor &x, int S,
  * @return A 2D matrix that is the row-wise scan of `x`.
  */
 at::Tensor run_scan_batch(const at::Tensor &x, int S) {
+  const auto ascendc_platform =
+      platform_ascendc::PlatformAscendCManager::GetInstance();
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();
   const auto dtype = x.options().dtype();
-  const uint32_t block_size = x.size(0);  // For tiling/cube core parallelism
-  const auto dtype_out =
-      dtype == torch::kHalf ? torch::kFloat32 : torch::kInt32;
+  const auto dtype_out = dtype == torch::kHalf || dtype == torch::kFloat32
+                             ? torch::kFloat32
+                             : torch::kInt32;
 
   const uint32_t matmul_size = static_cast<uint32_t>(S);
   const uint32_t batch_size = x.size(0);
@@ -131,17 +134,37 @@ at::Tensor run_scan_batch(const at::Tensor &x, int S) {
   const at::Tensor z =
       at::empty({batch_size, vec_len},
                 at::TensorOptions().dtype(dtype_out).device(device));
-  // Workspace is **always** required, even if it is an empty tensor
-  const at::Tensor workspace_tensor = alloc_workspace(0, device);
 
-  const ScanBatchTiling tiling{block_size, vec_len, batch_size, matmul_size,
+  uint32_t block_dim = ascendc_platform->GetCoreNumAic();
+  if (batch_size < block_dim) {
+    block_dim = batch_size;
+  }
+
+  const ScanBatchTiling tiling{block_dim, vec_len, batch_size, matmul_size,
                                2 /* vec-cube ratio */};
   uint8_t *tiling_device = alloc_copy_tiling(tiling);
 
-  ACLRT_LAUNCH_KERNEL(scan_batch)
-  (block_size, acl_stream, const_cast<void *>(x.storage().data()),
-   const_cast<void *>(z.storage().data()),
-   const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
+  if (dtype == torch::kHalf) {
+    const uint32_t user_workspace_size =
+        workspace::scan_batch::get_workspace_size<int16_t>(tiling);
+    const at::Tensor workspace_tensor =
+        alloc_workspace(user_workspace_size, device);
+    ACLRT_LAUNCH_KERNEL(scan_batch_fp16)
+    (block_dim, acl_stream, const_cast<void *>(x.storage().data()),
+     const_cast<void *>(z.storage().data()),
+     const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
+  } else if (dtype == torch::kFloat32) {
+    const uint32_t user_workspace_size =
+        workspace::scan_batch::get_workspace_size<float>(tiling);
+    const at::Tensor workspace_tensor =
+        alloc_zeros_workspace(user_workspace_size, device);
+    ACLRT_LAUNCH_KERNEL(scan_batch_fp32)
+    (block_dim, acl_stream, const_cast<void *>(x.storage().data()),
+     const_cast<void *>(z.storage().data()),
+     const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
+  } else {
+    /* Unsupported */
+  }
 
   aclrtFree(tiling_device);
   aclrtSynchronizeStream(acl_stream);

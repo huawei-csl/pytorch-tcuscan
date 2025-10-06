@@ -2,12 +2,14 @@
  * Copyright (c) Huawei Technologies Co., Ltd. 2024. All rights reserved.
  *
  * @file kernel_row_scan.h
- * @brief Kernel implementing row scan using right matrix multiplication by U_s
- (upper tringular all-ones matrix).
+ * @brief Kernel implementing row-wise scan using Cube unit.
  */
 #pragma once
 
 #include "ascendc_kernel_operator.h"
+#include "kernel_copy.h"
+#include "kernel_pad_batch.h"
+#include "kernel_unpad_batch.h"
 #include "tcuscan_utils.h"
 
 using namespace AscendC;
@@ -28,7 +30,7 @@ using namespace kernel_utils;
  * are equally distributed into different cube cores.
  *
  * The algorithm assumes that the length of the input vector is divisible by
- * \f$M K\f$ times the number of blocks.
+ * \f$M K\f$.
  *
  * The algorithm is a first step in the full-scan calculation.
  *
@@ -38,7 +40,8 @@ using namespace kernel_utils;
  *   - inputs: `half`; output: `float`.
  *
  * @tparam InputT Data type of the input vector.
- * @tparam SyncAfter Synchronize cube tiles with vector cores if true
+ * @tparam SyncAfter If true, synchronize vector units with cube unit after each
+ * matrix tile.
  */
 template <typename InputT, bool SyncAfter = false>
 class KernelRowScan {
@@ -61,14 +64,9 @@ class KernelRowScan {
         vec_len_(vec_len),
         num_tiles_(scalar::FloorDiv(vec_len, tile_size_)),
         max_num_tiles_per_block_(scalar::CeilDiv(num_tiles_, block_num_)) {
-    static_assert(kernel_utils::cube_unit::IsCubeSupported<InputT>,
-                  "Unsupported input Cube dtype. Please use half or int8_t.");
-    ASCENDC_ASSERT((vec_len % (matmul_m_size_ * matmul_k_size_) == 0), {
-      KERNEL_LOG(KERNEL_ERROR,
-                 "The length of the input vector (%d) must be "
-                 "divisible by the tile size (%d)",
-                 vec_len, matmul_m_size_ * matmul_k_size_);
-    });
+    static_assert(
+        kernel_utils::cube_unit::IsCubeSupported<InputT>,
+        "Unsupported input Cube dtype. Please use half, float, or int8_t.");
   }
 
   /**
@@ -179,3 +177,84 @@ class KernelRowScan {
   const uint32_t b_cube_tile_size_ = K_ * N_;
   const uint32_t c_cube_tile_size_ = matmul_m_size_ * N_;
 };
+
+/**
+ * @brief Run the row scan kernel with padding if needed.
+ *
+ * @tparam InputT Data type of the input vectors.
+ *
+ * @param [in] input_vec Pointer to an input vector.
+ * @param [in] upper_triangular Pointer to an upper-triangular matrix filled
+ * with ones of size \f$\textit{matmul_size} \times \textit{matmul_size}\f$.
+ * @param [in] output_vec Pointer to an output vector.
+ * @param [in] vec_len Number of elements in one vector.
+ * @param [in] batch_size Number of vectors in a batch.
+ * @param [in] matmul_size Size of the matmul tile used in the kernel.
+ * @param [in] workspace Pointer to a memory region used as workspace.
+ */
+template <typename InputT>
+__aicore__ inline void run_row_scan_kernel(GM_ADDR input_vec,
+                                           GM_ADDR upper_triangular,
+                                           GM_ADDR output_vec, uint32_t vec_len,
+                                           uint32_t batch_size,
+                                           uint16_t matmul_size,
+                                           GM_ADDR workspace) {
+  using OutputT = kernel_utils::cube_unit::CubeOutType_t<InputT>;
+
+  if (vec_len == matmul_size && batch_size % matmul_size == 0) {
+    if ASCEND_IS_AIC {
+      KernelRowScan<InputT> op_cube(matmul_size, matmul_size,
+                                    vec_len * batch_size);
+      op_cube.Init(input_vec, upper_triangular, output_vec);
+      op_cube.Process();
+    }
+
+  } else {
+    const uint32_t vector_align_size = matmul_size;
+    const uint32_t batch_align_size = matmul_size;
+    const uint32_t aligned_vec_len =
+        scalar::AlignUp(vec_len, vector_align_size);
+    const uint32_t aligned_batch_size =
+        scalar::AlignUp(batch_size, batch_align_size);
+
+    const uint32_t padded_tensor_len = aligned_vec_len * aligned_batch_size;
+    GM_ADDR const padded_input = workspace;
+    GM_ADDR const padded_rowwise_scan =
+        workspace + padded_tensor_len * sizeof(InputT);
+
+    if (vec_len == matmul_size) {
+      run_copy<OutputT, false /* ForceMixMode */>(
+          input_vec, padded_input, batch_size * vec_len, matmul_size);
+    } else {
+      run_pad_batch<InputT, false>(input_vec, padded_input, vec_len, batch_size,
+                                   vector_align_size, vector_align_size);
+    }
+
+    sync::SyncAllCores();
+    sync::SyncGroup<sync::GroupSyncDirection::FULL>();
+    PipeBarrier<PIPE_ALL>();
+
+    if ASCEND_IS_AIC {
+      KernelRowScan<InputT> op_cube(matmul_size, matmul_size,
+                                    aligned_vec_len * aligned_batch_size);
+      op_cube.Init(padded_input, upper_triangular, padded_rowwise_scan);
+      op_cube.Process();
+    }
+
+    sync::SyncAllCores();
+    sync::SyncGroup<sync::GroupSyncDirection::FULL>();
+    PipeBarrier<PIPE_ALL>();
+
+    if (vec_len == matmul_size) {
+      run_copy<OutputT, false /* ForceMixMode */>(
+          padded_rowwise_scan, output_vec, batch_size * vec_len, matmul_size);
+    } else {
+      if ASCEND_IS_AIV {
+        KernelUnpadBatch<OutputT> op_vec(aligned_vec_len, batch_size, vec_len,
+                                         matmul_size);
+        op_vec.Init(padded_rowwise_scan, output_vec);
+        op_vec.Process();
+      }
+    }
+  }
+}

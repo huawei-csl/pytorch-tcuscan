@@ -16,24 +16,16 @@
  * @param [in] input_vec Pointer to an input vector.
  * @param [in] output_vec Pointer to an output vector.
  * @param [in] workspace Pointer to a workspace vector (empty vector!).
- * @param [in] tiling_gm Pointer to the tiling structure.
+ * @param [in] tiling Pointer to the tiling structure.
  */
-extern "C" __global__ __aicore__ void scan_batch(GM_ADDR input_vec,
-                                                 GM_ADDR output_vec,
-                                                 GM_ADDR workspace,
-                                                 GM_ADDR tiling_gm) {
-  (void)workspace;
+extern "C" __global__ __aicore__ void scan_batch_fp16(GM_ADDR input_vec,
+                                                      GM_ADDR output_vec,
+                                                      GM_ADDR workspace,
+                                                      GM_ADDR tiling) {
   ScanBatchTiling tiling_data;
-  tiling::GetTilingData(&tiling_data, tiling_gm);
-
+  tiling::GetTilingData(&tiling_data, tiling);
   GM_ADDR const lower = load_tril_matrix<half>(tiling_data.matmul_size);
 
-  ASCENDC_ASSERT(tiling_data.num_elems % GetFractalK<half>() == 0, {
-    KERNEL_LOG(KERNEL_ERROR,
-               "The length of the vectors (%d) must be "
-               "divisible by the fractal size (%d).",
-               tiling_data.num_elems, GetFractalK<half>());
-  });
   ASCENDC_ASSERT(tiling_data.batch_size % tiling_data.vec_cube_ratio == 0, {
     KERNEL_LOG(KERNEL_ERROR,
                "The batch size (%d) must be "
@@ -41,13 +33,49 @@ extern "C" __global__ __aicore__ void scan_batch(GM_ADDR input_vec,
                tiling_data.batch_size, tiling_data.vec_cube_ratio);
   });
 
-  if (tiling_data.num_elems <= 128) {
-    run_scan_cube_only_kernel<half>(input_vec, lower, output_vec,
-                                    tiling_data.num_elems,
-                                    tiling_data.batch_size);
+  if (tiling_data.num_elems <= tiling_data.matmul_size) {
+    run_row_scan_kernel<half>(input_vec, lower, output_vec,
+                              tiling_data.num_elems, tiling_data.batch_size,
+                              tiling_data.matmul_size, workspace);
   } else {
-    run_scan_batch_kernel(input_vec, lower, output_vec, tiling_data.num_elems,
-                          tiling_data.batch_size, tiling_data.matmul_size,
-                          tiling_data.vec_cube_ratio);
+    run_scan_batch_kernel<half>(input_vec, lower, output_vec,
+                                tiling_data.num_elems, tiling_data.batch_size,
+                                tiling_data.matmul_size,
+                                tiling_data.vec_cube_ratio, workspace);
+  }
+}
+
+/**
+ *  @brief Run the multi core inclusive scan kernel on a batched input.
+ *
+ * @param [in] input_vec Pointer to an input vector.
+ * @param [in] output_vec Pointer to an output vector.
+ * @param [in] workspace Pointer to a workspace vector (empty vector!).
+ * @param [in] tiling Pointer to the tiling structure.
+ */
+extern "C" __global__ __aicore__ void scan_batch_fp32(GM_ADDR input_vec,
+                                                      GM_ADDR output_vec,
+                                                      GM_ADDR workspace,
+                                                      GM_ADDR tiling) {
+  ScanBatchTiling tiling_data;
+  tiling::GetTilingData(&tiling_data, tiling);
+  GM_ADDR const lower = load_tril_matrix<float>(tiling_data.matmul_size);
+
+  ASCENDC_ASSERT(tiling_data.batch_size % tiling_data.vec_cube_ratio == 0, {
+    KERNEL_LOG(KERNEL_ERROR,
+               "The batch size (%d) must be "
+               "divisible by the ratio between vector and cube cores (%d).",
+               tiling_data.batch_size, tiling_data.vec_cube_ratio);
+  });
+
+  if (tiling_data.num_elems <= tiling_data.matmul_size) {
+    run_row_scan_kernel<float>(input_vec, lower, output_vec,
+                               tiling_data.num_elems, tiling_data.batch_size,
+                               tiling_data.matmul_size, workspace);
+  } else {
+    run_scan_batch_kernel<float>(input_vec, lower, output_vec,
+                                 tiling_data.num_elems, tiling_data.batch_size,
+                                 tiling_data.matmul_size,
+                                 tiling_data.vec_cube_ratio, workspace);
   }
 }

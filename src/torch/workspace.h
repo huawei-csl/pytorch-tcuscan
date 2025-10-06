@@ -12,6 +12,7 @@
 #include "../tiling/tiling_compress.h"
 #include "../tiling/tiling_copy.h"
 #include "../tiling/tiling_radix_sort.h"
+#include "../tiling/tiling_scan_batch.h"
 #include "../tiling/tiling_scan_multi_core.h"
 #include "../tiling/tiling_scan_single_core.h"
 #include "../tiling/tiling_seg_sum_single_core.h"
@@ -134,6 +135,43 @@ constexpr uint32_t get_workspace_size(const SingleCoreScanTiling& tiling) {
   return total_size;
 }
 }  // namespace sc_scan
+
+namespace scan_batch {
+
+/**
+ * @brief Calculate the workspace size for batched scan.
+ *
+ * @tparam InputT Input data type.
+ *
+ * @param [in] tiling Tiling parameters used in the kernel.
+ * @return Size of the workspace in bytes.
+ */
+template <typename InputT>
+constexpr uint32_t get_workspace_size(const ScanBatchTiling& tiling) {
+  using OutputT = host_utils::CubeOutType_t<InputT>;
+
+  if (tiling.num_elems > tiling.matmul_size) {
+    const uint32_t padded_input_len =
+        host_utils::AlignUp(tiling.num_elems,
+                            tiling.matmul_size * tiling.matmul_size) *
+        tiling.batch_size;
+    const uint32_t padded_input_size = padded_input_len * sizeof(InputT);
+    const uint32_t padded_rowwise_size = padded_input_len * sizeof(OutputT);
+
+    return padded_input_size + padded_rowwise_size;
+  } else {
+    const uint32_t padded_input_len =
+        host_utils::AlignUp(tiling.num_elems, tiling.matmul_size) *
+        host_utils::AlignUp(tiling.batch_size,
+                            tiling.matmul_size * tiling.matmul_size);
+
+    const uint32_t padded_input_size = padded_input_len * sizeof(InputT);
+    const uint32_t padded_rowwise_size = padded_input_len * sizeof(OutputT);
+    return padded_input_size + padded_rowwise_size;
+  }
+}
+
+}  // namespace scan_batch
 
 namespace split {
 
