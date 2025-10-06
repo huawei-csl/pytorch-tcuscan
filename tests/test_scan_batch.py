@@ -19,16 +19,20 @@ torch.npu.set_device(NPU_DEVICE)
 
 _MULTIPLIERS = [1, 2, 3, 11, 63]
 _BATCH_SIZES = [2, 16, 20, 32, 44, 256]
+_S = [32, 64, 128]
 
 
-def get_lengths_and_batch_sizes(s: int, multipliers: List[int], batch_sizes: List[int]):
-    for multiplier in multipliers:
-        for batch_size in batch_sizes:
-            yield (multiplier * s * s, batch_size)
-            yield (multiplier * s * s // 2, batch_size)
-            yield (multiplier * s * s // 4, batch_size)
-            yield (multiplier * s * s - 1, batch_size)
-            yield (multiplier * s * s + 1, batch_size)
+def get_lengths_and_batch_sizes(
+    matmul_sizes: List[int], multipliers: List[int], batch_sizes: List[int]
+):
+    for s in matmul_sizes:
+        for multiplier in multipliers:
+            for batch_size in batch_sizes:
+                yield (s, multiplier * s * s, batch_size)
+                yield (s, multiplier * s * s // 2, batch_size)
+                yield (s, multiplier * s * s // 4, batch_size)
+                yield (s, multiplier * s * s - 1, batch_size)
+                yield (s, multiplier * s * s + 1, batch_size)
 
 
 def _test_scan_batch(s: int, vec_len: int, batch_size: int, dtype: torch.dtype):
@@ -47,44 +51,11 @@ def _test_scan_batch(s: int, vec_len: int, batch_size: int, dtype: torch.dtype):
 
 
 @pytest.mark.parametrize(
-    "vec_len, batch_size",
+    "s, vec_len, batch_size",
     get_lengths_and_batch_sizes(
-        s=16, multipliers=_MULTIPLIERS, batch_sizes=_BATCH_SIZES
-    ),
-)
-@pytest.mark.parametrize("dtype", [torch.float16], ids=str)
-def test_scan_batch_s_16(vec_len: int, batch_size: int, dtype: torch.dtype):
-    _test_scan_batch(16, vec_len, batch_size, dtype)
-
-
-@pytest.mark.parametrize(
-    "vec_len, batch_size",
-    get_lengths_and_batch_sizes(
-        s=32, multipliers=_MULTIPLIERS, batch_sizes=_BATCH_SIZES
-    ),
-)
-@pytest.mark.parametrize("dtype", [torch.float16], ids=str)
-def test_scan_batch_s_32(vec_len: int, batch_size: int, dtype: torch.dtype):
-    _test_scan_batch(32, vec_len, batch_size, dtype)
-
-
-@pytest.mark.parametrize(
-    "vec_len, batch_size",
-    get_lengths_and_batch_sizes(
-        s=64, multipliers=_MULTIPLIERS, batch_sizes=_BATCH_SIZES
-    ),
-)
-@pytest.mark.parametrize("dtype", [torch.float16], ids=str)
-def test_scan_batch_s_64(vec_len: int, batch_size: int, dtype: torch.dtype):
-    _test_scan_batch(64, vec_len, batch_size, dtype)
-
-
-@pytest.mark.parametrize(
-    "vec_len, batch_size",
-    get_lengths_and_batch_sizes(
-        s=128, multipliers=_MULTIPLIERS, batch_sizes=_BATCH_SIZES
+        matmul_sizes=_S, multipliers=_MULTIPLIERS, batch_sizes=_BATCH_SIZES
     ),
 )
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float16], ids=str)
-def test_scan_batch_s_128(vec_len: int, batch_size: int, dtype: torch.dtype):
-    _test_scan_batch(128, vec_len, batch_size, dtype)
+def test_scan_batch(s: int, vec_len: int, batch_size: int, dtype: torch.dtype):
+    _test_scan_batch(s, vec_len, batch_size, dtype)
