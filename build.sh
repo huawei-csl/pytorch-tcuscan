@@ -49,13 +49,8 @@ echo "Current compile soc version is ${SOC_VERSION}"
 CMAKE_PREFIX_PATH=$(python3 -c "import torch; print(torch.utils.cmake_prefix_path)")
 export CMAKE_PREFIX_PATH
 
-# TORCH_NPU_PATH is the location where PyTorch Ascend Adapter (torch_npu) is installed.
-TORCH_NPU_PATH=$(python3 -c "import os; import torch_npu; print(os.path.dirname(torch_npu.__file__))")
-export TORCH_NPU_PATH
-
 
 echo "CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}"
-echo "TORCH_NPU_PATH=${TORCH_NPU_PATH}"
 
 
 set -e

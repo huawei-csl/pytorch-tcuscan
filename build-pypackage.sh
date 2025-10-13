@@ -52,12 +52,8 @@ TORCH_NPU_PATH=$(python3 -c "import os; import torch_npu; print(os.path.dirname(
 export TORCH_NPU_PATH
 
 echo "CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}"
-echo "TORCH_NPU_PATH=${TORCH_NPU_PATH}"
-
-
 
 set -e
 
 export CMAKE_GENERATOR="Unix Makefiles"
-pip install -v . --extra-index-url https://download.pytorch.org/whl/cpu \
-                 --config-settings=cmake.define.TORCH_NPU_PATH="${TORCH_NPU_PATH}"
+pip install -v . --extra-index-url https://download.pytorch.org/whl/cpu

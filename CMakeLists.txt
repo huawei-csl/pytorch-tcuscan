@@ -47,11 +47,12 @@ include(${ASCENDC_CMAKE_DIR}/ascendc.cmake)
 
 # TORCH_NPU_PATH is the location where PyTorch Ascend Adapter (torch_npu) is
 # installed.
-if(NOT DEFINED ENV{TORCH_NPU_PATH})
-  message(FATAL_ERROR "TORCH_NPU_PATH is not set")
-else()
-  set(TORCH_NPU_PATH $ENV{TORCH_NPU_PATH})
-endif()
+execute_process(
+  COMMAND
+    python3 -c
+    "import os; import torch_npu; print(os.path.dirname(torch_npu.__file__))"
+  OUTPUT_STRIP_TRAILING_WHITESPACE
+  OUTPUT_VARIABLE TORCH_NPU_PATH)
 
 message("***********************************************************")
 message("* ASCEND_CANN_PACKAGE_PATH : ${ASCEND_CANN_PACKAGE_PATH}")

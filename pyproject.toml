@@ -1,5 +1,17 @@
 [build-system]
-requires = ["scikit-build-core", "pybind11"]
+requires = [
+  "scikit-build-core",
+  "pybind11==3.0.1",
+  "pybind11==3.0.1",
+  "numpy==1.26.4",
+  "scipy==1.13.1",
+  "decorator==5.1.1",
+  "psutil==6.1.0",
+  "PyYAML==6.0.2",
+  "attrs==24.2.0",
+  "torch @ https://download.pytorch.org/whl/cpu/torch-2.6.0%2Bcpu-cp310-cp310-linux_x86_64.whl",
+  "torch_npu @ https://gitcode.com/Ascend/pytorch/releases/download/v7.1.0.2-pytorch2.6.0/torch_npu-2.6.0.post2-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+]
 build-backend = "scikit_build_core.build"
 
 [tool.scikit-build.cmake.define]
@@ -19,7 +31,14 @@ classifiers = [
 ]
 dependencies = [
   "pybind11==3.0.1",
-  "torch-npu @ file://localhost/scratch/TCUSCAN/wheels/torch_npu-2.6.0.post1-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl"
+  "numpy==1.26.4",
+  "scipy==1.13.1",
+  "decorator==5.1.1",
+  "psutil==6.1.0",
+  "PyYAML==6.0.2",
+  "attrs==24.2.0",
+  "torch @ https://download.pytorch.org/whl/cpu/torch-2.6.0%2Bcpu-cp310-cp310-linux_x86_64.whl",
+  "torch_npu @ https://gitcode.com/Ascend/pytorch/releases/download/v7.1.0.2-pytorch2.6.0/torch_npu-2.6.0.post2-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
 ]
 
 [tool.scikit-build]
