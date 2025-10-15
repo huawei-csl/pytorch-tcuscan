@@ -128,8 +128,10 @@ at::Tensor run_scan_batch(const at::Tensor &x, int S) {
                              : torch::kInt32;
 
   const uint32_t matmul_size = static_cast<uint32_t>(S);
-  const uint32_t batch_size = x.size(0);
-  const uint32_t vec_len = x.size(1);
+
+  uint32_t num_el = x.numel();
+  const uint32_t batch_size = num_el / x.size(-1);
+  const uint32_t vec_len = x.size(-1);
 
   const at::Tensor z =
       at::empty({batch_size, vec_len},
