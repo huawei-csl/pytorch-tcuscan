@@ -31,6 +31,7 @@
 #include "commons.h"
 #include "tiling/platform/platform_ascendc.h"
 #include "torch_npu/csrc/core/npu/NPUStream.h"
+#include "torch_scan_cpu.h"
 #include "workspace.h"
 
 namespace asc {

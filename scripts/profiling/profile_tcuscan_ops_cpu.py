@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 # -*- coding:utf-8 -*-
 # Copyright 2024 Huawei Technologies Co., Ltd
+# isort: skip_file
 
 import argparse
 import logging
@@ -16,6 +17,8 @@ from typing import Tuple
 import numpy as np
 
 import torch
+import tcuscan_ops  # noqa : needed for tcuscan_ops.run_scan_cpu
+
 
 file_handler = logging.FileHandler(filename="torch_profiler_cpu.log")
 stdout_handler = logging.StreamHandler(stream=sys.stdout)
@@ -94,7 +97,12 @@ def _run_benchmark(
 
     start_times = np.zeros(benchmark_iters)
     end_times = np.zeros(benchmark_iters)
+
+    cache_size = 512 * 1024 * 1024
+    cache = torch.ones(cache_size, dtype=torch.int8)
+
     for i in range(benchmark_iters):
+        cache.zero_()
         start_times[i] = time.perf_counter_ns()
         fn()
         end_times[i] = time.perf_counter_ns()
@@ -143,7 +151,7 @@ def cast_benchmark(device: Device, size: int, dtype: torch.dtype) -> float:
 
 
 def scan_benchmark(device: Device, size: int, dtype: torch.dtype) -> float:
-    if dtype == torch.float16:
+    if dtype in {torch.float16, torch.float32}:
         out_dtype = torch.float32
         x = torch.rand(size, device=device.str, dtype=dtype)
     elif dtype == torch.int8:
@@ -152,10 +160,11 @@ def scan_benchmark(device: Device, size: int, dtype: torch.dtype) -> float:
     else:
         raise ValueError("Incorrect scan data type")
 
-    y = torch.zeros(size, device=device.str, dtype=out_dtype)
+    y = torch.zeros(size, device=device.str, dtype=out_dtype)  # noqa
 
     def run_scan() -> None:
-        _ = torch.cumsum(x, dim=-1, dtype=out_dtype, out=y)
+        _ = tcuscan_ops.run_scan_cpu(x)
+        # _ = torch.cumsum(x, dim=-1, dtype=out_dtype, out=y)
 
     return _run_benchmark(run_scan)
 
@@ -438,7 +447,7 @@ if __name__ == "__main__":  # noqa
 
     tdtype = STR_TO_DTYPE[dtype]
 
-    if bench == "scan" and dtype in ["int8", "fp16"]:
+    if bench == "scan" and dtype in ["int8", "fp16", "fp32"]:
         benchmark(
             device,
             "scan",
@@ -543,8 +552,8 @@ if __name__ == "__main__":  # noqa
             partial(top_p_benchmark, dtype=tdtype),
             filter(lambda x: x < 2**24, sizes),
         )
-    elif bench == "vadd":
-        benchmark(device, "vadd", "fp16", vadd_benchmark, sizes)
+    elif bench == "vadd" and dtype in ["fp16", "fp32"]:
+        benchmark(device, "vadd", dtype, vadd_benchmark, sizes)
     else:
         raise RuntimeError(
             f"Unsupported benchmark setup: bench:{bench}, dtype:{dtype}, s:{s}"

@@ -104,12 +104,10 @@ profile_all_s_fp16_%:
 profile_cpu_fp32_%:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops_cpu.py --bench $* --dtype fp32
 
-profile_cpu:
-	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops_cpu.py --bench copy --dtype fp16
-	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops_cpu.py --bench scan --dtype fp16
-	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops_cpu.py --bench sort --dtype fp16
-	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops_cpu.py --bench masked_select --dtype fp16
-	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops_cpu.py --bench topp --dtype fp16
+profile_cpu_fp16_%:
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops_cpu.py --bench $* --dtype fp16
+
+profile_cpu: profile_cpu_fp16_copy profile_cpu_fp16_scan profile_cpu_fp16_sort profile_cpu_fp16_masked_select profile_cpu_fp16_topk
 
 profile_cuda:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops_gpu.py --bench copy --dtype fp16
