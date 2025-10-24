@@ -1,5 +1,25 @@
-# pybind11-ascend
+# pytorch-tcuscan
 
+AscendC TCUSCAN operators (scan, sort, split, top-k, compress, etc) using the Cube unit.
+
+
+## Getting started
+
+```bash
+export CMAKE_GENERATOR="Unix Makefiles"
+pip install -v ssh://git@szv-open.codehub.huawei.com:2222/innersource/tcuscan_G/pytorch-tcuscan.git
+```
+
+Or clone the repository and run:
+```bash
+export CMAKE_GENERATOR="Unix Makefiles"
+pip install -v
+```
+
+Then, inside Python, type `import tcuscan`.
+
+
+# Development
 Integrating TCUSCAN kernels to pytorch npu.
 
 ## Build, test, and install
