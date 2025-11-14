@@ -20,7 +20,7 @@ torch.npu.set_device(NPU_DEVICE)
 def get_lengths(s: int, max_iters: int):
     NUM_AI_CORES = 20
     for multiplier in range(1, max_iters):
-        yield multiplier * NUM_AI_CORES * s * s
+        yield multiplier * NUM_AI_CORES * s * s - 13
 
 
 def tcuscan_compress(x, mask, s: int):

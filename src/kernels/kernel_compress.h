@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Huawei Technologies Co., Ltd. 2024. All rights reserved.
+ * Copyright (c) Huawei Technologies Co., Ltd. 2024-2025. All rights reserved.
  *
  * @file kernel_compress.h
  * @brief Kernel implementing a compress operation.
@@ -46,20 +46,20 @@ class KernelCompress {
    * @brief Class constructor.
    *
    * @param [in] vec_len Number of elements in an input vector.
-   * @param [in] tile_size Number of elements processed by each block in a
-   * single iteration.
+   * @param [in] tile_len Tile length.
    */
-  __aicore__ inline KernelCompress(uint32_t vec_len, uint32_t tile_size)
-      : vec_len_(vec_len),
-        block_num_(GetBlockNum() * GetTaskRation()),
-        tile_size_(tile_size),
-        mask_required_elems_(tile_size / IN_ELEMS_PER_MASK_ELEM),
+  __aicore__ inline KernelCompress(uint32_t vec_len, uint32_t tile_len)
+      : vec_core_num_(GetBlockNum() * GetTaskRation()),
+        vec_len_(vec_len),
+        tile_len_(tile_len),
+        mask_required_elems_(tile_len_ / IN_ELEMS_PER_MASK_ELEM),
         packed_mask_tile_size_(mask_required_elems_ < SMALLEST_MASK
                                    ? SMALLEST_MASK
                                    : mask_required_elems_),
-        num_tiles_(scalar::CeilDiv(vec_len_, tile_size_ * block_num_)),
-        num_elems_per_block_(tile_size_ * num_tiles_),
-        num_elems_before_block_(GetBlockIdx() * num_elems_per_block_) {
+        num_tiles_(scalar::CeilDiv(vec_len_, tile_len_)),
+        max_num_tiles_per_block_(scalar::CeilDiv(num_tiles_, vec_core_num_)),
+        max_num_elems_per_block_(tile_len_ * max_num_tiles_per_block_),
+        num_elems_before_block_(GetBlockIdx() * max_num_elems_per_block_) {
     // GatherMask requires either 2- or 4-byte elements
     static_assert(sizeof(T) >= 2);
   }
@@ -75,77 +75,92 @@ class KernelCompress {
    */
   __aicore__ inline void Init(GM_ADDR input, GM_ADDR mask, GM_ADDR pos,
                               GM_ADDR output) {
-    global_input_.SetGlobalBuffer((__gm__ T *)input + num_elems_before_block_,
-                                  num_elems_per_block_);
-    global_output_.SetGlobalBuffer((__gm__ T *)output, vec_len_);
-    global_mask_.SetGlobalBuffer((__gm__ MaskT *)mask + num_elems_before_block_,
-                                 num_elems_per_block_);
-    global_pos_.SetGlobalBuffer((__gm__ PosT *)pos, vec_len_);
+    global_input_.SetGlobalBuffer((__gm__ T*)input, vec_len_);
+    global_output_.SetGlobalBuffer((__gm__ T*)output, vec_len_);
+    global_mask_.SetGlobalBuffer((__gm__ MaskT*)mask, vec_len_);
+    global_pos_.SetGlobalBuffer((__gm__ PosT*)pos, vec_len_);
 
-    pipe.InitBuffer(vec_in_q_, 1, tile_size_ * sizeof(T));
-    pipe.InitBuffer(mask_in_q_, 1, tile_size_ * sizeof(MaskT));
-    pipe.InitBuffer(mask_fp16_buf_, tile_size_ * sizeof(half));
+    pipe.InitBuffer(vec_in_q_, 1, tile_len_ * sizeof(T));
+    pipe.InitBuffer(mask_in_q_, 1, tile_len_ * sizeof(MaskT));
+    pipe.InitBuffer(mask_fp16_buf_, tile_len_ * sizeof(half));
     pipe.InitBuffer(packed_mask_buf_,
                     packed_mask_tile_size_ * sizeof(PackedMaskT));
-    pipe.InitBuffer(gathered_out_q_, 2, tile_size_ * sizeof(T));
+    pipe.InitBuffer(gathered_out_q_, 2, tile_len_ * sizeof(T));
   }
 
   /**
    * @brief Run the kernel.
    */
   __aicore__ inline void Process() {
-    for (uint32_t block_offset = 0; block_offset < num_elems_per_block_;
-         block_offset += tile_size_) {
-      LoadAndConvertMask(block_offset);
-      copy::CopyGmToVec(vec_in_q_, global_input_[block_offset]);
+    const uint32_t num_tiles_to_process =
+        kernel_utils::scalar::GetWorkDistribution(vec_len_, tile_len_,
+                                                  vec_core_num_);
 
-      uint32_t output_offset;
-      CalculatePartsOffsets(block_offset, output_offset);
+    uint32_t offset_within_block = 0;
+    uint32_t output_offset;
+    CalculatePartsOffsets(num_elems_before_block_, output_offset);
+
+    for (uint32_t tile_idx = 0; tile_idx < num_tiles_to_process; tile_idx++) {
+      const uint32_t global_offset =
+          num_elems_before_block_ + offset_within_block;
+      const bool full_tile = global_offset + tile_len_ < vec_len_;
+      const uint32_t num_elems_to_process =
+          full_tile ? tile_len_ : vec_len_ - global_offset;
+
+      LoadAndConvertMask(global_offset, num_elems_to_process);
+      copy::CopyGmToVec(vec_in_q_, global_input_[global_offset],
+                        num_elems_to_process);
 
       LocalTensor<T> input_lt = vec_in_q_.DeQue<T>();
 
       // Gather ones.
-      GatherAndStore(input_lt, gathered_out_q_, global_output_[output_offset]);
+      uint32_t num_gathered_elems =
+          GatherAndStore(input_lt, gathered_out_q_,
+                         global_output_[output_offset], num_elems_to_process);
+
+      output_offset += num_gathered_elems;
 
       vec_in_q_.FreeTensor(input_lt);
+      offset_within_block += num_elems_to_process;
     }
   }
 
  private:
-  __aicore__ inline void CalculatePartsOffsets(uint32_t offset_in_block,
-                                               uint32_t &output_offset) {
-    const uint32_t num_elems_before_tile =
-        num_elems_before_block_ + offset_in_block;
-
-    output_offset = 0;
-    if (num_elems_before_tile > 0) {
-      output_offset = global_pos_.GetValue(num_elems_before_tile - 1);
-      data_cache::InvalidateLine(global_pos_[num_elems_before_tile - 1]);
+  __aicore__ inline void CalculatePartsOffsets(uint32_t global_offset,
+                                               uint32_t& output_offset) {
+    if (global_offset > 0) {
+      output_offset = global_pos_.GetValue(global_offset - 1);
+      data_cache::InvalidateLine(global_pos_[global_offset - 1]);
+    } else {
+      output_offset = 0;
     }
   }
 
-  __aicore__ inline void LoadAndConvertMask(uint32_t block_offset) {
-    copy::CopyGmToVec(mask_in_q_, global_mask_[block_offset]);
+  __aicore__ inline void LoadAndConvertMask(uint32_t global_offset,
+                                            uint32_t num_elems_to_process) {
+    copy::CopyGmToVec(mask_in_q_, global_mask_[global_offset],
+                      num_elems_to_process);
     LocalTensor<MaskT> mask_lt = mask_in_q_.DeQue<MaskT>();
 
     // Cast mask to fp16 since compare instructions require fp16 or fp32
     // input.
     const LocalTensor<half> mask_fp16_lt = mask_fp16_buf_.Get<half>();
-    Cast(mask_fp16_lt, mask_lt, RoundMode::CAST_NONE, tile_size_);
+    Duplicate(mask_fp16_lt, static_cast<half>(0), tile_len_);
+    Cast(mask_fp16_lt, mask_lt, RoundMode::CAST_NONE, num_elems_to_process);
     mask_in_q_.FreeTensor(mask_lt);
 
     // Create a packed mask in uint8 datatype.
     const LocalTensor<PackedMaskT> packed_mask_8b =
         packed_mask_buf_.Get<PackedMaskT>();
     CompareScalar(packed_mask_8b, mask_fp16_lt, static_cast<half>(1),
-                  CMPMODE::EQ, tile_size_);
+                  CMPMODE::EQ, tile_len_);
   }
 
   template <typename GatherT, int32_t _NumBuf>
-  __aicore__ inline void GatherAndStore(
-      const LocalTensor<GatherT> &input_lt,
-      TQue<QuePosition::VECOUT, _NumBuf> &out_q,
-      const GlobalTensor<GatherT> &global) {
+  __aicore__ inline uint32_t GatherAndStore(
+      const LocalTensor<GatherT>& input_lt,
+      TQue<QuePosition::VECOUT, _NumBuf>& out_q,
+      const GlobalTensor<GatherT>& global, uint32_t num_elems_to_process) {
     using GatherMaskT = _GatherMaskT<GatherT>;
 
     uint64_t num_gathered_elems = 0;
@@ -155,9 +170,8 @@ class KernelCompress {
       const LocalTensor<GatherT> output_lt =
           out_q.template AllocTensor<GatherT>();
 
-      const uint32_t vector_mask = input_lt.GetSize();
-      GatherMask(output_lt, input_lt, mask_lt, true, vector_mask, {1, 1, 8, 8},
-                 num_gathered_elems);
+      GatherMask(output_lt, input_lt, mask_lt, true, num_elems_to_process,
+                 {1, 1, 8, 8}, num_gathered_elems);
       out_q.EnQue(output_lt);
     }
 
@@ -166,7 +180,7 @@ class KernelCompress {
 
       if (num_gathered_elems == 0) {
         out_q.FreeTensor(output_lt);
-        return;
+        return static_cast<uint32_t>(0);
       }
 
       DataCopyExtParams params;
@@ -177,6 +191,7 @@ class KernelCompress {
       DataCopyPad(global, output_lt, params);
 
       out_q.FreeTensor(output_lt);
+      return static_cast<uint32_t>(num_gathered_elems);
     }
   }
 
@@ -193,13 +208,14 @@ class KernelCompress {
   TBuf<QuePosition::VECCALC> packed_mask_buf_;
   TQue<QuePosition::VECOUT, 2> gathered_out_q_;
 
+  const uint32_t vec_core_num_;
   const uint32_t vec_len_;
-  const uint32_t block_num_;
-  const uint32_t tile_size_;
+  const uint32_t tile_len_;
   const uint32_t mask_required_elems_;
   const uint32_t packed_mask_tile_size_;
   const uint32_t num_tiles_;
-  const uint32_t num_elems_per_block_;
+  const uint32_t max_num_tiles_per_block_;
+  const uint32_t max_num_elems_per_block_;
   const uint32_t num_elems_before_block_;
 
   constexpr static uint16_t SMALLEST_MASK =
