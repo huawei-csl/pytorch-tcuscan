@@ -7,8 +7,10 @@
 
 #include "kernels/constants.h"
 #include "kernels/kernel_topk.h"
+#include "kernels/kernel_topk_pivot.h"
 #include "kernels/tcuscan_utils.h"
 #include "tiling/tiling_topk.h"
+#include "tiling/tiling_topk_pivot.h"
 
 /**
  * @brief Run the `topk` (int16) kernel.
@@ -63,4 +65,24 @@ extern "C" __global__ __aicore__ void topk_fp16(GM_ADDR vec_in, GM_ADDR vec_out,
   run_topk<half>(vec_in, tiling.k, vec_out, indices_out, lower, usrWorkspace,
                  x_min, x_max, tiling.num_elems, tiling.vec_tile_size,
                  tiling.matmul_size);
+}
+
+/**
+ * @brief Run the `topk_pivot` (fp16) kernel.
+ *
+ * @param [in] vec_in Pointer to input vector.
+ * @param [in] vec_out Pointer to output vector.
+ * @param [in] workspace Pointer to workspace.
+ * @param [in] tiling_ptr Pointer to the tiling structure.
+ */
+extern "C" __global__ __aicore__ void topk_pivot_fp16(GM_ADDR vec_in,
+                                                      GM_ADDR vec_out,
+                                                      GM_ADDR workspace,
+                                                      GM_ADDR tiling_ptr) {
+  (void)workspace;
+  TopKPivotTiling tiling;
+  tiling::GetTilingData(&tiling, tiling_ptr);
+
+  run_pivot_topk_estimator<true, half>(vec_in, vec_out, tiling.num_elems,
+                                       tiling.tile_len, tiling.k);
 }

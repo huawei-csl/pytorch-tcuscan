@@ -1,7 +1,7 @@
 /**
  * @file pybind11.cpp
  *
- * Copyright (C) 2024. Huawei Technologies Co., Ltd. All rights reserved.
+ * Copyright (C) 2024-2025. Huawei Technologies Co., Ltd. All rights reserved.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -23,6 +23,7 @@
 #include "torch/torch_sort.h"
 #include "torch/torch_split.h"
 #include "torch/torch_spmv.h"
+#include "torch/torch_topk.h"
 #include "torch/torch_vadd.h"
 
 /**
@@ -60,10 +61,12 @@ PYBIND11_MODULE(tcuscan_ops, m) {
         "Segmented Scan (vector-only)");
   m.def("run_seg_scan_mc_revert", &asc::seg_ops::run_seg_scan_mc_revert,
         "Vector Revert for MC Segmented Scan");
-  m.def("run_topk_int16", &asc::split::run_topk_int16,
+  m.def("run_topk_int16", &asc::topk::run_topk_int16,
         "TopK using parallel splits (int16)");
-  m.def("run_topk_fp16", &asc::split::run_topk_fp16,
+  m.def("run_topk_fp16", &asc::topk::run_topk_fp16,
         "TopK using parallel splits (fp16)");
+  m.def("run_topk_pivot_fp16", &asc::topk::run_topk_pivot_fp16,
+        "K-largest value estimator (fp16)");
   m.def("run_split", &asc::split::run_split, "Split (16-bits)");
   m.def("run_split_ind", &asc::split::run_split_ind,
         "Split with indices (16-bits)");
