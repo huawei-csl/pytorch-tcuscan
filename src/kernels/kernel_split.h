@@ -55,24 +55,25 @@ class KernelSplit {
    * @brief Class constructor.
    *
    * @param [in] vec_len Number of elements in an input vector.
-   * @param [in] tile_size Number of elements processed by each block in a
-   * single iteration.
+   * @param [in] tile_len Tile length.
    * @param [in] zeros_first Indicates whether the first elements in the
    * output vector are the ones with corresponding mask value set to zero or
    * one.
    */
-  __aicore__ inline KernelSplit(uint32_t vec_len, uint32_t tile_size,
+  __aicore__ inline KernelSplit(uint32_t vec_len, uint32_t tile_len,
                                 bool zeros_first)
       : vec_len_(vec_len),
         block_num_(GetBlockNum() * GetTaskRation()),
-        tile_size_(tile_size),
+        tile_len_(tile_len),
         zeros_first_(zeros_first),
-        mask_required_elems_(tile_size / IN_ELEMS_PER_MASK_ELEM),
+        mask_required_elems_(tile_len_ / IN_ELEMS_PER_MASK_ELEM),
         packed_mask_tile_size_(mask_required_elems_ < SMALLEST_MASK
                                    ? SMALLEST_MASK
                                    : mask_required_elems_),
-        num_tiles_(scalar::CeilDiv(vec_len_, tile_size_)),
-        max_num_tiles_per_block_(scalar::CeilDiv(num_tiles_, block_num_)) {
+        num_tiles_(scalar::CeilDiv(vec_len_, tile_len_)),
+        max_num_tiles_per_block_(scalar::CeilDiv(num_tiles_, block_num_)),
+        max_num_elems_per_block_(tile_len_ * max_num_tiles_per_block_),
+        num_elems_before_block_(GetBlockIdx() * max_num_elems_per_block_) {
     // GatherMask requires either 2- or 4-byte elements
     static_assert(sizeof(T) >= 2);
   }
@@ -80,17 +81,17 @@ class KernelSplit {
  private:
   __aicore__ inline void InitBase(GM_ADDR input, GM_ADDR mask, GM_ADDR pos,
                                   GM_ADDR output) {
-    global_input_.SetGlobalBuffer((__gm__ T *)input, vec_len_);
-    global_output_.SetGlobalBuffer((__gm__ T *)output, vec_len_);
-    global_mask_.SetGlobalBuffer((__gm__ MaskT *)mask, vec_len_);
-    global_pos_.SetGlobalBuffer((__gm__ PosT *)pos, vec_len_);
+    global_input_.SetGlobalBuffer((__gm__ T*)input, vec_len_);
+    global_output_.SetGlobalBuffer((__gm__ T*)output, vec_len_);
+    global_mask_.SetGlobalBuffer((__gm__ MaskT*)mask, vec_len_);
+    global_pos_.SetGlobalBuffer((__gm__ PosT*)pos, vec_len_);
 
-    pipe.InitBuffer(vec_in_q_, 1, tile_size_ * sizeof(T));
-    pipe.InitBuffer(mask_in_q_, 1, tile_size_ * sizeof(MaskT));
-    pipe.InitBuffer(mask_fp16_buf_, tile_size_ * sizeof(half));
+    pipe.InitBuffer(vec_in_q_, 1, tile_len_ * sizeof(T));
+    pipe.InitBuffer(mask_in_q_, 1, tile_len_ * sizeof(MaskT));
+    pipe.InitBuffer(mask_fp16_buf_, tile_len_ * sizeof(half));
     pipe.InitBuffer(packed_mask_buf_,
                     packed_mask_tile_size_ * sizeof(PackedMaskT));
-    pipe.InitBuffer(gathered_out_q_, 2, tile_size_ * sizeof(T));
+    pipe.InitBuffer(gathered_out_q_, 2, tile_len_ * sizeof(T));
 
     total_num_ones_ = global_pos_.GetValue(vec_len_ - 1);
     data_cache::InvalidateLine(global_pos_[vec_len_ - 1]);
@@ -132,10 +133,10 @@ class KernelSplit {
                               GM_ADDR indices_out) {
     InitBase(input, mask, pos, output);
 
-    global_ind_in_.SetGlobalBuffer((__gm__ IndicesT *)indices_in, vec_len_);
-    global_ind_out_.SetGlobalBuffer((__gm__ IndicesT *)indices_out, vec_len_);
-    pipe.InitBuffer(ind_in_q_, 1, tile_size_ * sizeof(IndicesT));
-    pipe.InitBuffer(gathered_ind_q_, 2, tile_size_ * sizeof(IndicesT));
+    global_ind_in_.SetGlobalBuffer((__gm__ IndicesT*)indices_in, vec_len_);
+    global_ind_out_.SetGlobalBuffer((__gm__ IndicesT*)indices_out, vec_len_);
+    pipe.InitBuffer(ind_in_q_, 1, tile_len_ * sizeof(IndicesT));
+    pipe.InitBuffer(gathered_ind_q_, 2, tile_len_ * sizeof(IndicesT));
   }
 
   /**
@@ -144,19 +145,16 @@ class KernelSplit {
   template <bool _WithIndices = WithIndices,
             typename std::enable_if<!_WithIndices, int>::type = 0>
   __aicore__ inline void Process() {
-    uint32_t global_offset =
-        GetBlockIdx() * tile_size_ * max_num_tiles_per_block_;
+    uint32_t global_offset = num_elems_before_block_;
     const uint32_t num_tiles_to_process =
-        kernel_utils::scalar::GetWorkDistribution(vec_len_, tile_size_,
+        kernel_utils::scalar::GetWorkDistribution(vec_len_, tile_len_,
                                                   block_num_);
 
     for (uint32_t tile_idx = 0; tile_idx < num_tiles_to_process; tile_idx++) {
-      const bool full_tile = global_offset + tile_size_ <= vec_len_;
-      num_elems_to_process_ = full_tile ? tile_size_ : vec_len_ - global_offset;
-
-      LoadAndConvertMask(global_offset);
-      copy::CopyGmToVec(vec_in_q_, global_input_[global_offset],
-                        num_elems_to_process_);
+      const uint32_t num_elems =
+          scalar::NextTileLen(tile_len_, global_offset, vec_len_);
+      LoadAndConvertMask(global_offset, num_elems);
+      copy::CopyGmToVec(vec_in_q_, global_input_[global_offset], num_elems);
 
       uint32_t zeros_offset, ones_offset;
       CalculatePartsOffsets(global_offset, zeros_offset, ones_offset);
@@ -164,15 +162,17 @@ class KernelSplit {
       LocalTensor<T> input_lt = vec_in_q_.DeQue<T>();
 
       // Gather ones.
-      GatherAndStore(input_lt, gathered_out_q_, global_output_[ones_offset]);
+      GatherAndStore(input_lt, gathered_out_q_, global_output_[ones_offset],
+                     num_elems);
 
       NegateMask();
 
       // Gather zeros.
-      GatherAndStore(input_lt, gathered_out_q_, global_output_[zeros_offset]);
+      GatherAndStore(input_lt, gathered_out_q_, global_output_[zeros_offset],
+                     num_elems);
 
       vec_in_q_.FreeTensor(input_lt);
-      global_offset += tile_size_;
+      global_offset += tile_len_;
     }
   }
 
@@ -183,21 +183,19 @@ class KernelSplit {
             typename std::enable_if<_WithIndices, int>::type = 0>
   __aicore__ inline void Process() {
     uint32_t global_offset =
-        GetBlockIdx() * tile_size_ * max_num_tiles_per_block_;
+        GetBlockIdx() * tile_len_ * max_num_tiles_per_block_;
     const uint32_t num_tiles_to_process =
-        kernel_utils::scalar::GetWorkDistribution(vec_len_, tile_size_,
+        kernel_utils::scalar::GetWorkDistribution(vec_len_, tile_len_,
                                                   block_num_);
 
     for (uint32_t tile_idx = 0; tile_idx < num_tiles_to_process; tile_idx++) {
-      const bool full_tile = global_offset + tile_size_ <= vec_len_;
-      num_elems_to_process_ = full_tile ? tile_size_ : vec_len_ - global_offset;
+      const uint32_t num_elems =
+          scalar::NextTileLen(tile_len_, global_offset, vec_len_);
 
-      LoadAndConvertMask(global_offset);
+      LoadAndConvertMask(global_offset, num_elems);
 
-      copy::CopyGmToVec(vec_in_q_, global_input_[global_offset],
-                        num_elems_to_process_);
-      copy::CopyGmToVec(ind_in_q_, global_ind_in_[global_offset],
-                        num_elems_to_process_);
+      copy::CopyGmToVec(vec_in_q_, global_input_[global_offset], num_elems);
+      copy::CopyGmToVec(ind_in_q_, global_ind_in_[global_offset], num_elems);
 
       uint32_t zeros_offset, ones_offset;
       CalculatePartsOffsets(global_offset, zeros_offset, ones_offset);
@@ -205,25 +203,27 @@ class KernelSplit {
       LocalTensor<T> input_lt = vec_in_q_.DeQue<T>();
       LocalTensor<IndicesT> ind_input_lt = ind_in_q_.DeQue<IndicesT>();
       // Gather ones
-      GatherAndStore(input_lt, gathered_out_q_, global_output_[ones_offset]);
+      GatherAndStore(input_lt, gathered_out_q_, global_output_[ones_offset],
+                     num_elems);
       GatherAndStore(ind_input_lt, gathered_ind_q_,
-                     global_ind_out_[ones_offset]);
+                     global_ind_out_[ones_offset], num_elems);
       NegateMask();
       // Gather zeros.
-      GatherAndStore(input_lt, gathered_out_q_, global_output_[zeros_offset]);
+      GatherAndStore(input_lt, gathered_out_q_, global_output_[zeros_offset],
+                     num_elems);
       GatherAndStore(ind_input_lt, gathered_ind_q_,
-                     global_ind_out_[zeros_offset]);
+                     global_ind_out_[zeros_offset], num_elems);
 
       vec_in_q_.FreeTensor(input_lt);
       ind_in_q_.FreeTensor(ind_input_lt);
-      global_offset += tile_size_;
+      global_offset += tile_len_;
     }
   }
 
  private:
   __aicore__ inline void CalculatePartsOffsets(uint32_t global_offset,
-                                               uint32_t &zeros_offset,
-                                               uint32_t &ones_offset) {
+                                               uint32_t& zeros_offset,
+                                               uint32_t& ones_offset) {
     const uint32_t num_elems_before_tile = global_offset;
 
     uint32_t num_ones_before_tile = 0;
@@ -243,9 +243,9 @@ class KernelSplit {
     }
   }
 
-  __aicore__ inline void LoadAndConvertMask(uint32_t global_offset) {
-    copy::CopyGmToVec(mask_in_q_, global_mask_[global_offset],
-                      num_elems_to_process_);
+  __aicore__ inline void LoadAndConvertMask(uint32_t global_offset,
+                                            uint32_t num_elems) {
+    copy::CopyGmToVec(mask_in_q_, global_mask_[global_offset], num_elems);
     LocalTensor<MaskT> mask_lt = mask_in_q_.DeQue<MaskT>();
 
     // Cast mask to fp16 since compare instructions require fp16 or fp32
@@ -268,9 +268,9 @@ class KernelSplit {
 
   template <typename GatherT, int32_t _NumBuf>
   __aicore__ inline void GatherAndStore(
-      const LocalTensor<GatherT> &input_lt,
-      TQue<QuePosition::VECOUT, _NumBuf> &out_q,
-      const GlobalTensor<GatherT> &global) {
+      const LocalTensor<GatherT>& input_lt,
+      TQue<QuePosition::VECOUT, _NumBuf>& out_q,
+      const GlobalTensor<GatherT>& global, uint32_t num_elems) {
     using GatherMaskT = _GatherMaskT<GatherT>;
 
     uint64_t num_gathered_elems = 0;
@@ -280,8 +280,8 @@ class KernelSplit {
       const LocalTensor<GatherT> output_lt =
           out_q.template AllocTensor<GatherT>();
 
-      GatherMask(output_lt, input_lt, mask_lt, true, num_elems_to_process_,
-                 {1, 1, 8, 8}, num_gathered_elems);
+      GatherMask(output_lt, input_lt, mask_lt, true, num_elems, {1, 1, 8, 8},
+                 num_gathered_elems);
       out_q.EnQue(output_lt);
     }
 
@@ -329,16 +329,17 @@ class KernelSplit {
 
   const uint32_t vec_len_;
   const uint32_t block_num_;
-  const uint32_t tile_size_;
+  const uint32_t tile_len_;
   const bool zeros_first_;
   const uint32_t mask_required_elems_;
   const uint32_t packed_mask_tile_size_;
   const uint32_t num_tiles_;
   const uint32_t max_num_tiles_per_block_;
+  const uint32_t max_num_elems_per_block_;
+  const uint32_t num_elems_before_block_;
 
   uint32_t total_num_ones_;
   uint32_t total_num_zeros_;
-  uint32_t num_elems_to_process_;
 
   constexpr static uint16_t SMALLEST_MASK =
       kernel_utils::UB_ALIGNMENT / sizeof(PackedMaskT);

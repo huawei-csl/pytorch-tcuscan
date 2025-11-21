@@ -97,8 +97,7 @@ class KernelCompress {
                                                   vec_core_num_);
 
     uint32_t offset_within_block = 0;
-    uint32_t output_offset;
-    CalculatePartsOffsets(num_elems_before_block_, output_offset);
+    uint32_t output_offset = CalculatePartsOffsets();
 
     for (uint32_t tile_idx = 0; tile_idx < num_tiles_to_process; tile_idx++) {
       const uint32_t global_offset =
@@ -126,14 +125,13 @@ class KernelCompress {
   }
 
  private:
-  __aicore__ inline void CalculatePartsOffsets(uint32_t global_offset,
-                                               uint32_t& output_offset) {
-    if (global_offset > 0) {
-      output_offset = global_pos_.GetValue(global_offset - 1);
-      data_cache::InvalidateLine(global_pos_[global_offset - 1]);
-    } else {
-      output_offset = 0;
+  __aicore__ inline uint32_t CalculatePartsOffsets() {
+    if (num_elems_before_block_ > 0) {
+      data_cache::InvalidateLine(global_pos_[num_elems_before_block_ - 1]);
+      return global_pos_.GetValue(num_elems_before_block_ - 1);
     }
+    // Offset is zero, if no element exist before block.
+    return 0;
   }
 
   __aicore__ inline void LoadAndConvertMask(uint32_t global_offset,
