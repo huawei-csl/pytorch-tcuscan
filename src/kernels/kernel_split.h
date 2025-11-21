@@ -145,34 +145,39 @@ class KernelSplit {
   template <bool _WithIndices = WithIndices,
             typename std::enable_if<!_WithIndices, int>::type = 0>
   __aicore__ inline void Process() {
-    uint32_t global_offset = num_elems_before_block_;
     const uint32_t num_tiles_to_process =
         kernel_utils::scalar::GetWorkDistribution(vec_len_, tile_len_,
                                                   block_num_);
 
+    uint32_t offset_within_block = 0;
+    uint32_t zeros_offset, ones_offset;
+    CalculatePartsOffsets(num_elems_before_block_, zeros_offset, ones_offset);
+
     for (uint32_t tile_idx = 0; tile_idx < num_tiles_to_process; tile_idx++) {
+      const uint32_t global_offset =
+          num_elems_before_block_ + offset_within_block;
       const uint32_t num_elems =
           scalar::NextTileLen(tile_len_, global_offset, vec_len_);
+
       LoadAndConvertMask(global_offset, num_elems);
       copy::CopyGmToVec(vec_in_q_, global_input_[global_offset], num_elems);
-
-      uint32_t zeros_offset, ones_offset;
-      CalculatePartsOffsets(global_offset, zeros_offset, ones_offset);
 
       LocalTensor<T> input_lt = vec_in_q_.DeQue<T>();
 
       // Gather ones.
-      GatherAndStore(input_lt, gathered_out_q_, global_output_[ones_offset],
-                     num_elems);
+      const uint32_t num_gathered_ones = GatherAndStore(
+          input_lt, gathered_out_q_, global_output_[ones_offset], num_elems);
+      ones_offset += num_gathered_ones;
 
       NegateMask();
 
       // Gather zeros.
-      GatherAndStore(input_lt, gathered_out_q_, global_output_[zeros_offset],
-                     num_elems);
+      const uint32_t num_gathered_zeros = GatherAndStore(
+          input_lt, gathered_out_q_, global_output_[zeros_offset], num_elems);
+      zeros_offset += num_gathered_zeros;
 
       vec_in_q_.FreeTensor(input_lt);
-      global_offset += tile_len_;
+      offset_within_block += num_elems;
     }
   }
 
@@ -182,13 +187,18 @@ class KernelSplit {
   template <bool _WithIndices = WithIndices,
             typename std::enable_if<_WithIndices, int>::type = 0>
   __aicore__ inline void Process() {
-    uint32_t global_offset =
-        GetBlockIdx() * tile_len_ * max_num_tiles_per_block_;
     const uint32_t num_tiles_to_process =
         kernel_utils::scalar::GetWorkDistribution(vec_len_, tile_len_,
                                                   block_num_);
 
+    uint32_t offset_within_block = 0;
+    uint32_t zeros_offset, ones_offset;
+    CalculatePartsOffsets(num_elems_before_block_, zeros_offset, ones_offset);
+
     for (uint32_t tile_idx = 0; tile_idx < num_tiles_to_process; tile_idx++) {
+      const uint32_t global_offset =
+          num_elems_before_block_ + offset_within_block;
+
       const uint32_t num_elems =
           scalar::NextTileLen(tile_len_, global_offset, vec_len_);
 
@@ -203,20 +213,23 @@ class KernelSplit {
       LocalTensor<T> input_lt = vec_in_q_.DeQue<T>();
       LocalTensor<IndicesT> ind_input_lt = ind_in_q_.DeQue<IndicesT>();
       // Gather ones
-      GatherAndStore(input_lt, gathered_out_q_, global_output_[ones_offset],
-                     num_elems);
-      GatherAndStore(ind_input_lt, gathered_ind_q_,
-                     global_ind_out_[ones_offset], num_elems);
+      const uint32_t num_gathered_ones = GatherAndStore(
+          input_lt, gathered_out_q_, global_output_[ones_offset], num_elems);
+      (void)GatherAndStore(ind_input_lt, gathered_ind_q_,
+                           global_ind_out_[ones_offset], num_elems);
+      ones_offset += num_gathered_ones;
+
       NegateMask();
       // Gather zeros.
-      GatherAndStore(input_lt, gathered_out_q_, global_output_[zeros_offset],
-                     num_elems);
-      GatherAndStore(ind_input_lt, gathered_ind_q_,
-                     global_ind_out_[zeros_offset], num_elems);
+      const uint32_t num_gathered_zeros = GatherAndStore(
+          input_lt, gathered_out_q_, global_output_[zeros_offset], num_elems);
+      (void)GatherAndStore(ind_input_lt, gathered_ind_q_,
+                           global_ind_out_[zeros_offset], num_elems);
+      zeros_offset += num_gathered_zeros;
 
       vec_in_q_.FreeTensor(input_lt);
       ind_in_q_.FreeTensor(ind_input_lt);
-      global_offset += tile_len_;
+      offset_within_block += num_elems;
     }
   }
 
@@ -267,7 +280,7 @@ class KernelSplit {
   }
 
   template <typename GatherT, int32_t _NumBuf>
-  __aicore__ inline void GatherAndStore(
+  __aicore__ inline uint32_t GatherAndStore(
       const LocalTensor<GatherT>& input_lt,
       TQue<QuePosition::VECOUT, _NumBuf>& out_q,
       const GlobalTensor<GatherT>& global, uint32_t num_elems) {
@@ -289,7 +302,7 @@ class KernelSplit {
       LocalTensor<GatherT> output_lt = out_q.template DeQue<GatherT>();
       if (num_gathered_elems == 0) {
         out_q.FreeTensor(output_lt);
-        return;
+        return 0;
       }
 
       DataCopyExtParams params;
@@ -300,6 +313,7 @@ class KernelSplit {
       DataCopyPad(global, output_lt, params);
 
       out_q.FreeTensor(output_lt);
+      return static_cast<uint32_t>(num_gathered_elems);
     }
   }
 
