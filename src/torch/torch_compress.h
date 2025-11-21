@@ -20,9 +20,7 @@
 #include "torch_npu/csrc/core/npu/NPUStream.h"
 #include "workspace.h"
 
-namespace asc {
-
-namespace compress {
+namespace tcuscan {
 
 /**
  * @brief Parallel vector compaction / compress.
@@ -32,7 +30,7 @@ namespace compress {
  * @param S Tiling parameter. Typical values: 32, 64, 128.
  * @return The subvector of `x`: `x[f == 1]`. Output length is `sum(f == 1)`.
  */
-at::Tensor run_compress(const at::Tensor &x, const at::Tensor &mask, int S) {
+at::Tensor run_compress(const at::Tensor& x, const at::Tensor& mask, int S) {
   const auto ascendc_platform =
       platform_ascendc::PlatformAscendCManager::GetInstance();
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
@@ -59,25 +57,26 @@ at::Tensor run_compress(const at::Tensor &x, const at::Tensor &mask, int S) {
       {total_length}, at::TensorOptions().dtype(dtype).device(device));
 
   const CompressTiling tiling{total_length, matmul_size, vec_tile_size};
-  uint8_t *tiling_device = alloc_copy_tiling(tiling);
+  uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
 
   const uint32_t user_workspace_size =
-      workspace::compress::get_workspace_size<int8_t>(tiling, block_dim);
+      tcuscan::workspace::compress::get_workspace_size<int8_t>(tiling,
+                                                               block_dim);
   const at::Tensor workspace_tensor =
-      alloc_workspace(user_workspace_size, device);
+      tcuscan::alloc_workspace(user_workspace_size, device);
 
   if (dtype == torch::kHalf or dtype == torch::kInt16) {
     ACLRT_LAUNCH_KERNEL(compress_fp16)
-    (block_dim, acl_stream, const_cast<void *>(x.storage().data()),
-     const_cast<void *>(mask.storage().data()),
-     const_cast<void *>(z.storage().data()),
-     const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
+    (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
+     const_cast<void*>(mask.storage().data()),
+     const_cast<void*>(z.storage().data()),
+     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else {
     ACLRT_LAUNCH_KERNEL(compress_fp32)
-    (block_dim, acl_stream, const_cast<void *>(x.storage().data()),
-     const_cast<void *>(mask.storage().data()),
-     const_cast<void *>(z.storage().data()),
-     const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
+    (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
+     const_cast<void*>(mask.storage().data()),
+     const_cast<void*>(z.storage().data()),
+     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   }
 
   aclrtFree(tiling_device);
@@ -97,8 +96,8 @@ at::Tensor run_compress(const at::Tensor &x, const at::Tensor &mask, int S) {
  * @param S Tiling parameter. Typical values: 32, 64, 128.
  * @return The subvector of `x`: `x[f == 1]`. Output length is `sum(f == 1)`.
  */
-at::Tensor run_compress_pos(const at::Tensor &x, const at::Tensor &mask,
-                            const at::Tensor &pos, int S) {
+at::Tensor run_compress_pos(const at::Tensor& x, const at::Tensor& mask,
+                            const at::Tensor& pos, int S) {
   const auto ascendc_platform =
       platform_ascendc::PlatformAscendCManager::GetInstance();
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
@@ -127,27 +126,28 @@ at::Tensor run_compress_pos(const at::Tensor &x, const at::Tensor &mask,
                 at::TensorOptions().dtype(dtype).device(device));
 
   const CompressTiling tiling{total_length, matmul_size, vec_tile_size};
-  uint8_t *tiling_device = alloc_copy_tiling(tiling);
+  uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
 
   const uint32_t user_workspace_size =
-      workspace::compress::get_workspace_size<int8_t>(tiling, block_dim);
+      tcuscan::workspace::compress::get_workspace_size<int8_t>(tiling,
+                                                               block_dim);
   const at::Tensor workspace_tensor =
-      alloc_workspace(user_workspace_size, device);
+      tcuscan::alloc_workspace(user_workspace_size, device);
 
   if (dtype == torch::kHalf or dtype == torch::kInt16) {
     ACLRT_LAUNCH_KERNEL(compress_pos_fp16)
-    (block_dim, acl_stream, const_cast<void *>(x.storage().data()),
-     const_cast<void *>(mask.storage().data()),
-     const_cast<void *>(pos.storage().data()),
-     const_cast<void *>(z.storage().data()),
-     const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
+    (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
+     const_cast<void*>(mask.storage().data()),
+     const_cast<void*>(pos.storage().data()),
+     const_cast<void*>(z.storage().data()),
+     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else {
     ACLRT_LAUNCH_KERNEL(compress_pos_fp32)
-    (block_dim, acl_stream, const_cast<void *>(x.storage().data()),
-     const_cast<void *>(mask.storage().data()),
-     const_cast<void *>(pos.storage().data()),
-     const_cast<void *>(z.storage().data()),
-     const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
+    (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
+     const_cast<void*>(mask.storage().data()),
+     const_cast<void*>(pos.storage().data()),
+     const_cast<void*>(z.storage().data()),
+     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   }
 
   aclrtFree(tiling_device);
@@ -155,6 +155,5 @@ at::Tensor run_compress_pos(const at::Tensor &x, const at::Tensor &mask,
 
   return z;
 }
-}  // namespace compress
 
-}  // namespace asc
+}  // namespace tcuscan

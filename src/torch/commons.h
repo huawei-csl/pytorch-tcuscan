@@ -14,7 +14,7 @@
 #include "tiling/platform/platform_ascendc.h"
 #include "torch_npu/csrc/core/npu/NPUStream.h"
 
-namespace asc {
+namespace tcuscan {
 /**
  * @brief Allocates a torch tensor for AscendC kernel working space.
  *
@@ -61,16 +61,15 @@ at::Tensor alloc_zeros_workspace(uint32_t user_workspace_size,
  * @param x Input torch tensor.
  * @return Number of bytes required for each element of `x`.
  */
-size_t byte_size(const at::Tensor &x) {
+size_t byte_size(const at::Tensor& x) {
   const auto dtype = x.options().dtype();
 
   if (dtype == torch::kHalf or dtype == torch::kInt16) {
     return 2;
   } else if (dtype == torch::kInt8) {
     return 1;
-  } else {
-    return 4;
   }
+  return 4;
 }
 
 /**
@@ -83,17 +82,16 @@ size_t byte_size(const at::Tensor &x) {
  * @return Device pointer where tiling struct is copied.
  */
 template <typename T>
-uint8_t *alloc_copy_tiling(const T &tiling_struct) {
+uint8_t* alloc_copy_tiling(const T& tiling_struct) {
   constexpr size_t TILIING_SIZE = sizeof(T);
-  const uint8_t *tiling_host =
-      reinterpret_cast<const uint8_t *>(&tiling_struct);
+  const uint8_t* tiling_host = reinterpret_cast<const uint8_t*>(&tiling_struct);
 
-  uint8_t *tiling_device = nullptr;
-  aclrtMalloc((void **)&tiling_device, TILIING_SIZE, ACL_MEM_MALLOC_HUGE_FIRST);
+  uint8_t* tiling_device = nullptr;
+  aclrtMalloc((void**)&tiling_device, TILIING_SIZE, ACL_MEM_MALLOC_HUGE_FIRST);
   aclrtMemcpy(tiling_device, TILIING_SIZE, tiling_host, TILIING_SIZE,
               ACL_MEMCPY_HOST_TO_DEVICE);
 
   return tiling_device;
 }
 
-}  // namespace asc
+}  // namespace tcuscan

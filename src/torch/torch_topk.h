@@ -21,9 +21,7 @@
 #include "torch_npu/csrc/core/npu/NPUStream.h"
 #include "workspace.h"
 
-namespace asc {
-
-namespace topk {
+namespace tcuscan {
 
 /**
  * @brief Top-K elements from an input vector of dtype int16.
@@ -69,7 +67,7 @@ std::tuple<at::Tensor, at::Tensor> run_topk_int16(const at::Tensor& x,
       workspace::topk::get_workspace_size<int32_t>(total_length, matmul_size,
                                                    block_dim);
   const at::Tensor workspace_tensor =
-      alloc_workspace(user_workspace_size, device);
+      tcuscan::alloc_workspace(user_workspace_size, device);
 
   TopKTiling tiling;
   tiling.num_elems = total_length;
@@ -80,7 +78,7 @@ std::tuple<at::Tensor, at::Tensor> run_topk_int16(const at::Tensor& x,
   tiling.x_max.value_i32 = static_cast<int32_t>(x_max);
   tiling.k = k;
 
-  uint8_t* tiling_device = alloc_copy_tiling(tiling);
+  uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
 
   ACLRT_LAUNCH_KERNEL(topk_int16)
   (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
@@ -135,10 +133,10 @@ std::tuple<at::Tensor, at::Tensor> run_topk_fp16(const at::Tensor& x,
       at::empty({k}, at::TensorOptions().dtype(torch::kInt32).device(device));
 
   const uint32_t user_workspace_size =
-      workspace::topk::get_workspace_size<int32_t>(total_length, matmul_size,
-                                                   block_dim);
+      tcuscan::workspace::topk::get_workspace_size<int32_t>(
+          total_length, matmul_size, block_dim);
   const at::Tensor workspace_tensor =
-      alloc_workspace(user_workspace_size, device);
+      tcuscan::alloc_workspace(user_workspace_size, device);
 
   TopKTiling tiling;
   tiling.num_elems = total_length;
@@ -149,7 +147,7 @@ std::tuple<at::Tensor, at::Tensor> run_topk_fp16(const at::Tensor& x,
   tiling.x_max.value_fp32 = x_max;
   tiling.k = k;
 
-  uint8_t* tiling_device = alloc_copy_tiling(tiling);
+  uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
 
   ACLRT_LAUNCH_KERNEL(topk_fp16)
   (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
@@ -191,11 +189,11 @@ at::Tensor run_topk_pivot_fp16(const at::Tensor& x, uint32_t k) {
 
   const uint32_t user_workspace_size = 0;
   const at::Tensor workspace_tensor =
-      alloc_workspace(user_workspace_size, device);
+      tcuscan::alloc_workspace(user_workspace_size, device);
 
   const TopKPivotTiling tiling{block_dim, total_length, tile_len, k};
 
-  uint8_t* tiling_device = alloc_copy_tiling(tiling);
+  uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
 
   ACLRT_LAUNCH_KERNEL(topk_pivot_fp16)
   (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
@@ -208,6 +206,4 @@ at::Tensor run_topk_pivot_fp16(const at::Tensor& x, uint32_t k) {
   return vec_out;
 }
 
-}  // namespace topk
-
-}  // namespace asc
+}  // namespace tcuscan

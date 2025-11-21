@@ -12,8 +12,7 @@
 #include "torch_gather.h"
 #include "torch_scan.h"
 
-namespace asc {
-namespace spmv {
+namespace tcuscan {
 
 /**
  * @brief
@@ -32,16 +31,16 @@ namespace spmv {
  * @return Returns the sparse (CSR) matrix product with vector
  *
  */
-at::Tensor run_spmv_multi_cube(const at::Tensor &vals, const at::Tensor &idx,
-                               const at::Tensor &cols, const at::Tensor &x,
-                               const at::Tensor &upper,
-                               const at::Tensor &lower_strict) {
+at::Tensor run_spmv_multi_cube(const at::Tensor& vals, const at::Tensor& idx,
+                               const at::Tensor& cols, const at::Tensor& x,
+                               const at::Tensor& upper,
+                               const at::Tensor& lower_strict) {
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
 
-  const at::Tensor product = asc::gather::run_csr_gather(vals, cols, idx, x);
+  const at::Tensor product = tcuscan::run_csr_gather(vals, cols, idx, x);
   const at::Tensor scanned =
-      asc::scan::run_scan_multi_cube(product, upper, lower_strict);
-  const at::Tensor gathered = asc::gather::run_gather_spmv(scanned, idx, 128);
+      tcuscan::run_scan_multi_cube(product, upper, lower_strict);
+  const at::Tensor gathered = tcuscan::run_gather_spmv(scanned, idx, 128);
   const at::Tensor z = torch::diff(gathered);
   aclrtSynchronizeStream(acl_stream);
 
@@ -62,18 +61,17 @@ at::Tensor run_spmv_multi_cube(const at::Tensor &vals, const at::Tensor &idx,
  * performance improvements with scaling that param. Failures for >512
  * @return Returns the sparse (CSR) matrix product with vector
  */
-at::Tensor run_spmv(const at::Tensor &vals, const at::Tensor &idx,
-                    const at::Tensor &cols, const at::Tensor &x, int s) {
+at::Tensor run_spmv(const at::Tensor& vals, const at::Tensor& idx,
+                    const at::Tensor& cols, const at::Tensor& x, int s) {
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
 
-  const at::Tensor product = asc::gather::run_csr_gather(vals, cols, idx, x);
-  const at::Tensor scanned = asc::scan::run_scan_multi_core(product, s);
-  const at::Tensor gathered = asc::gather::run_gather_spmv(scanned, idx, 128);
+  const at::Tensor product = tcuscan::run_csr_gather(vals, cols, idx, x);
+  const at::Tensor scanned = tcuscan::run_scan_multi_core(product, s);
+  const at::Tensor gathered = tcuscan::run_gather_spmv(scanned, idx, 128);
   const at::Tensor z = torch::diff(gathered);
   aclrtSynchronizeStream(acl_stream);
 
   return z;
 }
 
-}  // namespace spmv
-}  // namespace asc
+}  // namespace tcuscan

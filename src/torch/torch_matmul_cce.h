@@ -21,11 +21,7 @@
 #include "torch_npu/csrc/core/npu/NPUStream.h"
 #include "workspace.h"
 
-namespace asc {
-
-namespace matmul {
-
-using namespace torch::indexing;
+namespace tcuscan {
 
 /**
  * @brief Matrix multiplication CCE kernel.
@@ -41,27 +37,25 @@ at::Tensor matmul_cce(at::Tensor a, at::Tensor b) {
   const at::Device device = a.options().device();
 
   at::Tensor c = at::empty({M, N}, a.options());
-  uint8_t *a_ptr = reinterpret_cast<uint8_t *>(a.storage().data_ptr().get());
-  uint8_t *b_ptr = reinterpret_cast<uint8_t *>(b.storage().data_ptr().get());
-  uint8_t *c_ptr = reinterpret_cast<uint8_t *>(c.storage().data_ptr().get());
+  uint8_t* a_ptr = reinterpret_cast<uint8_t*>(a.storage().data_ptr().get());
+  uint8_t* b_ptr = reinterpret_cast<uint8_t*>(b.storage().data_ptr().get());
+  uint8_t* c_ptr = reinterpret_cast<uint8_t*>(c.storage().data_ptr().get());
   uint32_t block_dim = 20;  // 910B4, 20 cube cores
 
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
 
   MatMulCCETiling tiling{M, N, K};
-  uint8_t *tiling_device = alloc_copy_tiling(tiling);
+  uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
 
-  const at::Tensor workspace_tensor = alloc_workspace(0, device);
+  const at::Tensor workspace_tensor = tcuscan::alloc_workspace(0, device);
 
   ACLRT_LAUNCH_KERNEL(matmul_cce)
   (block_dim, acl_stream, a_ptr, b_ptr, c_ptr,
-   const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
+   const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   aclrtSynchronizeStream(acl_stream);
   aclrtFree(tiling_device);
 
-  return c.index({Slice({None, M}), "..."});
+  return c.index({torch::indexing::Slice({torch::indexing::None, M}), "..."});
 }
 
-}  // namespace matmul
-
-}  // namespace asc
+}  // namespace tcuscan

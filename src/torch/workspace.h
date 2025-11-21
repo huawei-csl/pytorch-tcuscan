@@ -19,7 +19,7 @@
 #include "../tiling/tiling_seg_sum_single_cube.h"
 #include "../tiling/tiling_split.h"
 
-namespace workspace {
+namespace tcuscan::workspace {
 
 namespace seg_scan {
 /**
@@ -328,4 +328,4 @@ constexpr uint32_t get_workspace_size(const SegSumSingleCubeTiling& tiling) {
 
 }  // namespace seg_sum
 
-}  // namespace workspace
+}  // namespace tcuscan::workspace

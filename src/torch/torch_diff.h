@@ -17,9 +17,7 @@
 #include "tiling/platform/platform_ascendc.h"
 #include "torch_npu/csrc/core/npu/NPUStream.h"
 
-namespace asc {
-
-namespace diff {
+namespace tcuscan {
 
 /**
  * @brief Torch wrapper of diff kernel.
@@ -28,7 +26,7 @@ namespace diff {
  * @param max_size Number of elements of x to apply diff on.
  * @return Return vector so that z[i] = x[i+1] - x[i] where x[-1] = 0
  */
-at::Tensor run_diff(const at::Tensor &x, int64_t max_size) {
+at::Tensor run_diff(const at::Tensor& x, int64_t max_size) {
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const auto dtype = x.options().dtype();
   const at::Device device = x.options().device();
@@ -42,7 +40,7 @@ at::Tensor run_diff(const at::Tensor &x, int64_t max_size) {
 
   const at::Tensor z = at::empty(
       {total_length}, at::TensorOptions().dtype(dtype).device(device));
-  const at::Tensor workspace_tensor = alloc_workspace(0, device);
+  const at::Tensor workspace_tensor = tcuscan::alloc_workspace(0, device);
 
   uint32_t block_dim =
       static_cast<uint32_t>((total_length + tile_len - 1) / tile_len);
@@ -52,18 +50,18 @@ at::Tensor run_diff(const at::Tensor &x, int64_t max_size) {
   }
 
   const DiffTiling tiling{total_length, tile_len};
-  uint8_t *tiling_device = alloc_copy_tiling(tiling);
+  uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
 
   if (dtype == torch::kHalf) {
     ACLRT_LAUNCH_KERNEL(diff_fp16)
-    (block_dim, acl_stream, const_cast<void *>(x.storage().data()),
-     const_cast<void *>(z.storage().data()),
-     const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
+    (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
+     const_cast<void*>(z.storage().data()),
+     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else {
     ACLRT_LAUNCH_KERNEL(diff_fp32)
-    (block_dim, acl_stream, const_cast<void *>(x.storage().data()),
-     const_cast<void *>(z.storage().data()),
-     const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
+    (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
+     const_cast<void*>(z.storage().data()),
+     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   }
 
   aclrtFree(tiling_device);
@@ -72,6 +70,4 @@ at::Tensor run_diff(const at::Tensor &x, int64_t max_size) {
   return z;
 }
 
-}  // namespace diff
-
-}  // namespace asc
+}  // namespace tcuscan

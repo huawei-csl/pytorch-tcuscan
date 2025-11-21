@@ -34,9 +34,7 @@
 #include "torch_scan_cpu.h"
 #include "workspace.h"
 
-namespace asc {
-
-namespace scan {
+namespace tcuscan {
 
 /**
  * @brief Returns the prefix sum of an input 1D vector using one AI Core.
@@ -46,7 +44,7 @@ namespace scan {
  * @param starting_sum Starting sum for the scan_single core. Default is 0
  * @return The prefix sum of `x`.
  */
-at::Tensor run_scan_single_core(const at::Tensor &x, int S,
+at::Tensor run_scan_single_core(const at::Tensor& x, int S,
                                 double starting_sum = 0) {
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();
@@ -72,35 +70,35 @@ at::Tensor run_scan_single_core(const at::Tensor &x, int S,
     tiling.running_sum.int_value = static_cast<int32_t>(starting_sum);
   }
 
-  uint8_t *tiling_device = alloc_copy_tiling(tiling);
+  uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
 
   if (dtype == torch::kInt8) {
     const uint32_t user_workspace_size =
-        workspace::sc_scan::get_workspace_size<int8_t>(tiling);
+        tcuscan::workspace::sc_scan::get_workspace_size<int8_t>(tiling);
     const at::Tensor workspace_tensor =
-        alloc_zeros_workspace(user_workspace_size, device);
+        tcuscan::alloc_zeros_workspace(user_workspace_size, device);
     ACLRT_LAUNCH_KERNEL(scan_single_core_int8)
-    (1 /* single core*/, acl_stream, const_cast<void *>(x.storage().data()),
-     const_cast<void *>(z.storage().data()),
-     const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
+    (1 /* single core*/, acl_stream, const_cast<void*>(x.storage().data()),
+     const_cast<void*>(z.storage().data()),
+     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else if (dtype == torch::kHalf) {
     const uint32_t user_workspace_size =
-        workspace::sc_scan::get_workspace_size<int16_t>(tiling);
+        tcuscan::workspace::sc_scan::get_workspace_size<int16_t>(tiling);
     const at::Tensor workspace_tensor =
-        alloc_zeros_workspace(user_workspace_size, device);
+        tcuscan::alloc_zeros_workspace(user_workspace_size, device);
     ACLRT_LAUNCH_KERNEL(scan_single_core_fp16)
-    (1 /* single core*/, acl_stream, const_cast<void *>(x.storage().data()),
-     const_cast<void *>(z.storage().data()),
-     const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
+    (1 /* single core*/, acl_stream, const_cast<void*>(x.storage().data()),
+     const_cast<void*>(z.storage().data()),
+     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else if (dtype == torch::kFloat32) {
     const uint32_t user_workspace_size =
-        workspace::sc_scan::get_workspace_size<float>(tiling);
+        tcuscan::workspace::sc_scan::get_workspace_size<float>(tiling);
     const at::Tensor workspace_tensor =
-        alloc_zeros_workspace(user_workspace_size, device);
+        tcuscan::alloc_zeros_workspace(user_workspace_size, device);
     ACLRT_LAUNCH_KERNEL(scan_single_core_fp32)
-    (1 /* single core*/, acl_stream, const_cast<void *>(x.storage().data()),
-     const_cast<void *>(z.storage().data()),
-     const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
+    (1 /* single core*/, acl_stream, const_cast<void*>(x.storage().data()),
+     const_cast<void*>(z.storage().data()),
+     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else {
     /* Unsupported */
   }
@@ -118,7 +116,7 @@ at::Tensor run_scan_single_core(const at::Tensor &x, int S,
  * @param S Tiling parameter. Typical values 32, 64, 128.
  * @return A 2D matrix that is the row-wise scan of `x`.
  */
-at::Tensor run_scan_batch(const at::Tensor &x, int S) {
+at::Tensor run_scan_batch(const at::Tensor& x, int S) {
   const auto ascendc_platform =
       platform_ascendc::PlatformAscendCManager::GetInstance();
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
@@ -145,26 +143,26 @@ at::Tensor run_scan_batch(const at::Tensor &x, int S) {
 
   const ScanBatchTiling tiling{block_dim, vec_len, batch_size, matmul_size,
                                2 /* vec-cube ratio */};
-  uint8_t *tiling_device = alloc_copy_tiling(tiling);
+  uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
 
   if (dtype == torch::kHalf) {
     const uint32_t user_workspace_size =
-        workspace::scan_batch::get_workspace_size<int16_t>(tiling);
+        tcuscan::workspace::scan_batch::get_workspace_size<int16_t>(tiling);
     const at::Tensor workspace_tensor =
-        alloc_workspace(user_workspace_size, device);
+        tcuscan::alloc_workspace(user_workspace_size, device);
     ACLRT_LAUNCH_KERNEL(scan_batch_fp16)
-    (block_dim, acl_stream, const_cast<void *>(x.storage().data()),
-     const_cast<void *>(z.storage().data()),
-     const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
+    (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
+     const_cast<void*>(z.storage().data()),
+     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else if (dtype == torch::kFloat32) {
     const uint32_t user_workspace_size =
-        workspace::scan_batch::get_workspace_size<float>(tiling);
+        tcuscan::workspace::scan_batch::get_workspace_size<float>(tiling);
     const at::Tensor workspace_tensor =
-        alloc_zeros_workspace(user_workspace_size, device);
+        tcuscan::alloc_zeros_workspace(user_workspace_size, device);
     ACLRT_LAUNCH_KERNEL(scan_batch_fp32)
-    (block_dim, acl_stream, const_cast<void *>(x.storage().data()),
-     const_cast<void *>(z.storage().data()),
-     const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
+    (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
+     const_cast<void*>(z.storage().data()),
+     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else {
     /* Unsupported */
   }
@@ -182,7 +180,7 @@ at::Tensor run_scan_batch(const at::Tensor &x, int S) {
  * @param S Tiling parameter. Typical values 32, 64, 128.
  * @return The prefix sum of `x`
  */
-at::Tensor run_scan_multi_core(const at::Tensor &x, int S) {
+at::Tensor run_scan_multi_core(const at::Tensor& x, int S) {
   const auto ascendc_platform =
       platform_ascendc::PlatformAscendCManager::GetInstance();
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
@@ -211,29 +209,29 @@ at::Tensor run_scan_multi_core(const at::Tensor &x, int S) {
 
   const MultiCoreScanTiling tiling{block_dim, total_length, matmul_size,
                                    l2_cache_size};
-  uint8_t *tiling_device = alloc_copy_tiling(tiling);
+  uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
 
   if (dtype == torch::kHalf) {
     const uint32_t user_workspace_size =
-        workspace::mc_scan::get_workspace_size<int16_t>(
+        tcuscan::workspace::mc_scan::get_workspace_size<int16_t>(
             tiling.num_elems, tiling.matmul_size, tiling.num_blocks);
     const at::Tensor workspace_tensor =
-        alloc_workspace(user_workspace_size, device);
+        tcuscan::alloc_workspace(user_workspace_size, device);
     ACLRT_LAUNCH_KERNEL(scan_multi_core_fp16)
-    (block_dim, acl_stream, const_cast<void *>(x.storage().data()),
-     const_cast<void *>(z.storage().data()),
-     const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
+    (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
+     const_cast<void*>(z.storage().data()),
+     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else {
     const uint32_t user_workspace_size =
-        workspace::mc_scan::get_workspace_size<int8_t>(
+        tcuscan::workspace::mc_scan::get_workspace_size<int8_t>(
             tiling.num_elems, tiling.matmul_size, tiling.num_blocks);
     const at::Tensor workspace_tensor =
-        alloc_workspace(user_workspace_size, device);
+        tcuscan::alloc_workspace(user_workspace_size, device);
 
     ACLRT_LAUNCH_KERNEL(scan_multi_core_int8)
-    (block_dim, acl_stream, const_cast<void *>(x.storage().data()),
-     const_cast<void *>(z.storage().data()),
-     const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
+    (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
+     const_cast<void*>(z.storage().data()),
+     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   }
 
   aclrtFree(tiling_device);
@@ -250,7 +248,7 @@ at::Tensor run_scan_multi_core(const at::Tensor &x, int S) {
  * @param S Tiling parameter. Typical values 32, 64, 128.
  * @return The prefix sum of `x`
  */
-at::Tensor run_scan_multi_core_no_l2(const at::Tensor &x, int S) {
+at::Tensor run_scan_multi_core_no_l2(const at::Tensor& x, int S) {
   const auto ascendc_platform =
       platform_ascendc::PlatformAscendCManager::GetInstance();
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
@@ -274,29 +272,29 @@ at::Tensor run_scan_multi_core_no_l2(const at::Tensor &x, int S) {
   }
 
   const MultiCoreScanTiling tiling{block_dim, total_length, matmul_size};
-  uint8_t *tiling_device = alloc_copy_tiling(tiling);
+  uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
 
   if (dtype == torch::kHalf) {
     const uint32_t user_workspace_size =
-        workspace::mc_scan::get_workspace_size<int16_t>(
+        tcuscan::workspace::mc_scan::get_workspace_size<int16_t>(
             tiling.num_elems, tiling.matmul_size, tiling.num_blocks);
     const at::Tensor workspace_tensor =
-        alloc_workspace(user_workspace_size, device);
+        tcuscan::alloc_workspace(user_workspace_size, device);
     ACLRT_LAUNCH_KERNEL(scan_multi_core_fp16_no_l2)
-    (block_dim, acl_stream, const_cast<void *>(x.storage().data()),
-     const_cast<void *>(z.storage().data()),
-     const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
+    (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
+     const_cast<void*>(z.storage().data()),
+     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else {
     const uint32_t user_workspace_size =
-        workspace::mc_scan::get_workspace_size<int8_t>(
+        tcuscan::workspace::mc_scan::get_workspace_size<int8_t>(
             tiling.num_elems, tiling.matmul_size, tiling.num_blocks);
     const at::Tensor workspace_tensor =
-        alloc_workspace(user_workspace_size, device);
+        tcuscan::alloc_workspace(user_workspace_size, device);
 
     ACLRT_LAUNCH_KERNEL(scan_multi_core_int8_no_l2)
-    (block_dim, acl_stream, const_cast<void *>(x.storage().data()),
-     const_cast<void *>(z.storage().data()),
-     const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
+    (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
+     const_cast<void*>(z.storage().data()),
+     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   }
 
   aclrtFree(tiling_device);
@@ -313,7 +311,7 @@ at::Tensor run_scan_multi_core_no_l2(const at::Tensor &x, int S) {
  * @param S Tiling parameter. Typical values 32, 64, 128.
  * @return The prefix sum of each concecutive block of `x` (block length S).
  */
-at::Tensor run_row_scan(const at::Tensor &x, int S) {
+at::Tensor run_row_scan(const at::Tensor& x, int S) {
   const auto ascendc_platform =
       platform_ascendc::PlatformAscendCManager::GetInstance();
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
@@ -336,14 +334,14 @@ at::Tensor run_row_scan(const at::Tensor &x, int S) {
   }
 
   const RowScanTiling tiling{M * matmul_size, matmul_size};
-  uint8_t *tiling_device = alloc_copy_tiling(tiling);
+  uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
 
   if (dtype == torch::kHalf) {
-    const at::Tensor workspace_tensor = alloc_workspace(0, device);
+    const at::Tensor workspace_tensor = tcuscan::alloc_workspace(0, device);
     ACLRT_LAUNCH_KERNEL(row_scan_fp16)
-    (block_dim, acl_stream, const_cast<void *>(x.storage().data()),
-     const_cast<void *>(z.storage().data()),
-     const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
+    (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
+     const_cast<void*>(z.storage().data()),
+     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else {
     /* Unsupported*/
   }
@@ -363,8 +361,8 @@ at::Tensor run_row_scan(const at::Tensor &x, int S) {
  * @param lower_strict Strict lower triangular all-ones matrix of size S.
  * @return The prefix sum of each concecutive block of `x` (block length S^2).
  */
-at::Tensor run_block_scan(const at::Tensor &x, const at::Tensor &upper,
-                          const at::Tensor &lower_strict) {
+at::Tensor run_block_scan(const at::Tensor& x, const at::Tensor& upper,
+                          const at::Tensor& lower_strict) {
   const auto ascendc_platform =
       platform_ascendc::PlatformAscendCManager::GetInstance();
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
@@ -388,16 +386,16 @@ at::Tensor run_block_scan(const at::Tensor &x, const at::Tensor &upper,
   }
 
   const BlockScanTiling tiling{total_len, s};
-  uint8_t *tiling_device = alloc_copy_tiling(tiling);
+  uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
 
   if (dtype == torch::kHalf) {
-    const at::Tensor workspace_tensor = alloc_workspace(0, device);
+    const at::Tensor workspace_tensor = tcuscan::alloc_workspace(0, device);
     ACLRT_LAUNCH_KERNEL(block_scan_fp16)
-    (block_dim, acl_stream, const_cast<void *>(x.storage().data()),
-     const_cast<void *>(upper.storage().data()),
-     const_cast<void *>(lower_strict.storage().data()),
-     const_cast<void *>(z.storage().data()),
-     const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
+    (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
+     const_cast<void*>(upper.storage().data()),
+     const_cast<void*>(lower_strict.storage().data()),
+     const_cast<void*>(z.storage().data()),
+     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else {
     /* Unsupported*/
   }
@@ -417,8 +415,8 @@ at::Tensor run_block_scan(const at::Tensor &x, const at::Tensor &upper,
  * @param lower_strict Strict lower triangular all-ones matrix of size S.
  * @return The prefix sum of each concecutive block of `x` (block length S^2).
  */
-at::Tensor run_scan_multi_cube(const at::Tensor &x, const at::Tensor &upper,
-                               const at::Tensor &lower_strict) {
+at::Tensor run_scan_multi_cube(const at::Tensor& x, const at::Tensor& upper,
+                               const at::Tensor& lower_strict) {
   const auto ascendc_platform =
       platform_ascendc::PlatformAscendCManager::GetInstance();
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
@@ -446,20 +444,20 @@ at::Tensor run_scan_multi_cube(const at::Tensor &x, const at::Tensor &upper,
                                    l2_cache_size);
 
   const ScanMultiCubeTiling tiling{block_dim, total_len, s, l2_cache_size};
-  uint8_t *tiling_device = alloc_copy_tiling(tiling);
+  uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
 
   if (dtype == torch::kHalf) {
     const uint32_t user_workspace_size =
-        workspace::mc_scan::get_workspace_size<int16_t>(
+        tcuscan::workspace::mc_scan::get_workspace_size<int16_t>(
             tiling.num_elems, tiling.matmul_size, tiling.num_blocks);
     const at::Tensor workspace_tensor =
-        alloc_workspace(user_workspace_size, device);
+        tcuscan::alloc_workspace(user_workspace_size, device);
     ACLRT_LAUNCH_KERNEL(scan_multi_cube_fp16)
-    (block_dim, acl_stream, const_cast<void *>(x.storage().data()),
-     const_cast<void *>(upper.storage().data()),
-     const_cast<void *>(lower_strict.storage().data()),
-     const_cast<void *>(z.storage().data()),
-     const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
+    (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
+     const_cast<void*>(upper.storage().data()),
+     const_cast<void*>(lower_strict.storage().data()),
+     const_cast<void*>(z.storage().data()),
+     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else {
     /* Unsupported*/
   }
@@ -470,6 +468,4 @@ at::Tensor run_scan_multi_cube(const at::Tensor &x, const at::Tensor &upper,
   return z;
 }
 
-}  // namespace scan
-
-}  // namespace asc
+}  // namespace tcuscan

@@ -11,7 +11,7 @@
 #include <pybind11/pybind11.h>
 #include <torch/extension.h>
 
-namespace tcuscan::cpu::scan {
+namespace tcuscan {
 
 /**
  * @brief Inclusive scan inplace :a[i] := sum_{j=0..i} a[j]
@@ -106,4 +106,4 @@ at::Tensor run_scan_cpu(const at::Tensor& x) {
   return z;
 }
 
-}  // namespace tcuscan::cpu::scan
+}  // namespace tcuscan

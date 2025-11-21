@@ -19,9 +19,7 @@
 #include "tiling/platform/platform_ascendc.h"
 #include "torch_npu/csrc/core/npu/NPUStream.h"
 
-namespace asc {
-
-namespace gen {
+namespace tcuscan {
 
 /**
  * @brief Torch wrapper for generate lower triangular kernel.
@@ -30,7 +28,7 @@ namespace gen {
  * @param dtype The desired scalar type for the matrix elements.
  * @return Returns tensor that contains the lower triangular matrix.
  */
-at::Tensor run_gen_lower(uint32_t matrix_size, const at::Device &device,
+at::Tensor run_gen_lower(uint32_t matrix_size, const at::Device& device,
                          const torch::Dtype dtype) {
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const uint32_t total_len = matrix_size * matrix_size;
@@ -39,18 +37,18 @@ at::Tensor run_gen_lower(uint32_t matrix_size, const at::Device &device,
                 at::TensorOptions().dtype(dtype).device(device));
   const uint32_t tile_len = 8 * matrix_size;
   const uint32_t block_dim = host_utils::CeilDiv(total_len, tile_len);
-  const at::Tensor workspace_tensor = alloc_workspace(0, device);
+  const at::Tensor workspace_tensor = tcuscan::alloc_workspace(0, device);
 
   const GenLowerTiling tiling{matrix_size, tile_len};
-  uint8_t *tiling_device = alloc_copy_tiling(tiling);
+  uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
   if (dtype == at::kHalf) {
     ACLRT_LAUNCH_KERNEL(gen_lower_fp16)
-    (block_dim, acl_stream, const_cast<void *>(z.storage().data()),
-     const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
+    (block_dim, acl_stream, const_cast<void*>(z.storage().data()),
+     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else if (dtype == at::kChar) {
     ACLRT_LAUNCH_KERNEL(gen_lower_int8)
-    (block_dim, acl_stream, const_cast<void *>(z.storage().data()),
-     const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
+    (block_dim, acl_stream, const_cast<void*>(z.storage().data()),
+     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   }
 
   aclrtFree(tiling_device);
@@ -59,6 +57,4 @@ at::Tensor run_gen_lower(uint32_t matrix_size, const at::Device &device,
   return z;
 }
 
-}  // namespace gen
-
-}  // namespace asc
+}  // namespace tcuscan

@@ -19,9 +19,7 @@
 #include "torch_npu/csrc/core/npu/NPUStream.h"
 #include "workspace.h"
 
-namespace asc {
-
-namespace split {
+namespace tcuscan {
 
 /**
  * @brief Returns the binary split with indices of x given a boolean mask
@@ -59,12 +57,12 @@ at::Tensor run_split(const at::Tensor& x, const at::Tensor& mask, int S) {
       {total_length}, at::TensorOptions().dtype(dtype).device(device));
 
   const SplitTiling tiling{block_dim, total_length, matmul_size, vec_tile_size};
-  uint8_t* tiling_device = alloc_copy_tiling(tiling);
+  uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
 
   const uint32_t user_workspace_size =
-      workspace::split::get_workspace_size(tiling);
+      tcuscan::workspace::split::get_workspace_size(tiling);
   const at::Tensor workspace_tensor =
-      alloc_workspace(user_workspace_size, device);
+      tcuscan::alloc_workspace(user_workspace_size, device);
 
   if (dtype == torch::kHalf or dtype == torch::kInt16) {
     ACLRT_LAUNCH_KERNEL(split_uint16)
@@ -122,12 +120,12 @@ std::tuple<at::Tensor, at::Tensor> run_split_ind(const at::Tensor& x,
       {total_length}, at::TensorOptions().dtype(torch::kInt32).device(device));
 
   const SplitTiling tiling{block_dim, total_length, matmul_size, vec_tile_size};
-  uint8_t* tiling_device = alloc_copy_tiling(tiling);
+  uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
 
   const uint32_t user_workspace_size =
-      workspace::split::get_workspace_size(tiling);
+      tcuscan::workspace::split::get_workspace_size(tiling);
   const at::Tensor workspace_tensor =
-      alloc_workspace(user_workspace_size, device);
+      tcuscan::alloc_workspace(user_workspace_size, device);
 
   if (dtype == torch::kHalf or dtype == torch::kInt16) {
     ACLRT_LAUNCH_KERNEL(split_ind_uint16)
@@ -145,6 +143,4 @@ std::tuple<at::Tensor, at::Tensor> run_split_ind(const at::Tensor& x,
   return std::make_tuple(vec_out, indices_out);
 }
 
-}  // namespace split
-
-}  // namespace asc
+}  // namespace tcuscan

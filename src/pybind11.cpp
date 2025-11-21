@@ -31,68 +31,66 @@
  */
 PYBIND11_MODULE(tcuscan_ops, m) {
   m.doc() = "TCUSCAN AscendC operators";
-  m.def("run_add", &asc::add::run_add, "Vector add");
-  m.def("run_diff", &asc::diff::run_diff, pybind11::arg(),
+  m.def("run_add", &tcuscan::run_add, "Vector add");
+  m.def("run_diff", &tcuscan::run_diff, pybind11::arg(),
         pybind11::arg("max_size") = 0, "Vector diff");
-  m.def("run_seg_scan", &asc::seg_ops::run_seg_scan, "Segmented Scan");
-  m.def("run_scan_multi_core", &asc::scan::run_scan_multi_core,
+  m.def("run_seg_scan", &tcuscan::run_seg_scan, "Segmented Scan");
+  m.def("run_scan_multi_core", &tcuscan::run_scan_multi_core,
         "Multi-core Scan");
-  m.def("run_scan_multi_core_no_l2", &asc::scan::run_scan_multi_core_no_l2,
+  m.def("run_scan_multi_core_no_l2", &tcuscan::run_scan_multi_core_no_l2,
         "Multi-core Scan (no L2 cache optimization)");
-  m.def("run_csr_gather", &asc::gather::run_csr_gather, "CSR gather");
-  m.def("run_compress", &asc::compress::run_compress, "Compaction/compress");
-  m.def("run_compress_pos", &asc::compress::run_compress_pos,
+  m.def("run_csr_gather", &tcuscan::run_csr_gather, "CSR gather");
+  m.def("run_compress", &tcuscan::run_compress, "Compaction/compress");
+  m.def("run_compress_pos", &tcuscan::run_compress_pos,
         "Compaction/compress with pre-computed output positions");
-  m.def("run_seg_sum", &asc::seg_ops::run_seg_sum, "Segmented Sum");
-  m.def("run_seg_sum_single_core", &asc::seg_ops::run_seg_sum_single_core,
+  m.def("run_seg_sum", &tcuscan::run_seg_sum, "Segmented Sum");
+  m.def("run_seg_sum_single_core", &tcuscan::run_seg_sum_single_core,
         "Segmented Sum (single-core)");
-  m.def("run_seg_sum_single_cube", &asc::seg_ops::run_seg_sum_single_cube,
+  m.def("run_seg_sum_single_cube", &tcuscan::run_seg_sum_single_cube,
         "Segmented Sum (single-cube)");
-  m.def("run_spmv", &asc::spmv::run_spmv,
-        "Sparse Matrix-Vector Multiplication");
-  m.def("run_spmv_multi_cube", &asc::spmv::run_spmv_multi_cube,
+  m.def("run_spmv", &tcuscan::run_spmv, "Sparse Matrix-Vector Multiplication");
+  m.def("run_spmv_multi_cube", &tcuscan::run_spmv_multi_cube,
         "Sparse Matrix-Vector Multiplication Using Multi-cube Scan");
-  m.def("run_copy", &asc::copy::run_copy, "Copy single core");
-  m.def("run_scan_batch", &asc::scan::run_scan_batch, "Scan Batch");
-  m.def("run_scan_single_core", &asc::scan::run_scan_single_core,
+  m.def("run_copy", &tcuscan::run_copy, "Copy single core");
+  m.def("run_scan_batch", &tcuscan::run_scan_batch, "Scan Batch");
+  m.def("run_scan_single_core", &tcuscan::run_scan_single_core,
         pybind11::arg("x"), pybind11::arg("S"),
         pybind11::arg("starting_sum") = 0, "Scan Single Core");
-  m.def("run_seg_scan_vec", &asc::seg_ops::run_seg_scan_vec,
+  m.def("run_seg_scan_vec", &tcuscan::run_seg_scan_vec,
         "Segmented Scan (vector-only)");
-  m.def("run_seg_scan_mc_revert", &asc::seg_ops::run_seg_scan_mc_revert,
+  m.def("run_seg_scan_mc_revert", &tcuscan::run_seg_scan_mc_revert,
         "Vector Revert for MC Segmented Scan");
-  m.def("run_topk_int16", &asc::topk::run_topk_int16,
+  m.def("run_topk_int16", &tcuscan::run_topk_int16,
         "TopK using parallel splits (int16)");
-  m.def("run_topk_fp16", &asc::topk::run_topk_fp16,
+  m.def("run_topk_fp16", &tcuscan::run_topk_fp16,
         "TopK using parallel splits (fp16)");
-  m.def("run_topk_pivot_fp16", &asc::topk::run_topk_pivot_fp16,
+  m.def("run_topk_pivot_fp16", &tcuscan::run_topk_pivot_fp16,
         "K-largest value estimator (fp16)");
-  m.def("run_split", &asc::split::run_split, "Split (16-bits)");
-  m.def("run_split_ind", &asc::split::run_split_ind,
+  m.def("run_split", &tcuscan::run_split, "Split (16-bits)");
+  m.def("run_split_ind", &tcuscan::run_split_ind,
         "Split with indices (16-bits)");
-  m.def("run_mc_gather", &asc::gather::run_mc_gather,
-        "Vector Multi Core Gather");
-  m.def("run_gather_spmv", &asc::gather::run_gather_spmv,
+  m.def("run_mc_gather", &tcuscan::run_mc_gather, "Vector Multi Core Gather");
+  m.def("run_gather_spmv", &tcuscan::run_gather_spmv,
         "Vector Multi Core Gather SPMV");
-  m.def("run_radix_sort", &asc::sort::run_radix_sort,
+  m.def("run_radix_sort", &tcuscan::run_radix_sort,
         "Radix sort using cube units");
-  m.def("run_matmul_cce", &asc::matmul::matmul_cce,
+  m.def("run_matmul_cce", &tcuscan::matmul_cce,
         "Matrix multiplication CCE kernel (B dims must be a multiple of 512)");
-  m.def("run_row_scan", &asc::scan::run_row_scan,
+  m.def("run_row_scan", &tcuscan::run_row_scan,
         "Matrix multiplication row scan kernel");
-  m.def("run_gen_lower", &asc::gen::run_gen_lower,
+  m.def("run_gen_lower", &tcuscan::run_gen_lower,
         "Generate lower triangular matrix");
-  m.def("run_reduce_tiles", &asc::reduce::run_reduce_tiles,
+  m.def("run_reduce_tiles", &tcuscan::run_reduce_tiles,
         "Sum-reduce over tiles");
-  m.def("run_complete_rows", &asc::reduce::run_complete_rows,
+  m.def("run_complete_rows", &tcuscan::run_complete_rows,
         "Down-sweep (second) phase of MCSCAN");
-  m.def("run_complete_blocks", &asc::reduce::run_complete_blocks,
+  m.def("run_complete_blocks", &tcuscan::run_complete_blocks,
         "Block-wise down-sweep (second) phase of block scan");
-  m.def("run_block_scan", &asc::scan::run_block_scan,
+  m.def("run_block_scan", &tcuscan::run_block_scan,
         "Block scan on blocks of length S^2");
-  m.def("run_simple_pad", &asc::pad::run_simple_pad,
+  m.def("run_simple_pad", &tcuscan::run_simple_pad,
         "Padding of an input tensor from length vec_len up to align_len");
-  m.def("run_scan_multi_cube", &asc::scan::run_scan_multi_cube,
+  m.def("run_scan_multi_cube", &tcuscan::run_scan_multi_cube,
         "Multi-cube scan");
-  m.def("run_scan_cpu", &tcuscan::cpu::scan::run_scan_cpu, "Scan on CPUs");
+  m.def("run_scan_cpu", &tcuscan::run_scan_cpu, "Scan on CPUs");
 }
