@@ -279,6 +279,26 @@ def topk_tcuscan_benchmark(
     return _run_benchmark(device, run_tcuscan_topk), k
 
 
+def topk_pivot_benchmark(
+    device: Device, size: int, dtype: torch.dtype, k: int
+) -> float:
+    if dtype in {torch.float16, torch.float32}:
+        x = torch.rand(size, device=device.str, dtype=dtype)
+    else:
+        x = torch.randint(
+            torch.iinfo(dtype).min,
+            torch.iinfo(dtype).max,
+            (size,),
+            device=device.str,
+            dtype=dtype,
+        )
+
+    def run_topk_pivot() -> None:
+        _ = tcuscan_ops.run_topk_pivot_fp16(x, k)
+
+    return _run_benchmark(device, run_topk_pivot), k
+
+
 def tcuscan_top_p(probs, p, s):
     """
     Perform top-p (nucleus) sampling on a probability distribution.
@@ -981,6 +1001,7 @@ if __name__ == "__main__":  # noqa
             "scscan",
             "seg_scan_mc_revert",
             "topk",
+            "topk_pivot",
             "tcuscan_topk",
             "topp",
             "tcuscan_topp",
@@ -1295,6 +1316,16 @@ if __name__ == "__main__":  # noqa
         benchmark(
             device,
             f"topk_{k}",
+            dtype,
+            partial(topk_benchmark, dtype=tdtype, k=k),
+            sizes,
+        )
+    elif bench == "topk_pivot" and dtype in ["fp16"]:
+        k = args.k
+        tdtype = STR_TO_DTYPE[dtype]
+        benchmark(
+            device,
+            f"topk_pivot_{k}",
             dtype,
             partial(topk_benchmark, dtype=tdtype, k=k),
             sizes,

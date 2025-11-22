@@ -164,11 +164,13 @@ std::tuple<at::Tensor, at::Tensor> run_topk_fp16(const at::Tensor& x,
 /**
  * @brief K-largest value estimator from an input vector of dtype fp16.
  *
- * @param x Input 1D tensor
- * @param k Input parameter k (of top-k)
+ * @param x Input 1D tensor.
+ * @param k Input parameter k (of top-k).
+ * @param tile_len Tile length.
  * @return Returns Tensor of length 16, where second element is estimator
  */
-at::Tensor run_topk_pivot_fp16(const at::Tensor& x, uint32_t k) {
+at::Tensor run_topk_pivot_fp16(const at::Tensor& x, uint32_t k,
+                               uint32_t tile_len = 32) {
   const auto ascendc_platform =
       platform_ascendc::PlatformAscendCManager::GetInstance();
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
@@ -176,7 +178,6 @@ at::Tensor run_topk_pivot_fp16(const at::Tensor& x, uint32_t k) {
   const auto dtype = x.options().dtype();
 
   const uint32_t total_length = x.numel();
-  const uint32_t tile_len = 128;
   const uint32_t num_tiles = host_utils::CeilDiv(total_length, tile_len);
 
   uint32_t block_dim = ascendc_platform->GetCoreNumAic();

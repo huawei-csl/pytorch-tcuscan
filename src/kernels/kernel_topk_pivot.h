@@ -22,7 +22,7 @@ using namespace kernel_utils;
  */
 template <typename T = half>
 class KernelPivotTopkEstimator {
-  constexpr static uint32_t BUFFER_NUM = 1;
+  constexpr static uint32_t BUFFER_NUM = 2;
   constexpr static uint32_t MIN_VEC_SIZE = UB_ALIGNMENT / sizeof(T);
 
  public:
@@ -41,6 +41,7 @@ class KernelPivotTopkEstimator {
         k_{static_cast<int32_t>(k)},
         inner_k_{scalar::CeilDiv(k_, vec_core_num_)},
         num_tiles_(scalar::CeilDiv(vec_len_, tile_len_)),
+        num_samples_per_core_(1),
         max_num_tiles_per_block_(scalar::CeilDiv(num_tiles_, vec_core_num_)) {
     ASCENDC_ASSERT(k_ % vec_core_num_ == 0, {
       KERNEL_LOG(KERNEL_ERROR,
@@ -53,6 +54,14 @@ class KernelPivotTopkEstimator {
                  "K-largest (top-k) value estimator supports k at most "
                  "128. Got (k=%d, inner_k_=%d, AIVs=%d)",
                  k_, inner_k_, vec_core_num_);
+    });
+
+    ASCENDC_ASSERT(num_samples_per_core_ <= max_num_tiles_per_block_, {
+      KERNEL_LOG(KERNEL_ERROR,
+                 "Number of samples per core must be smaller than the maximum "
+                 "number of tiles per block. Got (tile_len=%d, "
+                 "num_samples_per_core_=%d, max_num_tiles_per_block_=%d)",
+                 tile_len_, num_samples_per_core_, max_num_tiles_per_block_);
     });
   }
 
@@ -86,9 +95,11 @@ class KernelPivotTopkEstimator {
 
     uint32_t global_offset =
         GetBlockIdx() * tile_len_ * max_num_tiles_per_block_;
+    const uint32_t max_num_tiles = kernel_utils::scalar::GetWorkDistribution(
+        vec_len_, tile_len_, vec_core_num_);
+
     const uint32_t num_tiles_to_process =
-        kernel_utils::scalar::GetWorkDistribution(vec_len_, tile_len_,
-                                                  vec_core_num_);
+        kernel_utils::scalar::Min(max_num_tiles, num_samples_per_core_);
 
     const LocalTensor<T> vec_out_lt = out_q_.AllocTensor<T>();
     T estimate = std::numeric_limits<T>::min();
@@ -196,6 +207,7 @@ class KernelPivotTopkEstimator {
   const int32_t k_;
   const int32_t inner_k_;
   const uint32_t num_tiles_;
+  const uint32_t num_samples_per_core_;
   const uint32_t max_num_tiles_per_block_;
 };
 
