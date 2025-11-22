@@ -80,12 +80,12 @@ class KernelCompress {
     global_mask_.SetGlobalBuffer((__gm__ MaskT*)mask, vec_len_);
     global_pos_.SetGlobalBuffer((__gm__ PosT*)pos, vec_len_);
 
-    pipe.InitBuffer(vec_in_q_, 1, tile_len_ * sizeof(T));
-    pipe.InitBuffer(mask_in_q_, 1, tile_len_ * sizeof(MaskT));
-    pipe.InitBuffer(mask_fp16_buf_, tile_len_ * sizeof(half));
-    pipe.InitBuffer(packed_mask_buf_,
-                    packed_mask_tile_size_ * sizeof(PackedMaskT));
-    pipe.InitBuffer(gathered_out_q_, 2, tile_len_ * sizeof(T));
+    pipe_.InitBuffer(vec_in_q_, 1, tile_len_ * sizeof(T));
+    pipe_.InitBuffer(mask_in_q_, 1, tile_len_ * sizeof(MaskT));
+    pipe_.InitBuffer(mask_fp16_buf_, tile_len_ * sizeof(half));
+    pipe_.InitBuffer(packed_mask_buf_,
+                     packed_mask_tile_size_ * sizeof(PackedMaskT));
+    pipe_.InitBuffer(gathered_out_q_, 2, tile_len_ * sizeof(T));
   }
 
   /**
@@ -102,9 +102,9 @@ class KernelCompress {
     for (uint32_t tile_idx = 0; tile_idx < num_tiles_to_process; tile_idx++) {
       const uint32_t global_offset =
           num_elems_before_block_ + offset_within_block;
-      const bool full_tile = global_offset + tile_len_ < vec_len_;
+
       const uint32_t num_elems_to_process =
-          full_tile ? tile_len_ : vec_len_ - global_offset;
+          scalar::NextTileLen(tile_len_, global_offset, vec_len_);
 
       LoadAndConvertMask(global_offset, num_elems_to_process);
       copy::CopyGmToVec(vec_in_q_, global_input_[global_offset],
@@ -113,7 +113,7 @@ class KernelCompress {
       LocalTensor<T> input_lt = vec_in_q_.DeQue<T>();
 
       // Gather ones.
-      uint32_t num_gathered_elems =
+      const uint32_t num_gathered_elems =
           GatherAndStore(input_lt, gathered_out_q_,
                          global_output_[output_offset], num_elems_to_process);
 
@@ -193,7 +193,7 @@ class KernelCompress {
     }
   }
 
-  TPipe pipe;
+  TPipe pipe_;
 
   GlobalTensor<T> global_input_;
   GlobalTensor<T> global_output_;
