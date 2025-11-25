@@ -35,12 +35,12 @@ at::Tensor run_copy(const at::Tensor& x, int s) {
   const at::Tensor z = at::empty(
       {total_length}, at::TensorOptions().dtype(dtype).device(device));
 
-  const at::Tensor workspace_tensor = tcuscan::alloc_workspace(0, device);
+  const at::Tensor workspace_tensor = alloc_workspace(0, device);
 
   const uint32_t num_block = 1;  // required for 1 core
   const uint32_t tile_size = static_cast<uint32_t>(s);
   const CopyTiling tiling{num_block, total_length, tile_size};
-  uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
+  uint8_t* tiling_device = alloc_copy_tiling(tiling);
 
   if (dtype == at::kFloat) {
     ACLRT_LAUNCH_KERNEL(copy_fp32)

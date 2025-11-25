@@ -8,6 +8,7 @@
 #pragma once
 
 #include <cstdint>
+namespace tcuscan {
 
 #pragma pack(push, 8)
 /**
@@ -24,3 +25,4 @@ struct TopKPivotTiling {
   uint32_t k;
 };
 #pragma pack(pop)
+}  // namespace tcuscan

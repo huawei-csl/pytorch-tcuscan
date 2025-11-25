@@ -9,6 +9,8 @@
 
 #include <cstdint>
 
+namespace tcuscan {
+
 #pragma pack(push, 8)
 /**
  * @brief `seg_sum_single_core` kernel tiling parameter structure.
@@ -23,3 +25,5 @@ struct SegSumSingleCoreTiling {
 };
 
 #pragma pack(pop)
+
+}  // namespace tcuscan

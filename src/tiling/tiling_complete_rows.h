@@ -11,6 +11,8 @@
 
 #include <cstdint>
 
+namespace tcuscan {
+
 #pragma pack(push, 8)
 /**
  * @brief Tiling struct of `complete_rows` kernel.
@@ -24,3 +26,5 @@ struct CompleteRowsTiling {
   uint32_t tile_height;
 };
 #pragma pack(pop)
+
+}  // namespace tcuscan

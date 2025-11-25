@@ -10,6 +10,7 @@
 #pragma once
 
 #include <cstdint>
+namespace tcuscan {
 
 #pragma pack(push, 8)
 /**
@@ -24,3 +25,4 @@ struct MatMulCCETiling {
   uint32_t K;
 };
 #pragma pack(pop)
+}  // namespace tcuscan

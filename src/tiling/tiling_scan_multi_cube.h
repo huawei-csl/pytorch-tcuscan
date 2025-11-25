@@ -10,6 +10,7 @@
 #pragma once
 
 #include <cstdint>
+namespace tcuscan {
 
 #pragma pack(push, 8)
 /**
@@ -27,3 +28,4 @@ struct ScanMultiCubeTiling {
   uint64_t l2_cache_size;
 };
 #pragma pack(pop)
+}  // namespace tcuscan

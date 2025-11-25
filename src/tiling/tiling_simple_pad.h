@@ -8,6 +8,7 @@
 #pragma once
 
 #include <cstdint>
+namespace tcuscan {
 
 #pragma pack(push, 8)
 /**
@@ -22,3 +23,5 @@ struct SimplePadTiling {
   uint32_t align_len;
 };
 #pragma pack(pop)
+
+}  // namespace tcuscan

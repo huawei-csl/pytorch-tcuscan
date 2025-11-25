@@ -18,11 +18,11 @@
  * @param [in] tiling_global Pointer to the structure in global memory.
  */
 template <typename TilingT>
-__aicore__ inline void GetTilingData(TilingT *const tiling,
+__aicore__ inline void GetTilingData(TilingT* const tiling,
                                      GM_ADDR tiling_global) {
-  uint32_t *const tiling_32b = reinterpret_cast<uint32_t *>(tiling);
-  const __gm__ uint32_t *const tiling_global_32b =
-      reinterpret_cast<__gm__ uint32_t *>(tiling_global);
+  uint32_t* const tiling_32b = reinterpret_cast<uint32_t*>(tiling);
+  const __gm__ uint32_t* const tiling_global_32b =
+      reinterpret_cast<__gm__ uint32_t*>(tiling_global);
 
   for (uint32_t i = 0; i < sizeof(TilingT) / sizeof(uint32_t); i++) {
     tiling_32b[i] = tiling_global_32b[i];
@@ -33,7 +33,7 @@ extern "C" __global__ __aicore__ void matmul_cce(GM_ADDR x, GM_ADDR y,
                                                  GM_ADDR z, GM_ADDR workspace,
                                                  GM_ADDR tiling_gm) {
   (void)workspace;
-  MatMulCCETiling t;
+  tcuscan::MatMulCCETiling t;
   GetTilingData(&t, tiling_gm);
 
   const int M = t.M;

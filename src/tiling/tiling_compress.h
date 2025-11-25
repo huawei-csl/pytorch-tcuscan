@@ -9,6 +9,8 @@
 
 #include <cstdint>
 
+namespace tcuscan {
+
 #pragma pack(push, 8)
 /**
  * @brief Compress tiling parameter structure.
@@ -22,3 +24,5 @@ struct CompressTiling {
   uint32_t compress_tile_size;
 };
 #pragma pack(pop)
+
+}  // namespace tcuscan

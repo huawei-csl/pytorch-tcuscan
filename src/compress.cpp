@@ -25,7 +25,7 @@ extern "C" __global__ __aicore__ void compress_fp16(GM_ADDR x, GM_ADDR mask,
                                                     GM_ADDR z,
                                                     GM_ADDR workspace,
                                                     GM_ADDR tilingGm) {
-  CompressTiling tiling;
+  tcuscan::CompressTiling tiling;
   tiling::GetTilingData(&tiling, tilingGm);
 
   GM_ADDR const usrWorkspace = AscendC::GetUserWorkspace(workspace);
@@ -53,7 +53,7 @@ extern "C" __global__ __aicore__ void compress_pos_fp16(
     GM_ADDR vec_in, GM_ADDR mask, GM_ADDR pos, GM_ADDR vec_out,
     GM_ADDR workspace, GM_ADDR tilingGm) {
   (void)workspace;
-  CompressTiling tiling;
+  tcuscan::CompressTiling tiling;
   tiling::GetTilingData(&tiling, tilingGm);
 
   const uint32_t in_size = tiling.size;
@@ -81,7 +81,7 @@ extern "C" __global__ __aicore__ void compress_fp32(GM_ADDR x, GM_ADDR mask,
                                                     GM_ADDR z,
                                                     GM_ADDR workspace,
                                                     GM_ADDR tilingGm) {
-  CompressTiling tiling;
+  tcuscan::CompressTiling tiling;
   tiling::GetTilingData(&tiling, tilingGm);
 
   GM_ADDR const usrWorkspace = AscendC::GetUserWorkspace(workspace);
@@ -109,7 +109,7 @@ extern "C" __global__ __aicore__ void compress_pos_fp32(
     GM_ADDR vec_in, GM_ADDR mask, GM_ADDR pos, GM_ADDR vec_out,
     GM_ADDR workspace, GM_ADDR tilingGm) {
   (void)workspace;
-  CompressTiling tiling;
+  tcuscan::CompressTiling tiling;
   tiling::GetTilingData(&tiling, tilingGm);
 
   const uint32_t in_size = tiling.size;

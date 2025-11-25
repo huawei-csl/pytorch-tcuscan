@@ -15,7 +15,7 @@ __aicore__ inline void _run_complete_blocks(GM_ADDR input_vec,
                                             GM_ADDR input_sums,
                                             GM_ADDR output_vec,
                                             GM_ADDR tiling_gm) {
-  CompleteBlocksTiling tiling;
+  tcuscan::CompleteBlocksTiling tiling;
   tiling::GetTilingData(&tiling, tiling_gm);
 
   const uint32_t vec_len = tiling.num_elems;

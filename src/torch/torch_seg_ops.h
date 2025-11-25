@@ -48,7 +48,7 @@ at::Tensor run_seg_scan_vec(const at::Tensor& x, const at::Tensor& f, int S) {
   const at::Tensor z = at::empty(
       {total_length}, at::TensorOptions().dtype(at::kFloat).device(device));
 
-  const SegScanVecSingleCoreTiling tiling{total_length, tile_len};
+  const tcuscan::SegScanVecSingleCoreTiling tiling{total_length, tile_len};
   uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
 
   const uint32_t user_workspace_size = 0;
@@ -124,8 +124,8 @@ at::Tensor run_seg_scan_mc_revert(const at::Tensor& x, const at::Tensor& f,
 
   const uint32_t diff_len = static_cast<uint32_t>(diff.numel());
 
-  const SegScanMcRevertTiling tiling{block_dim, total_length, diff_len,
-                                     tile_len};
+  const tcuscan::SegScanMcRevertTiling tiling{block_dim, total_length, diff_len,
+                                              tile_len};
   uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
 
   const at::Tensor workspace_tensor = tcuscan::alloc_workspace(0, device);
@@ -163,7 +163,7 @@ at::Tensor run_seg_scan(const at::Tensor& x, const at::Tensor& f, int S) {
   const at::Tensor z = at::empty(
       {total_length}, at::TensorOptions().dtype(at::kFloat).device(device));
 
-  const SegScanSingleCoreTiling tiling{total_length, matmul_size};
+  const tcuscan::SegScanSingleCoreTiling tiling{total_length, matmul_size};
   uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
 
   const uint32_t user_workspace_size =
@@ -208,7 +208,8 @@ at::Tensor run_seg_sum_single_core(const at::Tensor& x,
   const at::Tensor z = at::empty(
       {num_segments}, at::TensorOptions().dtype(dtype_out).device(device));
 
-  const SegSumSingleCoreTiling tiling{total_length, num_segments, matmul_size};
+  const tcuscan::SegSumSingleCoreTiling tiling{total_length, num_segments,
+                                               matmul_size};
   uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
 
   if (dtype == torch::kHalf) {
@@ -271,7 +272,8 @@ at::Tensor run_seg_sum_single_cube(const at::Tensor& x, const at::Tensor& upper,
   const at::Tensor z = at::empty(
       {num_segments}, at::TensorOptions().dtype(dtype_out).device(device));
 
-  const SegSumSingleCubeTiling tiling{total_length, num_segments, matmul_size};
+  const tcuscan::SegSumSingleCubeTiling tiling{total_length, num_segments,
+                                               matmul_size};
   uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
 
   if (dtype == torch::kHalf) {

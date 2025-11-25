@@ -21,7 +21,7 @@ extern "C" __global__ __aicore__ void diff_fp16(GM_ADDR vec_in, GM_ADDR vec_out,
                                                 GM_ADDR workspace,
                                                 GM_ADDR tilingGm) {
   (void)workspace;
-  DiffTiling tiling;
+  tcuscan::DiffTiling tiling;
   tiling::GetTilingData(&tiling, tilingGm);
 
   run_diff<true, half>(vec_in, vec_out, tiling.vec_len, tiling.tile_len);
@@ -40,7 +40,7 @@ extern "C" __global__ __aicore__ void diff_fp32(GM_ADDR vec_in, GM_ADDR vec_out,
                                                 GM_ADDR workspace,
                                                 GM_ADDR tilingGm) {
   (void)workspace;
-  DiffTiling tiling;
+  tcuscan::DiffTiling tiling;
   tiling::GetTilingData(&tiling, tilingGm);
 
   run_diff<true, float>(vec_in, vec_out, tiling.vec_len, tiling.tile_len);

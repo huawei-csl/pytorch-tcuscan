@@ -8,6 +8,7 @@
 #pragma once
 
 #include <cstdint>
+namespace tcuscan {
 
 /**
  * @brief TopK union type
@@ -41,3 +42,4 @@ struct TopKTiling {
   uint32_t k;
 };
 #pragma pack(pop)
+}  // namespace tcuscan

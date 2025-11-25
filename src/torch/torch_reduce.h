@@ -49,9 +49,9 @@ at::Tensor run_reduce_tiles(const at::Tensor& x, int tile_len, int block_num) {
       {block_num}, at::TensorOptions().dtype(dtype_out).device(device));
 
   const ReduceTilesTiling tiling{total_len, s};
-  uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
+  uint8_t* tiling_device = alloc_copy_tiling(tiling);
 
-  const at::Tensor workspace_tensor = tcuscan::alloc_workspace(0, device);
+  const at::Tensor workspace_tensor = alloc_workspace(0, device);
   if (dtype == torch::kInt8) {
     ACLRT_LAUNCH_KERNEL(reduce_tiles_int8)
     (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
@@ -101,9 +101,9 @@ at::Tensor run_complete_rows(const at::Tensor& x, const at::Tensor& sums,
       {total_len}, at::TensorOptions().dtype(dtype_out).device(device));
 
   const CompleteRowsTiling tiling{total_len, width, height};
-  uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
+  uint8_t* tiling_device = alloc_copy_tiling(tiling);
 
-  const at::Tensor workspace_tensor = tcuscan::alloc_workspace(0, device);
+  const at::Tensor workspace_tensor = alloc_workspace(0, device);
   if (dtype == torch::kLong) {
     ACLRT_LAUNCH_KERNEL(complete_rows_int32)
     (block_dim, acl_stream, const_cast<void*>(x.storage().data()),

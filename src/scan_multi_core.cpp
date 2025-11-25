@@ -11,6 +11,8 @@
 #include "kernels/tcuscan_utils.h"
 #include "tiling/tiling_scan_multi_core.h"
 
+namespace tcuscan {
+
 template <typename InputT>
 __aicore__ inline void _run_scan_multi_core_no_l2_split(GM_ADDR input_vec,
                                                         GM_ADDR output_vec,
@@ -86,6 +88,8 @@ __aicore__ inline void _run_scan_multi_core(GM_ADDR input_vec,
   }
 }
 
+}  // namespace tcuscan
+
 /**
  * @brief Run the multi core inclusive scan kernel with input dtype fp16
  *
@@ -98,7 +102,8 @@ extern "C" __global__ __aicore__ void scan_multi_core_fp16(GM_ADDR input_vec,
                                                            GM_ADDR output_vec,
                                                            GM_ADDR workspace,
                                                            GM_ADDR tilingGm) {
-  _run_scan_multi_core<half>(input_vec, output_vec, workspace, tilingGm);
+  tcuscan::_run_scan_multi_core<half>(input_vec, output_vec, workspace,
+                                      tilingGm);
 }
 
 /**
@@ -113,7 +118,8 @@ extern "C" __global__ __aicore__ void scan_multi_core_int8(GM_ADDR input_vec,
                                                            GM_ADDR output_vec,
                                                            GM_ADDR workspace,
                                                            GM_ADDR tilingGm) {
-  _run_scan_multi_core<int8_t>(input_vec, output_vec, workspace, tilingGm);
+  tcuscan::_run_scan_multi_core<int8_t>(input_vec, output_vec, workspace,
+                                        tilingGm);
 }
 
 /**
@@ -128,8 +134,8 @@ extern "C" __global__ __aicore__ void scan_multi_core_int8(GM_ADDR input_vec,
 extern "C" __global__ __aicore__ void scan_multi_core_fp16_no_l2(
     GM_ADDR input_vec, GM_ADDR output_vec, GM_ADDR workspace,
     GM_ADDR tilingGm) {
-  _run_scan_multi_core_no_l2_split<half>(input_vec, output_vec, workspace,
-                                         tilingGm);
+  tcuscan::_run_scan_multi_core_no_l2_split<half>(input_vec, output_vec,
+                                                  workspace, tilingGm);
 }
 
 /**
@@ -144,6 +150,6 @@ extern "C" __global__ __aicore__ void scan_multi_core_fp16_no_l2(
 extern "C" __global__ __aicore__ void scan_multi_core_int8_no_l2(
     GM_ADDR input_vec, GM_ADDR output_vec, GM_ADDR workspace,
     GM_ADDR tilingGm) {
-  _run_scan_multi_core_no_l2_split<int8_t>(input_vec, output_vec, workspace,
-                                           tilingGm);
+  tcuscan::_run_scan_multi_core_no_l2_split<int8_t>(input_vec, output_vec,
+                                                    workspace, tilingGm);
 }

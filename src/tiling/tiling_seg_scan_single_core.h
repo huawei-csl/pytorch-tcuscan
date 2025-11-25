@@ -8,6 +8,7 @@
 #pragma once
 
 #include <cstdint>
+namespace tcuscan {
 
 #pragma pack(push, 8)
 /**
@@ -20,3 +21,4 @@ struct SegScanSingleCoreTiling {
   uint32_t matmul_size;
 };
 #pragma pack(pop)
+}  // namespace tcuscan

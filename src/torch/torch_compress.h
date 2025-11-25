@@ -57,13 +57,12 @@ at::Tensor run_compress(const at::Tensor& x, const at::Tensor& mask, int S) {
       {total_length}, at::TensorOptions().dtype(dtype).device(device));
 
   const CompressTiling tiling{total_length, matmul_size, vec_tile_size};
-  uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
+  uint8_t* tiling_device = alloc_copy_tiling(tiling);
 
   const uint32_t user_workspace_size =
-      tcuscan::workspace::compress::get_workspace_size<int8_t>(tiling,
-                                                               block_dim);
+      workspace::compress::get_workspace_size<int8_t>(tiling, block_dim);
   const at::Tensor workspace_tensor =
-      tcuscan::alloc_workspace(user_workspace_size, device);
+      alloc_workspace(user_workspace_size, device);
 
   if (dtype == torch::kHalf or dtype == torch::kInt16) {
     ACLRT_LAUNCH_KERNEL(compress_fp16)
@@ -126,13 +125,12 @@ at::Tensor run_compress_pos(const at::Tensor& x, const at::Tensor& mask,
                 at::TensorOptions().dtype(dtype).device(device));
 
   const CompressTiling tiling{total_length, matmul_size, vec_tile_size};
-  uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
+  uint8_t* tiling_device = alloc_copy_tiling(tiling);
 
   const uint32_t user_workspace_size =
-      tcuscan::workspace::compress::get_workspace_size<int8_t>(tiling,
-                                                               block_dim);
+      workspace::compress::get_workspace_size<int8_t>(tiling, block_dim);
   const at::Tensor workspace_tensor =
-      tcuscan::alloc_workspace(user_workspace_size, device);
+      alloc_workspace(user_workspace_size, device);
 
   if (dtype == torch::kHalf or dtype == torch::kInt16) {
     ACLRT_LAUNCH_KERNEL(compress_pos_fp16)

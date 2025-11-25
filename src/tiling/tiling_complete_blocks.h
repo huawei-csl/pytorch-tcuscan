@@ -9,6 +9,8 @@
 
 #include <cstdint>
 
+namespace tcuscan {
+
 #pragma pack(push, 8)
 /**
  * @brief Tiling struct of `complete_blocks` kernel.
@@ -22,3 +24,5 @@ struct CompleteBlocksTiling {
   uint32_t tile_len;
 };
 #pragma pack(pop)
+
+}  // namespace tcuscan

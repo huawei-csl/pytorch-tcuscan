@@ -12,7 +12,7 @@
 template <typename InputT>
 __aicore__ inline void _run_reduce_tiles(GM_ADDR input_vec, GM_ADDR output_vec,
                                          GM_ADDR tilingGm) {
-  ReduceTilesTiling tiling;
+  tcuscan::ReduceTilesTiling tiling;
   tiling::GetTilingData(&tiling, tilingGm);
 
   const uint32_t vec_len = tiling.num_elems;

@@ -11,6 +11,8 @@
 
 #include <cstdint>
 
+namespace tcuscan {
+
 #pragma pack(push, 8)
 /**
  * @brief MatMul blocks scan tiling parameter structure.
@@ -23,3 +25,5 @@ struct BlockScanTiling {
   uint32_t matmul_size;
 };
 #pragma pack(pop)
+
+}  // namespace tcuscan

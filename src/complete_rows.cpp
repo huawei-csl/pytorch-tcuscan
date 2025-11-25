@@ -13,7 +13,7 @@ template <typename InputT>
 __aicore__ inline void _run_complete_rows(GM_ADDR input_vec, GM_ADDR input_sums,
                                           GM_ADDR output_vec,
                                           GM_ADDR tilingGm) {
-  CompleteRowsTiling tiling;
+  tcuscan::CompleteRowsTiling tiling;
   tiling::GetTilingData(&tiling, tilingGm);
 
   const uint32_t vec_len = tiling.num_elems;

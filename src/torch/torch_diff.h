@@ -40,7 +40,7 @@ at::Tensor run_diff(const at::Tensor& x, int64_t max_size) {
 
   const at::Tensor z = at::empty(
       {total_length}, at::TensorOptions().dtype(dtype).device(device));
-  const at::Tensor workspace_tensor = tcuscan::alloc_workspace(0, device);
+  const at::Tensor workspace_tensor = alloc_workspace(0, device);
 
   uint32_t block_dim =
       static_cast<uint32_t>((total_length + tile_len - 1) / tile_len);
@@ -50,7 +50,7 @@ at::Tensor run_diff(const at::Tensor& x, int64_t max_size) {
   }
 
   const DiffTiling tiling{total_length, tile_len};
-  uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
+  uint8_t* tiling_device = alloc_copy_tiling(tiling);
 
   if (dtype == torch::kHalf) {
     ACLRT_LAUNCH_KERNEL(diff_fp16)

@@ -9,6 +9,8 @@
 
 #include <cstdint>
 
+namespace tcuscan {
+
 #pragma pack(push, 8)
 /**
  * @brief Copy tiling parameter structure.
@@ -22,3 +24,5 @@ struct CopyTiling {
   uint32_t tile_size;
 };
 #pragma pack(pop)
+
+}  // namespace tcuscan

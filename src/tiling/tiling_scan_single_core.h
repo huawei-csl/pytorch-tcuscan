@@ -8,6 +8,7 @@
 #pragma once
 
 #include <cstdint>
+namespace tcuscan {
 
 #pragma pack(push, 8)
 /**
@@ -26,3 +27,4 @@ struct SingleCoreScanTiling {
   } running_sum;
 };
 #pragma pack(pop)
+}  // namespace tcuscan

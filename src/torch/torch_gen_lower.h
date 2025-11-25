@@ -37,10 +37,10 @@ at::Tensor run_gen_lower(uint32_t matrix_size, const at::Device& device,
                 at::TensorOptions().dtype(dtype).device(device));
   const uint32_t tile_len = 8 * matrix_size;
   const uint32_t block_dim = host_utils::CeilDiv(total_len, tile_len);
-  const at::Tensor workspace_tensor = tcuscan::alloc_workspace(0, device);
+  const at::Tensor workspace_tensor = alloc_workspace(0, device);
 
   const GenLowerTiling tiling{matrix_size, tile_len};
-  uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
+  uint8_t* tiling_device = alloc_copy_tiling(tiling);
   if (dtype == at::kHalf) {
     ACLRT_LAUNCH_KERNEL(gen_lower_fp16)
     (block_dim, acl_stream, const_cast<void*>(z.storage().data()),

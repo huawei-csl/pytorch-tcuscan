@@ -10,6 +10,7 @@
 #pragma once
 
 #include <cstdint>
+namespace tcuscan {
 
 #pragma pack(push, 8)
 /**
@@ -23,3 +24,4 @@ struct RowScanTiling {
   uint32_t S;
 };
 #pragma pack(pop)
+}  // namespace tcuscan

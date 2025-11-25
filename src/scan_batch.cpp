@@ -22,7 +22,7 @@ extern "C" __global__ __aicore__ void scan_batch_fp16(GM_ADDR input_vec,
                                                       GM_ADDR output_vec,
                                                       GM_ADDR workspace,
                                                       GM_ADDR tiling) {
-  ScanBatchTiling tiling_data;
+  tcuscan::ScanBatchTiling tiling_data;
   tiling::GetTilingData(&tiling_data, tiling);
   GM_ADDR const lower = load_tril_matrix<half>(tiling_data.matmul_size);
 
@@ -57,7 +57,7 @@ extern "C" __global__ __aicore__ void scan_batch_fp32(GM_ADDR input_vec,
                                                       GM_ADDR output_vec,
                                                       GM_ADDR workspace,
                                                       GM_ADDR tiling) {
-  ScanBatchTiling tiling_data;
+  tcuscan::ScanBatchTiling tiling_data;
   tiling::GetTilingData(&tiling_data, tiling);
   GM_ADDR const lower = load_tril_matrix<float>(tiling_data.matmul_size);
 

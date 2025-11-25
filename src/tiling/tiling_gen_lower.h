@@ -8,6 +8,7 @@
 #pragma once
 
 #include <cstdint>
+namespace tcuscan {
 
 #pragma pack(push, 8)
 /**
@@ -20,3 +21,4 @@ struct GenLowerTiling {
   uint32_t tile_size;
 };
 #pragma pack(pop)
+}  // namespace tcuscan

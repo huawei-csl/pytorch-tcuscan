@@ -136,10 +136,10 @@ at::Tensor run_gather_spmv(const at::Tensor& values, const at::Tensor& idxs,
   block_dim = block_dim > max_aiv_cores ? max_aiv_cores : block_dim;
 
   const at::Tensor z = at::empty({idx_len}, values.options());
-  const at::Tensor workspace_tensor = tcuscan::alloc_workspace(0, device);
+  const at::Tensor workspace_tensor = alloc_workspace(0, device);
 
   const GatherSpmvTiling tiling{block_dim, values_len, idx_len, tile_len};
-  uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
+  uint8_t* tiling_device = alloc_copy_tiling(tiling);
 
   ACLRT_LAUNCH_KERNEL(gather_spmv)
   (block_dim, acl_stream, const_cast<void*>(values.storage().data()),

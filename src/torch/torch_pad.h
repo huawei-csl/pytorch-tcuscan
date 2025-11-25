@@ -35,8 +35,8 @@ at::Tensor run_simple_pad(const at::Tensor& x, const uint32_t align_len) {
   const uint32_t block_dim = 1;
 
   const SimplePadTiling tiling{block_dim, vec_len, align_len};
-  uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
-  const at::Tensor workspace_tensor = tcuscan::alloc_workspace(0, device);
+  uint8_t* tiling_device = alloc_copy_tiling(tiling);
+  const at::Tensor workspace_tensor = alloc_workspace(0, device);
 
   ACLRT_LAUNCH_KERNEL(simple_pad_fp16)
   (block_dim, acl_stream, const_cast<void*>(x.storage().data()),

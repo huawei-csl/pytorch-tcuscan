@@ -24,7 +24,7 @@ extern "C" __global__ __aicore__ void gather_spmv(GM_ADDR values_in,
                                                   GM_ADDR workspace,
                                                   GM_ADDR tilingGm) {
   (void)workspace;
-  GatherSpmvTiling tiling;
+  tcuscan::GatherSpmvTiling tiling;
   tiling::GetTilingData(&tiling, tilingGm);
 
   run_gather_spmv(values_in, cols_in, vec_out, tiling.idx_len, tiling.val_len,

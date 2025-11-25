@@ -23,7 +23,7 @@ extern "C" __global__ __aicore__ void simple_pad_fp16(GM_ADDR vec_in,
                                                       GM_ADDR workspace,
                                                       GM_ADDR tiling) {
   (void)workspace;
-  SimplePadTiling tiling_data;
+  tcuscan::SimplePadTiling tiling_data;
   tiling::GetTilingData(&tiling_data, tiling);
 
   run_simple_pad<false, half>(vec_in, vec_out, tiling_data.num_elems,

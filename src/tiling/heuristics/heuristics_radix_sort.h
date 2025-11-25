@@ -10,7 +10,7 @@
 #include "../../host_utils.h"
 #include "../tiling_radix_sort.h"
 
-namespace tiling::heuristics::radix_sort {
+namespace tcuscan::tiling::heuristics::radix_sort {
 
 /**
  * @brief Determine tiling parameters for radix sort.
@@ -55,4 +55,4 @@ RadixSortTiling CalculateTiling(uint32_t vec_len, uint32_t num_ai_cores,
   return tiling;
 }
 
-}  // namespace tiling::heuristics::radix_sort
+}  // namespace tcuscan::tiling::heuristics::radix_sort

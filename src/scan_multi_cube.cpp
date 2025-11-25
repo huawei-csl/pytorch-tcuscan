@@ -10,6 +10,8 @@
 #include "kernels/tcuscan_utils.h"
 #include "tiling/tiling_scan_multi_cube.h"
 
+namespace tcuscan {
+
 template <typename InputT>
 __aicore__ inline void _run_scan_multi_cube(GM_ADDR input_vec, GM_ADDR lower,
                                             GM_ADDR upper_strict,
@@ -61,6 +63,8 @@ __aicore__ inline void _run_scan_multi_cube(GM_ADDR input_vec, GM_ADDR lower,
   }
 }
 
+}  // namespace tcuscan
+
 /**
  * @brief Run the multi-cube inclusive block scan kernel with dtype fp16
  *
@@ -75,6 +79,6 @@ __aicore__ inline void _run_scan_multi_cube(GM_ADDR input_vec, GM_ADDR lower,
 extern "C" __global__ __aicore__ void scan_multi_cube_fp16(
     GM_ADDR input_vec, GM_ADDR lower, GM_ADDR upper_strict, GM_ADDR output_vec,
     GM_ADDR workspace, GM_ADDR tiling_gm) {
-  _run_scan_multi_cube<half>(input_vec, lower, upper_strict, output_vec,
-                             workspace, tiling_gm);
+  tcuscan::_run_scan_multi_cube<half>(input_vec, lower, upper_strict,
+                                      output_vec, workspace, tiling_gm);
 }

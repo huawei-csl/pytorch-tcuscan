@@ -13,7 +13,7 @@
 #include "tiling/tiling_seg_sum_single_cube.h"
 
 using namespace AscendC;
-using namespace kernel_utils;
+using namespace tcuscan;
 
 /**
  * @brief Run the `seg_sum_single_cube` kernel.
@@ -48,7 +48,7 @@ __aicore__ inline void run_seg_sum_single_cube(
 
   run_pad_kernel<T, false>(vec_in, padded_input, vec_len, align_size);
 
-  sync::SyncGroup<sync::GroupSyncDirection::FULL>();
+  kernel_utils::sync::SyncGroup<sync::GroupSyncDirection::FULL>();
 
   if ASCEND_IS_AIC {
     KernelBlockScan<T, true> op_cube(padded_vec_len, tile_len);
@@ -79,7 +79,7 @@ __aicore__ inline void run_seg_sum_single_cube(
 extern "C" __global__ __aicore__ void seg_sum_single_cube_fp16(
     GM_ADDR vec_in, GM_ADDR upper, GM_ADDR lower, GM_ADDR segm_ind_in,
     GM_ADDR vec_out, GM_ADDR workspace, GM_ADDR tiling) {
-  SegSumSingleCubeTiling t;
+  tcuscan::SegSumSingleCubeTiling t;
   tiling::GetTilingData(&t, tiling);
 
   const uint32_t vec_len = t.num_elems;

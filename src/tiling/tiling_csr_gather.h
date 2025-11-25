@@ -9,6 +9,8 @@
 
 #include <cstdint>
 
+namespace tcuscan {
+
 #pragma pack(push, 8)
 /**
  * @brief `csr_gather` tiling parameter structure.
@@ -25,3 +27,5 @@ struct CSRGatherTiling {
 };
 
 #pragma pack(pop)
+
+}  // namespace tcuscan

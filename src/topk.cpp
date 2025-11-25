@@ -26,7 +26,7 @@ extern "C" __global__ __aicore__ void topk_int16(GM_ADDR vec_in,
                                                  GM_ADDR indices_out,
                                                  GM_ADDR workspace,
                                                  GM_ADDR tiling_ptr) {
-  TopKTiling tiling;
+  tcuscan::TopKTiling tiling;
   tiling::GetTilingData(&tiling, tiling_ptr);
 
   GM_ADDR const usrWorkspace = AscendC::GetUserWorkspace(workspace);
@@ -53,7 +53,7 @@ extern "C" __global__ __aicore__ void topk_fp16(GM_ADDR vec_in, GM_ADDR vec_out,
                                                 GM_ADDR indices_out,
                                                 GM_ADDR workspace,
                                                 GM_ADDR tiling_ptr) {
-  TopKTiling tiling;
+  tcuscan::TopKTiling tiling;
   tiling::GetTilingData(&tiling, tiling_ptr);
 
   GM_ADDR const usrWorkspace = AscendC::GetUserWorkspace(workspace);
@@ -80,7 +80,7 @@ extern "C" __global__ __aicore__ void topk_pivot_fp16(GM_ADDR vec_in,
                                                       GM_ADDR workspace,
                                                       GM_ADDR tiling_ptr) {
   (void)workspace;
-  TopKPivotTiling tiling;
+  tcuscan::TopKPivotTiling tiling;
   tiling::GetTilingData(&tiling, tiling_ptr);
 
   run_pivot_topk_estimator<true, half>(vec_in, vec_out, tiling.num_elems,
