@@ -773,15 +773,27 @@ __aicore__ inline void CopyGmToVec(TQue<QuePosition::VECIN, QNumBuffers> &q,
   exec_mode::AssertIsAIV();
   const LocalTensor<DataType> lt = q.template AllocTensor<DataType>();
   if (!num_elems) num_elems = lt.GetSize();
-  if (num_elems % UB_ALIGNMENT == 0) {
+  if (num_elems % (UB_ALIGNMENT / sizeof(DataType)) == 0) {
     DataCopy(lt, global, num_elems);
   } else {
+    const uint32_t align_len =
+        static_cast<uint32_t>(UB_ALIGNMENT / sizeof(DataType));
+    const uint8_t pad_len =
+        static_cast<uint8_t>(align_len - num_elems % align_len);
+
     DataCopyExtParams params;
     params.blockCount = 1;
     params.blockLen = num_elems * sizeof(DataType);
     params.srcStride = 0;
     params.dstStride = 0;
-    DataCopyPad(lt, global, params, {});
+
+    DataCopyPadExtParams<DataType> pad_params;
+    pad_params.isPad = true;
+    pad_params.leftPadding = 0;
+    pad_params.rightPadding = pad_len;
+    pad_params.paddingValue = static_cast<DataType>(0);
+
+    DataCopyPad(lt, global, params, pad_params);
   }
   q.EnQue(lt);
 }
@@ -1102,129 +1114,6 @@ __aicore__ inline void ScalarWaitForVec() {
 
 }  // namespace sync
 
-namespace reduce {
-
-/**
- * @brief It is true if `DataType` is supported for the AscendC ReduceSum
- * instruction.
- *
- * @tparam DataType Data type to check.
- */
-template <typename DataType>
-constexpr bool IsAscendReduceSumSupported =
-    std::is_same<DataType, half>::value || std::is_same<DataType, float>::value;
-
-/**
- * @brief Reduce a tensor to a smaller tensor.
- *
- * The function takes the `src` tensor, divides it into parts of
- * size of the `acc` tensor, reduces the parts together using
- * element-wise addition and writes the result into `acc`.
- *
- * @tparam AllocateAcc Indicates whether the results should be accumulated or
- * written to the `acc` tensor.
- * @tparam DataType Data type of the tensors.
- *
- * @param [in] acc Accumulation tensor.
- * @param [in] src Source tensor.
- */
-template <bool AllocateAcc, typename DataType>
-__aicore__ inline void ReduceVecAdd(const LocalTensor<DataType> &acc,
-                                    const LocalTensor<DataType> &src) {
-  exec_mode::AssertIsAIV();
-  const uint32_t src_size = src.GetSize();
-  const uint32_t acc_size = acc.GetSize();
-
-  if (src_size == acc_size) {
-    DataCopy(acc, src, acc_size);
-  } else {
-    constexpr uint32_t i_start = AllocateAcc ? 2 : 0;
-    const uint32_t i_end = src_size / acc_size;
-    if constexpr (AllocateAcc) {
-      Add(acc, src[0], src[acc_size], acc_size);
-    }
-    for (uint32_t i = i_start; i < i_end; i++) {
-      Add(acc, src[i * acc_size], acc, acc_size);
-    }
-  }
-}
-
-/**
- * @brief Reduce a tensor to scalar using add operation.
- *
- * @tparam DataType Data type of the tensor.
- *
- * @param [in] src Source tensor.
- * @param [in] size Number of elements to reduce.
- *
- * @return The result of reduction.
- */
-template <typename DataType>
-__aicore__ inline DataType ReduceScalarAdd(const LocalTensor<DataType> &src,
-                                           uint32_t size) {
-  DataType acc = 0;
-  for (uint32_t i = 0; i < size; i++) {
-    acc += src.GetValue(i);
-  }
-  return acc;
-}
-
-/**
- * @brief Reduce a tensor to a smaller tensor using bitwise or.
- *
- * The function takes the `src` tensor, divides it into parts of
- * size of the `acc` tensor, reduces the parts together using
- * element-wise or operation and writes the result into `acc`.
- *
- * @tparam AllocateAcc Indicates whether the results should be accumulated or
- * written to the `acc` tensor.
- * @tparam DataType Data type of the tensors.
- *
- * @param [in] acc Accumulation tensor.
- * @param [in] src Source tensor.
- */
-template <bool AllocateAcc, typename DataType>
-__aicore__ inline void ReduceVecOr(const LocalTensor<DataType> &acc,
-                                   const LocalTensor<DataType> &src) {
-  exec_mode::AssertIsAIV();
-  const uint32_t src_size = src.GetSize();
-  const uint32_t acc_size = acc.GetSize();
-
-  if (src_size == acc_size) {
-    DataCopy(acc, src, acc_size);
-  } else {
-    constexpr uint32_t i_start = AllocateAcc ? 2 : 0;
-    const uint32_t i_end = src_size / acc_size;
-    if constexpr (AllocateAcc) {
-      Or(acc, src[0], src[acc_size], acc_size);
-    }
-    for (uint32_t i = i_start; i < i_end; i++) {
-      Or(acc, src[i * acc_size], acc, acc_size);
-    }
-  }
-}
-
-/**
- * @brief Reduce a tensor to scalar using bitwise or operation.
- *
- * @tparam DataType Data type of the tensor.
- *
- * @param [in] src Source tensor.
- *
- * @return The result of reduction.
- */
-template <typename DataType>
-__aicore__ inline DataType ReduceScalarOr(const LocalTensor<DataType> &src) {
-  exec_mode::AssertIsAIV();
-  DataType acc = 0;
-  for (uint32_t i = 0; i < src.GetSize(); i++) {
-    acc |= src.GetValue(i);
-  }
-  return acc;
-}
-
-}  // namespace reduce
-
 namespace cast {
 
 /**
@@ -1349,8 +1238,10 @@ __aicore__ inline T1 FloorDiv(T1 value, T2 divisor) {
 __aicore__ inline uint32_t NextTileLen(uint32_t tile_len,
                                        uint32_t global_offset,
                                        uint32_t length) {
+  if (length <= global_offset) {
+    return 0;
+  }
   const bool full_tile = global_offset + tile_len <= length;
-  if ((int)length - (int)global_offset < 0) return 0;
   const uint32_t num_elems_to_process =
       full_tile ? tile_len : length - global_offset;
 
@@ -1509,6 +1400,143 @@ __aicore__ inline T AlignDown(T length, uint32_t alignment) {
 }
 
 }  // namespace scalar
+
+namespace reduce {
+
+/**
+ * @brief It is true if `DataType` is supported for the AscendC ReduceSum
+ * instruction.
+ *
+ * @tparam DataType Data type to check.
+ */
+template <typename DataType>
+constexpr bool IsAscendReduceSumSupported =
+    std::is_same<DataType, half>::value || std::is_same<DataType, float>::value;
+
+/**
+ * @brief Reduce a tensor to a smaller tensor.
+ *
+ * The function takes the `src` tensor, divides it into parts of
+ * size of the `acc` tensor, reduces the parts together using
+ * element-wise addition and writes the result into `acc`.
+ *
+ * @tparam AllocateAcc Indicates whether the results should be accumulated or
+ * written to the `acc` tensor.
+ * @tparam DataType Data type of the tensors.
+ *
+ * @param [in] acc Accumulation tensor.
+ * @param [in] src Source tensor.
+ * @param [in] src_len Length of source tensor.
+ */
+template <bool AllocateAcc, typename DataType>
+__aicore__ inline void ReduceVecAdd(const LocalTensor<DataType> &acc,
+                                    const LocalTensor<DataType> &src,
+                                    uint32_t src_len) {
+  exec_mode::AssertIsAIV();
+  const uint32_t acc_size = acc.GetSize();
+  if (src_len == 0) {
+    return;
+  }
+
+  if (src_len == acc_size) {
+    if constexpr (AllocateAcc) {
+      DataCopy(acc, src, src_len);
+    }
+    if constexpr (!AllocateAcc) {
+      Add(acc, acc, src, src_len);
+    }
+  } else {
+    constexpr uint32_t i_start = AllocateAcc ? 2 : 0;
+    const uint32_t num_iters =
+        kernel_utils::scalar::FloorDiv(src_len, acc_size);
+    if constexpr (AllocateAcc) {
+      Add(acc, src[0], src[acc_size], acc_size);
+    }
+    for (uint32_t i = i_start; i < num_iters; i++) {
+      Add(acc, src[i * acc_size], acc, acc_size);
+    }
+    const uint32_t tail_len = src_len - num_iters * acc_size;
+    if (tail_len > 0) {
+      Add(acc, src[num_iters * acc_size], acc, tail_len);
+    }
+  }
+}
+
+/**
+ * @brief Reduce a tensor to scalar using add operation.
+ *
+ * @tparam DataType Data type of the tensor.
+ *
+ * @param [in] src Source tensor.
+ * @param [in] size Number of elements to reduce.
+ *
+ * @return The result of reduction.
+ */
+template <typename DataType>
+__aicore__ inline DataType ReduceScalarAdd(const LocalTensor<DataType> &src,
+                                           uint32_t size) {
+  DataType acc = 0;
+  for (uint32_t i = 0; i < size; i++) {
+    acc += src.GetValue(i);
+  }
+  return acc;
+}
+
+/**
+ * @brief Reduce a tensor to a smaller tensor using bitwise or.
+ *
+ * The function takes the `src` tensor, divides it into parts of
+ * size of the `acc` tensor, reduces the parts together using
+ * element-wise or operation and writes the result into `acc`.
+ *
+ * @tparam AllocateAcc Indicates whether the results should be accumulated or
+ * written to the `acc` tensor.
+ * @tparam DataType Data type of the tensors.
+ *
+ * @param [in] acc Accumulation tensor.
+ * @param [in] src Source tensor.
+ */
+template <bool AllocateAcc, typename DataType>
+__aicore__ inline void ReduceVecOr(const LocalTensor<DataType> &acc,
+                                   const LocalTensor<DataType> &src) {
+  exec_mode::AssertIsAIV();
+  const uint32_t src_size = src.GetSize();
+  const uint32_t acc_size = acc.GetSize();
+
+  if (src_size == acc_size) {
+    DataCopy(acc, src, acc_size);
+  } else {
+    constexpr uint32_t i_start = AllocateAcc ? 2 : 0;
+    const uint32_t i_end = src_size / acc_size;
+    if constexpr (AllocateAcc) {
+      Or(acc, src[0], src[acc_size], acc_size);
+    }
+    for (uint32_t i = i_start; i < i_end; i++) {
+      Or(acc, src[i * acc_size], acc, acc_size);
+    }
+  }
+}
+
+/**
+ * @brief Reduce a tensor to scalar using bitwise or operation.
+ *
+ * @tparam DataType Data type of the tensor.
+ *
+ * @param [in] src Source tensor.
+ *
+ * @return The result of reduction.
+ */
+template <typename DataType>
+__aicore__ inline DataType ReduceScalarOr(const LocalTensor<DataType> &src) {
+  exec_mode::AssertIsAIV();
+  DataType acc = 0;
+  for (uint32_t i = 0; i < src.GetSize(); i++) {
+    acc |= src.GetValue(i);
+  }
+  return acc;
+}
+
+}  // namespace reduce
 
 namespace tiling {
 

@@ -35,26 +35,19 @@ class KernelReduceTiles {
   /**
    * @brief Class constructor.
    *
-   * @param [in] tile_size Size of the tile.
+   * @param [in] tile_len Tile length.
    * @param [in] vec_len Number of elements in an input vector.
    */
-  __aicore__ inline KernelReduceTiles(uint32_t tile_size, uint32_t vec_len)
-      : block_num_(GetBlockNum() * GetTaskRation()),
-        tile_size_(tile_size),
+  __aicore__ inline KernelReduceTiles(uint32_t tile_len, uint32_t vec_len)
+      : vec_core_num_(GetBlockNum() * GetTaskRation()),
+        tile_len_(tile_len),
         vec_len_(vec_len),
-        num_tiles_(scalar::FloorDiv(vec_len, tile_size_)),
-        max_num_tiles_per_block_(scalar::CeilDiv(num_tiles_, block_num_)),
-        red1_size_((tile_size_ / 16 > RED2_SIZE) ? tile_size_ / 16
-                                                 : tile_size_ / 4) {
+        num_tiles_(scalar::CeilDiv(vec_len, tile_len)),
+        max_num_tiles_per_block_(scalar::CeilDiv(num_tiles_, vec_core_num_)),
+        red1_size_((tile_len_ / 16 > RED2_SIZE) ? tile_len_ / 16
+                                                : tile_len_ / 4) {
     static_assert(IS_ACC_T_SUPPORTED, "Unsupported accumulator type.");
     static_assert(IS_IN_T_8BIT || !IS_IN_T_UNSIGNED, "Unsupported input type.");
-    ASCENDC_ASSERT((vec_len % tile_size_ == 0), {
-      KERNEL_LOG(KERNEL_ERROR,
-                 "The length of the input vector (%d) must be "
-                 "divisible by the minimum amount of elements "
-                 "processed by every blocks (%d).",
-                 vec_len, tile_size_);
-    });
   }
 
   /**
@@ -65,83 +58,112 @@ class KernelReduceTiles {
    */
   __aicore__ inline void Init(GM_ADDR input, GM_ADDR output) {
     global_input_.SetGlobalBuffer((__gm__ InputT *)input, vec_len_);
-    global_output_.SetGlobalBuffer((__gm__ AccT *)output, block_num_);
+    global_output_.SetGlobalBuffer((__gm__ AccT *)output, vec_core_num_);
 
-    pipe.InitBuffer(vec_tile_input_q_, BufferNum, tile_size_ * sizeof(InputT));
+    pipe_.InitBuffer(vec_tile_input_q_, BufferNum, tile_len_ * sizeof(InputT));
     if constexpr (REQ_INTERMEDIATE_CAST) {
-      pipe.InitBuffer(vec_tile_intermediate_buf_,
-                      tile_size_ * sizeof(IntermediateT));
+      pipe_.InitBuffer(vec_tile_intermediate_buf_,
+                       tile_len_ * sizeof(IntermediateT));
     }
-    pipe.InitBuffer(vec_tile_q_, tile_size_ * sizeof(AccT));
+    pipe_.InitBuffer(vec_tile_q_, tile_len_ * sizeof(AccT));
 
-    pipe.InitBuffer(red1_buf_, red1_size_ * sizeof(AccT));
-    pipe.InitBuffer(red2_buf_, RED2_SIZE * sizeof(AccT));
-    pipe.InitBuffer(res_q_, BufferNum, MIN_VEC_SIZE * sizeof(AccT));
+    pipe_.InitBuffer(red1_buf_, red1_size_ * sizeof(AccT));
+    pipe_.InitBuffer(red2_buf_, RED2_SIZE * sizeof(AccT));
+    pipe_.InitBuffer(res_q_, 1, MIN_VEC_SIZE * sizeof(AccT));
   }
 
   /**
    * @brief Run the kernel - process all tiles.
    */
   __aicore__ inline void Process() {
-    const uint32_t num_tiles_to_process =
-        kernel_utils::scalar::GetWorkDistribution(vec_len_, tile_size_,
-                                                  block_num_);
-
-    if (num_tiles_to_process == 0) {
-      return;
-    }
-
     const LocalTensor<AccT> input_lt = vec_tile_q_.Get<AccT>();
+    const uint32_t num_tiles_to_process =
+        kernel_utils::scalar::GetWorkDistribution(vec_len_, tile_len_,
+                                                  vec_core_num_);
 
+    uint32_t global_offset =
+        GetBlockIdx() * tile_len_ * max_num_tiles_per_block_;
     AccT sum = 0;
 
     if constexpr (reduce::IsAscendReduceSumSupported<AccT>) {
       for (uint32_t tile_idx = 0; tile_idx < num_tiles_to_process; tile_idx++) {
-        LoadToAccT(input_lt, tile_idx);
-        ReduceSum(input_lt, input_lt, input_lt, tile_size_);
+        const uint32_t num_elems =
+            scalar::NextTileLen(tile_len_, global_offset, vec_len_);
 
-        sum += AscendC::GetAccVal<AccT>();
+        if (num_elems > 0) {
+          LoadToAccT(input_lt, global_offset, num_elems);
+          ReduceSum(input_lt, input_lt, input_lt, num_elems);
+          sum += AscendC::GetAccVal<AccT>();
+        }
+
+        global_offset += num_elems;
       }
     } else {
-      LoadToAccT(input_lt, 0);
       const LocalTensor<AccT> red1_lt = red1_buf_.Get<AccT>();
-      reduce::ReduceVecAdd<true /*AllocateAcc*/, AccT>(red1_lt, input_lt);
+
+      const uint32_t num_elems =
+          scalar::NextTileLen(tile_len_, global_offset, vec_len_);
+
+      if (num_elems > 0) {
+        LoadToAccT(input_lt, global_offset, num_elems);
+        reduce::ReduceVecAdd<true /*AllocAcc*/, AccT>(red1_lt, input_lt,
+                                                      num_elems);
+      }
+
+      global_offset += num_elems;
 
       for (uint32_t tile_idx = 1; tile_idx < num_tiles_to_process; tile_idx++) {
-        LoadToAccT(input_lt, tile_idx);
-        reduce::ReduceVecAdd<false /*AllocateAcc*/, AccT>(red1_lt, input_lt);
+        const uint32_t num_elems =
+            scalar::NextTileLen(tile_len_, global_offset, vec_len_);
+
+        if (num_elems > 0) {
+          LoadToAccT(input_lt, global_offset, num_elems);
+          reduce::ReduceVecAdd<false /*AllocAcc*/, AccT>(red1_lt, input_lt,
+                                                         num_elems);
+        }
+
+        global_offset += num_elems;
       }
-      const LocalTensor<AccT> red2_lt = red2_buf_.Get<AccT>();
-      reduce::ReduceVecAdd<true /*AllocateAcc*/, AccT>(red2_lt, red1_lt);
-      sum = reduce::ReduceScalarAdd<AccT>(red2_lt, red2_lt.GetSize());
+      if (num_tiles_to_process > 0) {
+        const LocalTensor<AccT> red2_lt = red2_buf_.Get<AccT>();
+        reduce::ReduceVecAdd<true /*AllocAcc*/, AccT>(red2_lt, red1_lt,
+                                                      red1_lt.GetSize());
+        sum = reduce::ReduceScalarAdd<AccT>(red2_lt, red2_lt.GetSize());
+      }
     }
     copy::CopyScalarToGm(global_output_[GetBlockIdx()], res_q_, sum);
   }
 
  private:
   __aicore__ inline void LoadToAccT(const LocalTensor<AccT> &dst_lt,
-                                    uint32_t tile_idx) {
-    const uint32_t global_offset =
-        GetBlockIdx() * tile_size_ * max_num_tiles_per_block_;
-
-    copy::CopyGmToVec(vec_tile_input_q_,
-                      global_input_[global_offset + tile_idx * tile_size_]);
+                                    uint32_t global_offset,
+                                    uint32_t num_elems_to_process) {
+    if (num_elems_to_process == 0) {
+      return;
+    }
+    copy::CopyGmToVec(vec_tile_input_q_, global_input_[global_offset],
+                      num_elems_to_process);
     LocalTensor<InputT> input_lt = vec_tile_input_q_.template DeQue<InputT>();
+    const auto dst_size =
+        scalar::AlignUp(num_elems_to_process, UB_ALIGNMENT / sizeof(InputT));
+
     if constexpr (REQ_INTERMEDIATE_CAST) {
       const LocalTensor<IntermediateT> intermediate_lt =
           vec_tile_intermediate_buf_.Get<IntermediateT>();
-      Cast(intermediate_lt, input_lt, RoundMode::CAST_NONE, tile_size_);
+      Cast(intermediate_lt, input_lt, RoundMode::CAST_NONE, dst_size);
 
       constexpr auto cast_mode = std::is_same_v<AccT, float>
                                      ? RoundMode::CAST_NONE
                                      : RoundMode::CAST_RINT;
-      Cast(dst_lt, intermediate_lt, cast_mode, tile_size_);
+      Cast(dst_lt, intermediate_lt, cast_mode, dst_size);
     } else {
-      Cast(dst_lt, input_lt, RoundMode::CAST_NONE, tile_size_);
+      Cast(dst_lt, input_lt, RoundMode::CAST_NONE, dst_size);
     }
+
     vec_tile_input_q_.FreeTensor(input_lt);
   }
-  TPipe pipe;
+
+  TPipe pipe_;
 
   TQue<QuePosition::VECIN, BufferNum> vec_tile_input_q_;
   TBuf<QuePosition::VECCALC> vec_tile_intermediate_buf_;
@@ -156,7 +178,8 @@ class KernelReduceTiles {
   constexpr static int32_t MIN_VEC_SIZE = UB_ALIGNMENT / sizeof(AccT);
   constexpr static bool IS_IN_T_8BIT =
       std::is_same_v<InputT, uint8_t> || std::is_same_v<InputT, int8_t>;
-  // AscendC casts do not support unsigned integers in many configurations.
+  // AscendC casts do not support unsigned integers in many
+  // configurations.
   constexpr static bool IS_IN_T_UNSIGNED = std::is_same_v<InputT, uint8_t> ||
                                            std::is_same_v<InputT, uint16_t> ||
                                            std::is_same_v<InputT, uint32_t>;
@@ -164,10 +187,9 @@ class KernelReduceTiles {
       std::is_same_v<AccT, float> || std::is_same_v<AccT, int32_t>;
   constexpr static bool REQ_INTERMEDIATE_CAST = IS_IN_T_8BIT;
 
-  const uint32_t block_num_;
-  const uint32_t tile_size_;
+  const uint32_t vec_core_num_;
+  const uint32_t tile_len_;
   const uint32_t vec_len_;
-
   const uint32_t num_tiles_;
   const uint32_t max_num_tiles_per_block_;
 
