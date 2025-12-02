@@ -22,7 +22,7 @@ torch.npu.set_device(NPU_DEVICE)
 
 def get_lengths(s: int, max_iters: int):
     for multiplier in range(
-        3, max_iters
+        1, max_iters
     ):  # FIXME(anastasios) range(1,max_iters) fails on torch.int8!
         yield multiplier * NUM_BLOCKS * s * s
 

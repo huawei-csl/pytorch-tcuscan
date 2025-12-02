@@ -1434,31 +1434,18 @@ __aicore__ inline void ReduceVecAdd(const LocalTensor<DataType> &acc,
                                     uint32_t src_len) {
   exec_mode::AssertIsAIV();
   const uint32_t acc_size = acc.GetSize();
-  if (src_len == 0) {
-    return;
-  }
 
-  if (src_len == acc_size) {
-    if constexpr (AllocateAcc) {
-      DataCopy(acc, src, src_len);
-    }
-    if constexpr (!AllocateAcc) {
-      Add(acc, acc, src, src_len);
-    }
-  } else {
-    constexpr uint32_t i_start = AllocateAcc ? 2 : 0;
-    const uint32_t num_iters =
-        kernel_utils::scalar::FloorDiv(src_len, acc_size);
-    if constexpr (AllocateAcc) {
-      Add(acc, src[0], src[acc_size], acc_size);
-    }
-    for (uint32_t i = i_start; i < num_iters; i++) {
-      Add(acc, src[i * acc_size], acc, acc_size);
-    }
-    const uint32_t tail_len = src_len - num_iters * acc_size;
-    if (tail_len > 0) {
-      Add(acc, src[num_iters * acc_size], acc, tail_len);
-    }
+  const uint32_t num_iters = kernel_utils::scalar::FloorDiv(src_len, acc_size);
+  const uint32_t tail_len = src_len - num_iters * acc_size;
+
+  if constexpr (AllocateAcc) {
+    Duplicate(acc, static_cast<DataType>(0), acc_size);
+  }
+  for (uint32_t i = 0; i < num_iters; i++) {
+    Add(acc, src[i * acc_size], acc, acc_size);
+  }
+  if (tail_len > 0) {
+    Add(acc, src[num_iters * acc_size], acc, tail_len);
   }
 }
 
