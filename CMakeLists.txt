@@ -77,7 +77,8 @@ ascendc_library(
   src/row_scan.cpp
   src/block_scan.cpp
   src/scan_multi_cube.cpp
-  src/simple_pad.cpp)
+  src/simple_pad.cpp
+  src/cube_reduce.cpp)
 
 ascendc_compile_options(scan_kernels PRIVATE -Wall -Wextra -Werror)
 

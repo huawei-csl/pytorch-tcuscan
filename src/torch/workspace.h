@@ -11,6 +11,7 @@
 #include "../host_utils.h"
 #include "../tiling/tiling_compress.h"
 #include "../tiling/tiling_copy.h"
+#include "../tiling/tiling_cube_reduce.h"
 #include "../tiling/tiling_radix_sort.h"
 #include "../tiling/tiling_scan_batch.h"
 #include "../tiling/tiling_scan_multi_core.h"
@@ -105,7 +106,7 @@ namespace compress {
  * @return Size of the workspace in bytes.
  */
 template <typename InputT>
-constexpr uint32_t get_workspace_size(const CompressTiling& tiling,
+constexpr uint32_t get_workspace_size(const CompressTiling &tiling,
                                       uint32_t num_blocks) {
   const uint32_t scan_res_size = host_utils::AlignUp(
       tiling.size * sizeof(int32_t), host_utils::GM_ALIGNMENT);
@@ -127,7 +128,7 @@ namespace sc_scan {
  * @return Size of the workspace in bytes.
  */
 template <typename InputT>
-constexpr uint32_t get_workspace_size(const SingleCoreScanTiling& tiling) {
+constexpr uint32_t get_workspace_size(const SingleCoreScanTiling &tiling) {
   using OutputT = host_utils::CubeOutType_t<InputT>;
 
   const uint32_t total_size =
@@ -147,7 +148,7 @@ namespace scan_batch {
  * @return Size of the workspace in bytes.
  */
 template <typename InputT>
-constexpr uint32_t get_workspace_size(const ScanBatchTiling& tiling) {
+constexpr uint32_t get_workspace_size(const ScanBatchTiling &tiling) {
   using OutputT = host_utils::CubeOutType_t<InputT>;
 
   if (tiling.num_elems > tiling.matmul_size) {
@@ -201,7 +202,7 @@ constexpr uint32_t get_workspace_size(size_t input_elems, size_t matmul_size,
  * @param [in] tiling Tiling parameters used in the kernel.
  * @return Size of the workspace in bytes.
  */
-constexpr uint32_t get_workspace_size(const SplitTiling& tiling) {
+constexpr uint32_t get_workspace_size(const SplitTiling &tiling) {
   return workspace::split::get_workspace_size(
       tiling.num_elems, tiling.scan_matmul_size, tiling.num_blocks);
 }
@@ -218,7 +219,7 @@ namespace radix_sort {
  * @return Size of the workspace in bytes.
  */
 template <typename InputT>
-uint32_t get_workspace_size(const RadixSortTiling& t) {
+uint32_t get_workspace_size(const RadixSortTiling &t) {
   const uint32_t tmp_output_size = t.num_elems * sizeof(InputT);
   // Arrays in workspace have to be aligned to their data type size. Therefore
   // we align the size of the radices array to 4 bytes, so that the
@@ -307,7 +308,7 @@ constexpr uint32_t get_workspace_size(size_t input_elems, size_t matmul_size) {
  * @return Size of the workspace in bytes.
  */
 template <typename InputT, typename OutputT>
-constexpr uint32_t get_workspace_size(const SegSumSingleCoreTiling& tiling) {
+constexpr uint32_t get_workspace_size(const SegSumSingleCoreTiling &tiling) {
   return seg_sum::get_workspace_size<InputT, OutputT>(tiling.num_elems,
                                                       tiling.tile_len);
 }
@@ -321,11 +322,37 @@ constexpr uint32_t get_workspace_size(const SegSumSingleCoreTiling& tiling) {
  * @return Size of the workspace in bytes.
  */
 template <typename InputT, typename OutputT>
-constexpr uint32_t get_workspace_size(const SegSumSingleCubeTiling& tiling) {
+constexpr uint32_t get_workspace_size(const SegSumSingleCubeTiling &tiling) {
   return seg_sum::get_workspace_size<InputT, OutputT>(tiling.num_elems,
                                                       tiling.tile_len);
 }
 
 }  // namespace seg_sum
+
+/**
+ * @brief Calculate the workspace size for `cube_reduce`.
+ *
+ * @tparam T Input data type.
+ *
+ * @param [in] tiling Tiling parameters used in the kernel.
+ * @return Size of the workspace in bytes.
+ */
+template <typename T>
+constexpr uint32_t get_workspace_size(const tcuscan::CubeReduceTiling &tiling) {
+  using OutputT = host_utils::CubeOutType_t<T>;
+
+  const uint32_t vec_len = tiling.vec_len;
+  const uint32_t matmul_size = tiling.matmul_size;
+  const uint32_t num_blocks = tiling.num_blocks;
+
+  const uint32_t align_size = matmul_size * matmul_size;
+  const uint32_t padded_input_len = host_utils::AlignUp(vec_len, align_size);
+
+  const uint32_t padded_input_size = padded_input_len * sizeof(T);
+  const uint32_t cube_reductions_size =
+      num_blocks * matmul_size * matmul_size * sizeof(OutputT);
+
+  return padded_input_size + cube_reductions_size;
+}
 
 }  // namespace tcuscan::workspace

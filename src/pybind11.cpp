@@ -82,6 +82,8 @@ PYBIND11_MODULE(tcuscan_ops, m) {
         "Generate lower triangular matrix");
   m.def("run_reduce_tiles", &tcuscan::run_reduce_tiles,
         "Sum-reduce over tiles");
+  m.def("run_cube_reduce", &tcuscan::run_cube_reduce,
+        "Block reduction using AIC/AIV cores.");
   m.def("run_complete_rows", &tcuscan::run_complete_rows,
         "Down-sweep (second) phase of MCSCAN");
   m.def("run_complete_blocks", &tcuscan::run_complete_blocks,

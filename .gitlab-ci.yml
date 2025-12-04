@@ -306,6 +306,12 @@ test_reduce_tiles:
     - make setup_ci
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_reduce_tiles
 
+test_cube_reduce:
+  <<: *test_config
+  script:
+    - make setup_ci
+    - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_cube_reduce
+
 test_complete_rows:
   <<: *test_config
   script:
