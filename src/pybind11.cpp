@@ -15,6 +15,7 @@
 #include "torch/torch_diff.h"
 #include "torch/torch_gather.h"
 #include "torch/torch_gen_lower.h"
+#include "torch/torch_linalg.h"
 #include "torch/torch_matmul_cce.h"
 #include "torch/torch_pad.h"
 #include "torch/torch_reduce.h"
@@ -95,4 +96,6 @@ PYBIND11_MODULE(tcuscan_ops, m) {
   m.def("run_scan_multi_cube", &tcuscan::run_scan_multi_cube,
         "Multi-cube scan");
   m.def("run_scan_cpu", &tcuscan::run_scan_cpu, "Scan on CPUs");
+  m.def("run_tri_inv_col_sweep", &tcuscan::run_tri_inv_col_sweep,
+        "Unit upper triangular matrix inverses (fp16)");
 }

@@ -80,6 +80,13 @@ def pad_to_multiple(x: torch.Tensor, s: int):
     return padded_x
 
 
+def rand_tril_tensor(batch_size: int, n: int, dtype: np.dtype):
+    "Returns a random unit lower triangular matrix of size n."
+    A = torch.rand(batch_size, n, n, dtype=dtype, device=NPU_DEVICE)
+    A = torch.tril(A)
+    return A
+
+
 def _run_benchmark(
     device: Device,
     fn: typing.Callable,
@@ -939,6 +946,41 @@ def searchsorted_benchmark(
     return _run_benchmark(device, run_searchsorted), num_partitions
 
 
+def tri_inv_baseline(device: Device, size: int, s: int, dtype: torch.dtype):
+    if dtype in {torch.float16}:
+        x = rand_tril_tensor(size, s, dtype=dtype)
+    else:
+        raise ValueError("searchsorted benchmark only supports float16/half for now")
+
+    assert x.shape[-2] == x.shape[-1]
+
+    def run_baseline_tril_inplace():
+        """compute inv(I + A) where A is strict lower-triangular"""
+        # Adapted from https://github.com/huggingface/transformers/blob/v4.57.1/
+        # src/transformers/models/qwen3_next/modeling_qwen3_next.py#L485-L490
+        chunk_size = x.shape[-1]
+        for i in range(1, chunk_size):
+            row = x[..., i, :i].clone()
+            sub = x[..., :i, :i].clone()
+            x[..., i, :i] = row + (row.unsqueeze(-1) * sub).sum(-2)
+
+    return _run_benchmark(device, run_baseline_tril_inplace), len(x)
+
+
+def tri_inv_col_sweep_benchmark(
+    device: Device, size: int, s: int, dtype: torch.dtype
+) -> Tuple[float, int]:
+    if dtype in {torch.float16}:
+        x = rand_tril_tensor(size, s, dtype=dtype)
+    else:
+        raise ValueError("tri_inv_col_sweep benchmark only supports float16/half.")
+
+    def run_tri_inv_cs() -> None:
+        _ = tcuscan_ops.run_tri_inv_col_sweep(x)
+
+    return _run_benchmark(device, run_tri_inv_cs), len(x)
+
+
 def benchmark(
     device: Device,
     op_name: str,
@@ -1023,6 +1065,8 @@ if __name__ == "__main__":  # noqa
             "searchsorted",
             "scan_batch",
             "scan_batch_tcuscan",
+            "tri_inv_col_sweep",
+            "tri_inv_baseline",
         ],
     )
     parser.add_argument("--dtype", choices=["int8", "fp16", "int16", "int32", "fp32"])
@@ -1469,6 +1513,28 @@ if __name__ == "__main__":  # noqa
             partial(scan_batch_tcuscan_benchmark, dtype=tdtype, s=s),
             sizes,
             density,
+        )
+    elif bench == "tri_inv_col_sweep" and dtype in ["fp16"]:
+        batch_sizes = range(4, 256, 4)
+
+        tdtype = STR_TO_DTYPE[dtype]
+        benchmark(
+            device,
+            f"tri_inv_col_sweep_{s}",
+            dtype,
+            partial(tri_inv_col_sweep_benchmark, dtype=tdtype, s=s),
+            batch_sizes,
+        )
+    elif bench == "tri_inv_baseline" and dtype in ["fp16"]:
+        batch_sizes = range(4, 256, 4)
+
+        tdtype = STR_TO_DTYPE[dtype]
+        benchmark(
+            device,
+            f"tri_inv_baseline_{s}",
+            dtype,
+            partial(tri_inv_baseline, dtype=tdtype, s=s),
+            batch_sizes,
         )
     else:
         raise RuntimeError(

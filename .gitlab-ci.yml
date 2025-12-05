@@ -342,6 +342,12 @@ test_scan_multi_cube:
     - make setup_ci
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_scan_multi_cube
 
+test_tri_inv_col_sweep:
+  <<: *test_config
+  script:
+    - make setup_ci
+    - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_tri_inv_col_sweep
+
 # Uncomment to run all tests in a single run
 unit_test:
   tags:

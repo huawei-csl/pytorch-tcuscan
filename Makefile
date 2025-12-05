@@ -271,4 +271,14 @@ profile_topp:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench tcuscan_topp --dtype fp16 --s 64 --num_cores 20 --max_size 16000000 --iter-step-divider 4
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench tcuscan_topp --dtype fp16 --s 128 --num_cores 20 --max_size 16000000 --iter-step-divider 8
 
+profile_tri_inv_col_sweep:
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench tri_inv_col_sweep --s 16 --dtype fp16
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench tri_inv_col_sweep --s 32 --dtype fp16
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench tri_inv_col_sweep --s 64 --dtype fp16
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench tri_inv_col_sweep --s 128 --dtype fp16
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench tri_inv_baseline --s 16 --dtype fp16
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench tri_inv_baseline --s 32 --dtype fp16
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench tri_inv_baseline --s 64 --dtype fp16
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench tri_inv_baseline --s 128 --dtype fp16
+
 include Makefile.spaa.mk Makefile.spmv.mk
