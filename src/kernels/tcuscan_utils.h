@@ -1695,12 +1695,13 @@ __aicore__ inline void Multiply(TQue<QuePosition::A2, 1> &q_a,
  *
  * @tparam T Input type can be half or int8 for now.
  * @tparam Pos Input local tensor position.
- * @param local_tensor Input local tensor to populate.
- * @param value Value to populate `local_tensor` with.
- * @param len Length of the local tensor to populate starting from index 0.
+ *
+ * @param [in] local_tensor Input local tensor to populate.
+ * @param [in] value Value to populate `local_tensor` with.
+ * @param [in] len Length of the local tensor to populate starting from index 0.
  */
 template <typename T, TPosition Pos>
-__aicore__ inline void InitConstL1(LocalTensor<T> &local_tensor, T value,
+__aicore__ inline void InitConstL1(const LocalTensor<T> &local_tensor, T value,
                                    uint16_t len) {
   exec_mode::AssertIsAIC();
   static_assert(Pos == TPosition::A1 || Pos == TPosition::B1 ||
@@ -1716,6 +1717,42 @@ __aicore__ inline void InitConstL1(LocalTensor<T> &local_tensor, T value,
   params.dstGap = 0;
   params.initValue = value;
   InitConstValue<T>(local_tensor, params);
+}
+
+/**
+ * @brief Initialize a local tensor of dtype `int8_t/half` that is allocated in
+ * Cube L1/L0 (A1/A2/B1/B2) with constant all-ones.
+ *
+ * @tparam T Input data type. Supports half/int8_t.
+ * @tparam Pos Input local tensor position.
+ *
+ * @param lt Input local tensor to populate with all-ones.
+ * @param len Length of the local tensor to populate starting from index 0.
+ */
+template <typename T, TPosition Pos>
+__aicore__ inline void InitConstAllOnesL1(LocalTensor<T> &lt, uint16_t len) {
+  static_assert(Pos == TPosition::A1 || Pos == TPosition::B1 ||
+                    Pos == TPosition::A2 || Pos == TPosition::B2,
+                "Local tensor must be either in A1, B1, A2 or B2");
+
+  static_assert(std::is_same_v<T, half> or std::is_same_v<T, int8_t>,
+                "Local tensor must have fp16 or int8_t dtype.");
+
+  if constexpr (std::is_same_v<T, int8_t>) {
+    ASCENDC_ASSERT((len % 2 == 0), {
+      KERNEL_LOG(KERNEL_ERROR,
+                 "The length of the local tensor (%d) must be "
+                 "divisible by 2.",
+                 len);
+    });
+    // Note: (int16_t)257 = 0x0101
+    constexpr int16_t TWO_INT8_ONES = 257;
+    LocalTensor<int16_t> int16_lt = lt.template ReinterpretCast<int16_t>();
+    InitConstL1<int16_t, Pos>(int16_lt, TWO_INT8_ONES, len / 2);
+  }
+  if constexpr (std::is_same_v<T, half>) {
+    InitConstL1<half, Pos>(lt, static_cast<half>(1), len);
+  }
 }
 
 }  // namespace cube_unit

@@ -338,7 +338,7 @@ constexpr uint32_t get_workspace_size(const SegSumSingleCubeTiling &tiling) {
  * @return Size of the workspace in bytes.
  */
 template <typename T>
-constexpr uint32_t get_workspace_size(const tcuscan::CubeReduceTiling &tiling) {
+constexpr uint32_t get_workspace_size(const CubeReduceTiling &tiling) {
   using OutputT = host_utils::CubeOutType_t<T>;
 
   const uint32_t vec_len = tiling.vec_len;

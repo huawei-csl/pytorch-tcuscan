@@ -17,6 +17,7 @@ using namespace kernel_utils;
 namespace tcuscan {
 
 /**
+ * @ingroup reduce
  * @brief Performs block reductions using matrix multiplications. Each Cube core
  * reduces the input vector independently by multiplying its input block (viewed
  * as a matrix with `S := matmul_size` columns) with an all-ones \f$S\times 16
@@ -70,12 +71,10 @@ class KernelCubeReduce {
    * @brief Initialize global and local memory structures.
    *
    * @param [in] vec_in Pointer to input vector in global memory.
-   * @param [in] b Pointer to all-ones matrix
    * @param [in] vec_out Pointer to output vector in global memory.
    */
-  __aicore__ inline void Init(GM_ADDR vec_in, GM_ADDR b, GM_ADDR vec_out) {
+  __aicore__ inline void Init(GM_ADDR vec_in, GM_ADDR vec_out) {
     global_a_.SetGlobalBuffer((__gm__ InputT *)vec_in, vec_len_);
-    global_b_.SetGlobalBuffer((__gm__ InputT *)b, all_ones_len_);
     global_c_.SetGlobalBuffer((__gm__ OutputT *)vec_out,
                               block_num_ * all_ones_len_);
 
@@ -104,7 +103,7 @@ class KernelCubeReduce {
     }
 
     // Load all-ones matrix B only once from global memory into L0B.
-    LoadBToL0();
+    LoadAllOnesToL0();
     // First iteration: perform no L0C accumulation.
     CubeIter<false /* accumulate */>(ai_core_offset);
     for (uint32_t idx = 1; idx < num_tiles_to_process; idx++) {
@@ -154,8 +153,11 @@ class KernelCubeReduce {
   /**
    * @brief Load all-ones matrix B into L0B.
    */
-  __aicore__ inline void LoadBToL0() {
-    copy::CopyPlainGmToL1B(b1_q_, global_b_);
+  __aicore__ inline void LoadAllOnesToL0() {
+    LocalTensor<InputT> all_ones_lt = b1_q_.AllocTensor<InputT>();
+    cube_unit::InitConstAllOnesL1<InputT, TPosition::B1>(all_ones_lt,
+                                                         all_ones_len_);
+    b1_q_.EnQue<InputT>(all_ones_lt);
     copy::CopyL1ToL0B<InputT, true>(b2_q_, b1_q_, k_blocks_, n_blocks_);
   }
 
@@ -169,7 +171,6 @@ class KernelCubeReduce {
   TQue<QuePosition::CO1, 1> co1_q_;
 
   GlobalTensor<InputT> global_a_;
-  GlobalTensor<InputT> global_b_;
   GlobalTensor<OutputT> global_c_;
 
   const uint32_t block_num_;
@@ -192,6 +193,7 @@ class KernelCubeReduce {
 };
 
 /**
+ * @ingroup reduce
  * @brief Given the multi-core output of `KernelCubeReduce` (which is an \f$ S
  * \times 16 \f$ matrix per block, `S := matmul_size`), reduces the first matrix
  * column into a single scalar sum-reduction per AI core.
@@ -315,22 +317,21 @@ class KernelCompleteCubeReduce {
 };
 
 /**
+ * @ingroup reduce
  * @brief Run the `cube_reduce` kernel.
  *
  * @tparam T Input data type.
  *
  * @param [in] vec_in Pointer to an input vector.
- * @param [in] all_ones_in Pointer to an all-ones vector of length
- * \f$matmul\_size \times 16 \f$ .
  * @param [in] vec_out Pointer to an output vector.
  * @param [in] workspace Pointer to the kernel workspace.
  * @param [in] vec_len Number of elements to process.
  * @param [in] matmul_size Size of the matmul tile used in the kernel.
  */
 template <typename T>
-__aicore__ inline void run_cube_reduce(GM_ADDR vec_in, GM_ADDR all_ones_in,
-                                       GM_ADDR vec_out, GM_ADDR workspace,
-                                       uint32_t vec_len, uint16_t matmul_size) {
+__aicore__ inline void run_cube_reduce(GM_ADDR vec_in, GM_ADDR vec_out,
+                                       GM_ADDR workspace, uint32_t vec_len,
+                                       uint16_t matmul_size) {
   using OutputT = kernel_utils::cube_unit::CubeOutType_t<T>;
 
   const uint32_t align_size = matmul_size * matmul_size;
@@ -353,7 +354,7 @@ __aicore__ inline void run_cube_reduce(GM_ADDR vec_in, GM_ADDR all_ones_in,
 
   if ASCEND_IS_AIC {
     KernelCubeReduce<T, true /* Sync */> op_vec(vec_len, matmul_size);
-    op_vec.Init(vec_in, all_ones_in, padded_cube_reductions);
+    op_vec.Init(vec_in, padded_cube_reductions);
     op_vec.Process();
   }
 

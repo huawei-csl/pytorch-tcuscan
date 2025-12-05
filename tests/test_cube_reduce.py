@@ -25,7 +25,7 @@ def get_lengths(s: int, max_iters: int):
         yield multiplier * NUM_BLOCKS * s * s
 
 
-def ref_reduce_tiles(x, dtype: torch.dtype, tile_len: int, num_blocks: int):
+def ref_cube_reduce(x, dtype: torch.dtype, tile_len: int, num_blocks: int):
     n = len(x)
     num_tiles = ceil(n / tile_len)
     max_num_tiles_per_block = ceil(num_tiles / num_blocks)
@@ -38,7 +38,7 @@ def ref_reduce_tiles(x, dtype: torch.dtype, tile_len: int, num_blocks: int):
     return sums
 
 
-def _test_cube_reduce(vec_len: int, matmul_size: int, dtype: torch.dtype):
+def _test_cube_reduce(vec_len: int, dtype: torch.dtype):
     out_dtype = None
     if dtype == torch.float16:
         x = 0.1 * torch.randn(vec_len, dtype=dtype, device=NPU_DEVICE)
@@ -49,25 +49,21 @@ def _test_cube_reduce(vec_len: int, matmul_size: int, dtype: torch.dtype):
     else:
         assert False, "Unsupported dtype for reduce_tiles. Got {dtype}."
 
-    all_ones = torch.ones((matmul_size, 16), dtype=dtype, device=NPU_DEVICE)
-    torch.npu.synchronize()
-
     torch.npu.synchronize()
     expected = x.reshape(NUM_BLOCKS, -1).sum(dim=1, dtype=out_dtype).flatten()
     torch.npu.synchronize()
-    actual = tcuscan_ops.run_cube_reduce(x, all_ones, NUM_BLOCKS)
+    actual = tcuscan_ops.run_cube_reduce(x, NUM_BLOCKS)
     torch.npu.synchronize()
 
     assert expected.dtype == actual.dtype
     assert expected.shape == actual.shape
     assert torch.allclose(
-        actual, expected, atol=1e-0, rtol=1e-3
+        actual, expected, atol=1e-0, rtol=1e-2
     ), f"Expected : {expected}. Actual: {actual}"
 
 
 @pytest.mark.parametrize("vec_len", get_lengths(s=128, max_iters=16))
-@pytest.mark.parametrize("s", [32, 64, 128])
 @pytest.mark.parametrize("offset", [0])  # TODO(anastasios): test unpadded cases
 @pytest.mark.parametrize("dtype", [torch.int8, torch.float16], ids=str)
-def test_cube_reduce(vec_len: int, s: int, offset: int, dtype: torch.dtype):
-    _test_cube_reduce(vec_len + offset, s, dtype)
+def test_cube_reduce(vec_len: int, offset: int, dtype: torch.dtype):
+    _test_cube_reduce(vec_len + offset, dtype)

@@ -10,6 +10,7 @@
 #include <pybind11/pybind11.h>
 #include <torch/extension.h>
 
+#include "../tiling/heuristics/heuristics_cube_reduce.h"
 #include "../tiling/tiling_complete_blocks.h"
 #include "../tiling/tiling_complete_rows.h"
 #include "../tiling/tiling_cube_reduce.h"
@@ -77,13 +78,11 @@ at::Tensor run_reduce_tiles(const at::Tensor &x, uint32_t tile_len,
  * @brief Returns the sum-reductions over each tile of an input 1D vector.
  *
  * @param [in] x Input 1D vector.
- * @param [in] all_ones All-ones matrix.
- * @param num_blocks Number of blocks
+ * @param [in] num_blocks Number of blocks
  * @return Returns a vector of length `num_blocks` where each entry contains the
  * i-th block reduction.
  */
-at::Tensor run_cube_reduce(const at::Tensor &x, const at::Tensor &all_ones,
-                           uint32_t num_blocks) {
+at::Tensor run_cube_reduce(const at::Tensor &x, uint32_t num_blocks) {
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();
   const auto dtype = x.options().dtype();
@@ -91,12 +90,13 @@ at::Tensor run_cube_reduce(const at::Tensor &x, const at::Tensor &all_ones,
       dtype == torch::kHalf ? torch::kFloat32 : torch::kInt32;
 
   const uint32_t vec_len = x.numel();
-  const uint32_t matmul_size = static_cast<uint32_t>(all_ones.size(0));
 
   const at::Tensor z = at::empty(
       {num_blocks}, at::TensorOptions().dtype(dtype_out).device(device));
 
-  const CubeReduceTiling tiling{num_blocks, vec_len, matmul_size};
+  const CubeReduceTiling tiling =
+      tcuscan::tiling::heuristics::cube_reduce::CalculateTiling(vec_len,
+                                                                num_blocks);
   uint8_t *tiling_device = alloc_copy_tiling(tiling);
 
   if (dtype == torch::kInt8) {
@@ -105,7 +105,6 @@ at::Tensor run_cube_reduce(const at::Tensor &x, const at::Tensor &all_ones,
     const at::Tensor workspace_tensor = alloc_workspace(workspace_size, device);
     ACLRT_LAUNCH_KERNEL(cube_reduce_int8)
     (num_blocks, acl_stream, const_cast<void *>(x.storage().data()),
-     const_cast<void *>(all_ones.storage().data()),
      const_cast<void *>(z.storage().data()),
      const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
   } else if (dtype == torch::kHalf) {
@@ -114,7 +113,6 @@ at::Tensor run_cube_reduce(const at::Tensor &x, const at::Tensor &all_ones,
     const at::Tensor workspace_tensor = alloc_workspace(workspace_size, device);
     ACLRT_LAUNCH_KERNEL(cube_reduce_fp16)
     (num_blocks, acl_stream, const_cast<void *>(x.storage().data()),
-     const_cast<void *>(all_ones.storage().data()),
      const_cast<void *>(z.storage().data()),
      const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
   }

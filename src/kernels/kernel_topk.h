@@ -4,6 +4,7 @@
  * @file kernel_topk.h
  * @brief Kernel implementing the top-k operation.
  */
+#pragma once
 
 #include <cmath>
 
