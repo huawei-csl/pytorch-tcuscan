@@ -981,6 +981,22 @@ def tri_inv_col_sweep_benchmark(
     return _run_benchmark(device, run_tri_inv_cs), len(x)
 
 
+def cube_reduce_benchmark(
+    device: Device, size: int, dtype: torch.dtype, num_cores: int
+) -> Tuple[float, int]:
+    if dtype == torch.float16:
+        x = torch.rand(size, device=device.str, dtype=dtype)
+    elif dtype in {torch.int8}:
+        x = torch.randint(-2, 2, (size,), device=device.str, dtype=torch.int8)
+    else:
+        raise RuntimeError(f"`cube_reduce` supports fp16/int8. Got {dtype}.")
+
+    def run_cube_reduce() -> None:
+        _ = tcuscan_ops.run_cube_reduce(x, num_cores)
+
+    return _run_benchmark(device, run_cube_reduce), num_cores
+
+
 def benchmark(
     device: Device,
     op_name: str,
@@ -1067,6 +1083,7 @@ if __name__ == "__main__":  # noqa
             "scan_batch_tcuscan",
             "tri_inv_col_sweep",
             "tri_inv_baseline",
+            "cube_reduce",
         ],
     )
     parser.add_argument("--dtype", choices=["int8", "fp16", "int16", "int32", "fp32"])
@@ -1535,6 +1552,16 @@ if __name__ == "__main__":  # noqa
             dtype,
             partial(tri_inv_baseline, dtype=tdtype, s=s),
             batch_sizes,
+        )
+    elif bench == "cube_reduce" and dtype in ["int8", "fp16"]:
+        tdtype = STR_TO_DTYPE[dtype]
+        benchmark(
+            device,
+            f"cube_reduce_{s}",
+            dtype,
+            partial(cube_reduce_benchmark, dtype=tdtype, num_cores=num_cores),
+            sizes,
+            density,
         )
     else:
         raise RuntimeError(

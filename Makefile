@@ -281,4 +281,7 @@ profile_tri_inv_col_sweep:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench tri_inv_baseline --s 64 --dtype fp16
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench tri_inv_baseline --s 128 --dtype fp16
 
+profile_cube_reduce:
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench cube_reduce --s 128 --dtype fp16
+
 include Makefile.spaa.mk Makefile.spmv.mk
