@@ -10,7 +10,7 @@
 #include "tiling/tiling_tri_inv_col_sweep.h"
 
 /**
- * @brief Run the `tri_inv_col_sweep` kernel.
+ * @brief Run the `tri_inv_col_sweep` kernel on dtype fp16/half.
  *
  * @param [in] vec_in Pointer to input vector.
  * @param [in] vec_out Pointer to output vector.
@@ -23,6 +23,24 @@ extern "C" __global__ __aicore__ void tri_inv_col_sweep_fp16(
   tcuscan::TriInvColumnSweepTiling tiling;
   tiling::GetTilingData(&tiling, tiling_gm);
 
-  tcuscan::tri_inv_col_sweep<half, false>(vec_in, vec_out, tiling.num_elems,
-                                          tiling.matrix_size);
+  tcuscan::tri_inv_col_sweep<half>(vec_in, vec_out, tiling.num_elems,
+                                   tiling.matrix_size);
+}
+
+/**
+ * @brief Run the `tri_inv_col_sweep` kernel on dtype float32.
+ *
+ * @param [in] vec_in Pointer to input vector.
+ * @param [in] vec_out Pointer to output vector.
+ * @param [in] workspace Pointer to workspace.
+ * @param [in] tiling_gm Pointer to tiling vector.
+ */
+extern "C" __global__ __aicore__ void tri_inv_col_sweep_fp32(
+    GM_ADDR vec_in, GM_ADDR vec_out, GM_ADDR workspace, GM_ADDR tiling_gm) {
+  (void)workspace;
+  tcuscan::TriInvColumnSweepTiling tiling;
+  tiling::GetTilingData(&tiling, tiling_gm);
+
+  tcuscan::tri_inv_col_sweep<float>(vec_in, vec_out, tiling.num_elems,
+                                    tiling.matrix_size);
 }
