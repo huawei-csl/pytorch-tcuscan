@@ -6,6 +6,7 @@
  */
 
 #pragma once
+#include <limits>
 #include <type_traits>
 
 #include "ascendc_kernel_operator.h"
@@ -271,8 +272,8 @@ namespace copy {
  */
 template <typename DataType, uint16_t FractalHeight = 16,
           uint16_t FractalWidth = 16>
-__aicore__ inline void CopyND2NZ(const LocalTensor<DataType> &dst,
-                                 const GlobalTensor<DataType> &src,
+__aicore__ inline void CopyND2NZ(const LocalTensor<DataType>& dst,
+                                 const GlobalTensor<DataType>& src,
                                  uint16_t fractals_h, uint16_t fractals_w) {
   exec_mode::AssertLocalTensorIsInL1(dst);
   if (fractals_w == 1) {
@@ -304,8 +305,8 @@ __aicore__ inline void CopyND2NZ(const LocalTensor<DataType> &dst,
  */
 template <typename DstDataType, typename SrcDataType, int32_t DstNumBuffers,
           int32_t SrcNumBuffers>
-__aicore__ inline void CopyCL0ToL1(TQue<QuePosition::CO2, DstNumBuffers> &dst_q,
-                                   TQue<QuePosition::CO1, SrcNumBuffers> &src_q,
+__aicore__ inline void CopyCL0ToL1(TQue<QuePosition::CO2, DstNumBuffers>& dst_q,
+                                   TQue<QuePosition::CO1, SrcNumBuffers>& src_q,
                                    int32_t num_fractals) {
   exec_mode::AssertIsAIC();
   const LocalTensor<DstDataType> dst_lt =
@@ -335,8 +336,8 @@ __aicore__ inline void CopyCL0ToL1(TQue<QuePosition::CO2, DstNumBuffers> &dst_q,
  * @param [in] width Width of the matrix.
  */
 template <typename DstDataType, typename SrcDataType>
-__aicore__ inline void CopyL0CToL1(const LocalTensor<DstDataType> &dst_lt,
-                                   const LocalTensor<SrcDataType> &src_lt,
+__aicore__ inline void CopyL0CToL1(const LocalTensor<DstDataType>& dst_lt,
+                                   const LocalTensor<SrcDataType>& src_lt,
                                    uint32_t height, uint32_t width) {
   exec_mode::AssertIsAIC();
   exec_mode::AssertLocalTensorIsIn(src_lt, QuePosition::CO1);
@@ -371,8 +372,8 @@ __aicore__ inline void CopyL0CToL1(const LocalTensor<DstDataType> &dst_lt,
  */
 template <typename DstDataType, typename SrcDataType, int32_t B1NumBuffers,
           int32_t C01NumBuffers>
-__aicore__ inline void CopyC01ToB1(TQue<QuePosition::B1, B1NumBuffers> &dst_q,
-                                   TQue<QuePosition::CO1, C01NumBuffers> &src_q,
+__aicore__ inline void CopyC01ToB1(TQue<QuePosition::B1, B1NumBuffers>& dst_q,
+                                   TQue<QuePosition::CO1, C01NumBuffers>& src_q,
                                    uint32_t height, uint32_t width) {
   exec_mode::AssertIsAIC();
   LocalTensor<SrcDataType> src_lt = src_q.template DeQue<SrcDataType>();
@@ -398,8 +399,8 @@ __aicore__ inline void CopyC01ToB1(TQue<QuePosition::B1, B1NumBuffers> &dst_q,
  */
 template <typename DataType, int32_t QNumBuffers>
 __aicore__ inline void CopyCL0ToGlobal(
-    const GlobalTensor<DataType> &global,
-    TQue<QuePosition::CO1, QNumBuffers> &src_q, uint32_t height,
+    const GlobalTensor<DataType>& global,
+    TQue<QuePosition::CO1, QNumBuffers>& src_q, uint32_t height,
     uint32_t width) {
   exec_mode::AssertIsAIC();
   constexpr uint16_t fractal_size = GetFractalMN<DataType>();
@@ -440,8 +441,8 @@ __aicore__ inline void CopyCL0ToGlobal(
  * the input matrix.
  */
 template <uint16_t FractalHeight, uint16_t FractalWidth, typename DataType>
-__aicore__ inline void CopyGmToL1(const LocalTensor<DataType> &local,
-                                  const GlobalTensor<DataType> &global,
+__aicore__ inline void CopyGmToL1(const LocalTensor<DataType>& local,
+                                  const GlobalTensor<DataType>& global,
                                   uint16_t fractals_h, uint16_t fractals_w) {
   exec_mode::AssertIsAIC();
   exec_mode::AssertLocalTensorIsInL1(local);
@@ -465,8 +466,8 @@ __aicore__ inline void CopyGmToL1(const LocalTensor<DataType> &local,
  * the input matrix.
  */
 template <typename DataType, int32_t QNumBuffers>
-__aicore__ inline void CopyGmToL1A(TQue<QuePosition::A1, QNumBuffers> &q,
-                                   const GlobalTensor<DataType> &global,
+__aicore__ inline void CopyGmToL1A(TQue<QuePosition::A1, QNumBuffers>& q,
+                                   const GlobalTensor<DataType>& global,
                                    uint16_t fractals_h, uint16_t fractals_w) {
   exec_mode::AssertIsAIC();
   const LocalTensor<DataType> lt = q.template AllocTensor<DataType>();
@@ -492,8 +493,8 @@ __aicore__ inline void CopyGmToL1A(TQue<QuePosition::A1, QNumBuffers> &q,
  * the input matrix.
  */
 template <typename DataType, int32_t QNumBuffers>
-__aicore__ inline void CopyGmToL1B(TQue<QuePosition::B1, QNumBuffers> &q,
-                                   const GlobalTensor<DataType> &global,
+__aicore__ inline void CopyGmToL1B(TQue<QuePosition::B1, QNumBuffers>& q,
+                                   const GlobalTensor<DataType>& global,
                                    uint16_t fractals_h, uint16_t fractals_w) {
   exec_mode::AssertIsAIC();
   const LocalTensor<DataType> lt = q.template AllocTensor<DataType>();
@@ -522,9 +523,9 @@ __aicore__ inline void CopyGmToL1B(TQue<QuePosition::B1, QNumBuffers> &q,
  */
 template <typename DataType, int32_t QNumBuffersB2, int32_t QNumBuffersB1>
 __aicore__ inline void CopyTransposedGmToL0B(
-    TQue<QuePosition::B2, QNumBuffersB2> &b2_q,
-    TQue<QuePosition::B1, QNumBuffersB1> &b1_q,
-    const GlobalTensor<DataType> &global, uint16_t fractals_h,
+    TQue<QuePosition::B2, QNumBuffersB2>& b2_q,
+    TQue<QuePosition::B1, QNumBuffersB1>& b1_q,
+    const GlobalTensor<DataType>& global, uint16_t fractals_h,
     uint16_t fractals_w) {
   exec_mode::AssertIsAIC();
   // Copy with ND -> NZ transform.
@@ -561,8 +562,8 @@ __aicore__ inline void CopyTransposedGmToL0B(
  * @param [in] global Source global tensor.
  */
 template <typename DataType, int32_t QNumBuffers>
-__aicore__ inline void CopyPlainGmToL1A(TQue<QuePosition::A1, QNumBuffers> &q,
-                                        const GlobalTensor<DataType> &global) {
+__aicore__ inline void CopyPlainGmToL1A(TQue<QuePosition::A1, QNumBuffers>& q,
+                                        const GlobalTensor<DataType>& global) {
   exec_mode::AssertIsAIC();
   const LocalTensor<DataType> lt = q.template AllocTensor<DataType>();
   DataCopy(lt, global, lt.GetSize());
@@ -582,8 +583,8 @@ __aicore__ inline void CopyPlainGmToL1A(TQue<QuePosition::A1, QNumBuffers> &q,
  * @param [in] global Source global tensor.
  */
 template <typename DataType, int32_t QNumBuffers>
-__aicore__ inline void CopyPlainGmToL1B(TQue<QuePosition::B1, QNumBuffers> &q,
-                                        const GlobalTensor<DataType> &global) {
+__aicore__ inline void CopyPlainGmToL1B(TQue<QuePosition::B1, QNumBuffers>& q,
+                                        const GlobalTensor<DataType>& global) {
   exec_mode::AssertIsAIC();
   const LocalTensor<DataType> lt = q.template AllocTensor<DataType>();
   DataCopy(lt, global, lt.GetSize());
@@ -608,8 +609,8 @@ __aicore__ inline void CopyPlainGmToL1B(TQue<QuePosition::B1, QNumBuffers> &q,
  * NZ to ZZ one.
  */
 template <uint16_t FractalHeight, uint16_t FractalWidth, typename DataType>
-__aicore__ inline void CopyL1ToL0(const LocalTensor<DataType> &dst,
-                                  const LocalTensor<DataType> &src,
+__aicore__ inline void CopyL1ToL0(const LocalTensor<DataType>& dst,
+                                  const LocalTensor<DataType>& src,
                                   uint16_t fractals_h, uint16_t fractals_w,
                                   bool transpose) {
   exec_mode::AssertIsAIC();
@@ -652,8 +653,8 @@ __aicore__ inline void CopyL1ToL0(const LocalTensor<DataType> &dst,
  */
 template <typename DataType, bool FreeSrc, int32_t L0NumBuffers,
           int32_t L1NumBuffers>
-__aicore__ inline void CopyL1ToL0A(TQue<QuePosition::A2, L0NumBuffers> &l0_q,
-                                   TQue<QuePosition::A1, L1NumBuffers> &l1_q,
+__aicore__ inline void CopyL1ToL0A(TQue<QuePosition::A2, L0NumBuffers>& l0_q,
+                                   TQue<QuePosition::A1, L1NumBuffers>& l1_q,
                                    uint16_t fractals_h, uint16_t fractals_w) {
   exec_mode::AssertIsAIC();
   const LocalTensor<DataType> l0_lt = l0_q.template AllocTensor<DataType>();
@@ -706,8 +707,8 @@ constexpr __aicore__ inline bool ShouldTransposeB() {
  */
 template <typename DataType, bool FreeSrc, int32_t L0NumBuffers,
           int32_t L1NumBuffers>
-__aicore__ inline void CopyL1ToL0B(TQue<QuePosition::B2, L0NumBuffers> &l0_q,
-                                   TQue<QuePosition::B1, L1NumBuffers> &l1_q,
+__aicore__ inline void CopyL1ToL0B(TQue<QuePosition::B2, L0NumBuffers>& l0_q,
+                                   TQue<QuePosition::B1, L1NumBuffers>& l1_q,
                                    uint16_t fractals_h, uint16_t fractals_w) {
   exec_mode::AssertIsAIC();
   LocalTensor<DataType> l1_lt = l1_q.template DeQue<DataType>();
@@ -741,8 +742,8 @@ __aicore__ inline void CopyL1ToL0B(TQue<QuePosition::B2, L0NumBuffers> &l0_q,
  * the input matrix.
  */
 template <typename DataType, int32_t L0NumBuffers>
-__aicore__ inline void CopyL1ToL0B(TQue<QuePosition::B2, L0NumBuffers> &l0_q,
-                                   LocalTensor<DataType> &l1_lt,
+__aicore__ inline void CopyL1ToL0B(TQue<QuePosition::B2, L0NumBuffers>& l0_q,
+                                   LocalTensor<DataType>& l1_lt,
                                    uint16_t fractals_h, uint16_t fractals_w) {
   exec_mode::AssertIsAIC();
   exec_mode::AssertLocalTensorIsInL1(l1_lt);
@@ -767,8 +768,8 @@ __aicore__ inline void CopyL1ToL0B(TQue<QuePosition::B2, L0NumBuffers> &l0_q,
  * value is provided, the function will load \f$num_elems\f$ elements.
  */
 template <typename DataType, int32_t QNumBuffers>
-__aicore__ inline void CopyGmToVec(TQue<QuePosition::VECIN, QNumBuffers> &q,
-                                   const GlobalTensor<DataType> &global,
+__aicore__ inline void CopyGmToVec(TQue<QuePosition::VECIN, QNumBuffers>& q,
+                                   const GlobalTensor<DataType>& global,
                                    uint32_t num_elems = 0) {
   exec_mode::AssertIsAIV();
   const LocalTensor<DataType> lt = q.template AllocTensor<DataType>();
@@ -813,8 +814,8 @@ __aicore__ inline void CopyGmToVec(TQue<QuePosition::VECIN, QNumBuffers> &q,
  * value is provided, the function will store \f$num_elems\f$ elements.
  */
 template <typename DataType, int32_t VecNumBuffers>
-__aicore__ inline void CopyVecToGm(const GlobalTensor<DataType> &global,
-                                   TQue<QuePosition::VECOUT, VecNumBuffers> &q,
+__aicore__ inline void CopyVecToGm(const GlobalTensor<DataType>& global,
+                                   TQue<QuePosition::VECOUT, VecNumBuffers>& q,
                                    uint32_t num_elems = 0) {
   exec_mode::AssertIsAIV();
   LocalTensor<DataType> lt = q.template DeQue<DataType>();
@@ -855,9 +856,9 @@ __aicore__ inline void CopyVecToGm(const GlobalTensor<DataType> &global,
  */
 template <typename DataType, int32_t VecoutNumBuffers>
 __aicore__ inline void CopyVecToGm(
-    const GlobalTensor<DataType> &global,
-    TQue<QuePosition::VECOUT, VecoutNumBuffers> &vecout_q,
-    const LocalTensor<DataType> &lt, uint32_t num_elems = 0) {
+    const GlobalTensor<DataType>& global,
+    TQue<QuePosition::VECOUT, VecoutNumBuffers>& vecout_q,
+    const LocalTensor<DataType>& lt, uint32_t num_elems = 0) {
   exec_mode::AssertIsAIV();
   // Any UB position -> VECOUT
   const uint32_t size =
@@ -893,9 +894,9 @@ __aicore__ inline void CopyVecToGm(
  */
 template <typename DataType, int32_t VecoutNumBuffers, int32_t SrcNumBuffers>
 __aicore__ inline void CopyVecToGm(
-    const GlobalTensor<DataType> &global,
-    TQue<QuePosition::VECOUT, VecoutNumBuffers> &vecout_q,
-    TQue<QuePosition::VECIN, SrcNumBuffers> &q, uint32_t num_elems = 0) {
+    const GlobalTensor<DataType>& global,
+    TQue<QuePosition::VECOUT, VecoutNumBuffers>& vecout_q,
+    TQue<QuePosition::VECIN, SrcNumBuffers>& q, uint32_t num_elems = 0) {
   exec_mode::AssertIsAIV();
   LocalTensor<DataType> lt = q.template DeQue<DataType>();
   kernel_utils::copy::CopyVecToGm<DataType>(global, vecout_q, lt, num_elems);
@@ -923,8 +924,8 @@ __aicore__ inline void CopyVecToGm(
  */
 template <typename DataType, int32_t QNumBuffers>
 __aicore__ inline void CopyScalarToGm(
-    const GlobalTensor<DataType> &global,
-    TQue<QuePosition::VECOUT, QNumBuffers> &vecout_q, DataType scalar) {
+    const GlobalTensor<DataType>& global,
+    TQue<QuePosition::VECOUT, QNumBuffers>& vecout_q, DataType scalar) {
   exec_mode::AssertIsAIV();
   {
     const LocalTensor<DataType> lt = vecout_q.template AllocTensor<DataType>();
@@ -956,7 +957,7 @@ namespace queue {
  * @param [in] q Queue from which to free a tensor.
  */
 template <typename DataType, typename Q>
-__aicore__ inline void FreeFromQ(Q &q) {
+__aicore__ inline void FreeFromQ(Q& q) {
   LocalTensor<DataType> lt = q.template DeQue<DataType>();
   q.FreeTensor(lt);
 }
@@ -972,7 +973,7 @@ namespace debug {
  * @param [in] q Queue from which to free the tensors.
  */
 template <typename DataType, typename Q>
-__aicore__ inline void EmptyQ(Q &q) {
+__aicore__ inline void EmptyQ(Q& q) {
   while (q.HasTensorInQue()) {
     FreeFromQ<DataType>(q);
   }
@@ -1014,8 +1015,8 @@ enum class GroupSyncDirection {
  * tensor will be allocated. Position must be VECIN.
  */
 __aicore__ inline void SyncAllBlocks(
-    const GlobalTensor<int32_t> &global_workspace,
-    TQue<QuePosition::VECIN, 1> &local_workspace_q) {
+    const GlobalTensor<int32_t>& global_workspace,
+    TQue<QuePosition::VECIN, 1>& local_workspace_q) {
   exec_mode::AssertIsAIV();
   LocalTensor<int32_t> lt = local_workspace_q.AllocTensor<int32_t>();
   SyncAll(global_workspace, lt);
@@ -1138,7 +1139,7 @@ template <
                              QPosition == QuePosition::VECCALC) &&
                                 (sizeof(DstDataType) == sizeof(SrcDataType)),
                             int>::type = 0>
-__aicore__ inline void CastInPlace(TQue<QPosition, QNumBuffers> &q) {
+__aicore__ inline void CastInPlace(TQue<QPosition, QNumBuffers>& q) {
   exec_mode::AssertIsAIV();
   const LocalTensor<SrcDataType> src = q.template DeQue<SrcDataType>();
   const LocalTensor<DstDataType> dst =
@@ -1161,7 +1162,7 @@ namespace data_cache {
  * cache.
  */
 template <typename T>
-__aicore__ inline void InvalidateLine(const GlobalTensor<T> &global) {
+__aicore__ inline void InvalidateLine(const GlobalTensor<T>& global) {
   DataCacheCleanAndInvalid<T, CacheLine::SINGLE_CACHE_LINE,
                            DcciDst::CACHELINE_OUT>(global);
 }
@@ -1345,7 +1346,7 @@ __aicore__ inline T GetGMValue(GM_ADDR addr, uint32_t offset,
   });
 
   GlobalTensor<T> gt;
-  gt.SetGlobalBuffer((__gm__ T *)addr, vec_len);
+  gt.SetGlobalBuffer((__gm__ T*)addr, vec_len);
 
   data_cache::InvalidateLine(gt);
 
@@ -1361,7 +1362,7 @@ __aicore__ inline T GetGMValue(GM_ADDR addr, uint32_t offset,
  *
  */
 template <typename DataT>
-__aicore__ inline void Swap(DataT &v1, DataT &v2) {
+__aicore__ inline void Swap(DataT& v1, DataT& v2) {
   DataT tmp = v1;
   v1 = v2;
   v2 = tmp;
@@ -1429,8 +1430,8 @@ constexpr bool IsAscendReduceSumSupported =
  * @param [in] src_len Length of source tensor.
  */
 template <bool AllocateAcc, typename DataType>
-__aicore__ inline void ReduceVecAdd(const LocalTensor<DataType> &acc,
-                                    const LocalTensor<DataType> &src,
+__aicore__ inline void ReduceVecAdd(const LocalTensor<DataType>& acc,
+                                    const LocalTensor<DataType>& src,
                                     uint32_t src_len) {
   exec_mode::AssertIsAIV();
   const uint32_t acc_size = acc.GetSize();
@@ -1460,7 +1461,7 @@ __aicore__ inline void ReduceVecAdd(const LocalTensor<DataType> &acc,
  * @return The result of reduction.
  */
 template <typename DataType>
-__aicore__ inline DataType ReduceScalarAdd(const LocalTensor<DataType> &src,
+__aicore__ inline DataType ReduceScalarAdd(const LocalTensor<DataType>& src,
                                            uint32_t size) {
   DataType acc = 0;
   for (uint32_t i = 0; i < size; i++) {
@@ -1484,8 +1485,8 @@ __aicore__ inline DataType ReduceScalarAdd(const LocalTensor<DataType> &src,
  * @param [in] src Source tensor.
  */
 template <bool AllocateAcc, typename DataType>
-__aicore__ inline void ReduceVecOr(const LocalTensor<DataType> &acc,
-                                   const LocalTensor<DataType> &src) {
+__aicore__ inline void ReduceVecOr(const LocalTensor<DataType>& acc,
+                                   const LocalTensor<DataType>& src) {
   exec_mode::AssertIsAIV();
   const uint32_t src_size = src.GetSize();
   const uint32_t acc_size = acc.GetSize();
@@ -1514,7 +1515,7 @@ __aicore__ inline void ReduceVecOr(const LocalTensor<DataType> &acc,
  * @return The result of reduction.
  */
 template <typename DataType>
-__aicore__ inline DataType ReduceScalarOr(const LocalTensor<DataType> &src) {
+__aicore__ inline DataType ReduceScalarOr(const LocalTensor<DataType>& src) {
   exec_mode::AssertIsAIV();
   DataType acc = 0;
   for (uint32_t i = 0; i < src.GetSize(); i++) {
@@ -1535,11 +1536,11 @@ namespace tiling {
  * @param [in] tiling_global Pointer to the structure in global memory.
  */
 template <typename TilingT>
-__aicore__ inline void GetTilingData(TilingT *const tiling,
+__aicore__ inline void GetTilingData(TilingT* const tiling,
                                      GM_ADDR tiling_global) {
-  uint32_t *const tiling_32b = reinterpret_cast<uint32_t *>(tiling);
-  const __gm__ uint32_t *const tiling_global_32b =
-      reinterpret_cast<__gm__ uint32_t *>(tiling_global);
+  uint32_t* const tiling_32b = reinterpret_cast<uint32_t*>(tiling);
+  const __gm__ uint32_t* const tiling_global_32b =
+      reinterpret_cast<__gm__ uint32_t*>(tiling_global);
 
   for (uint32_t i = 0; i < sizeof(TilingT) / sizeof(uint32_t); i++) {
     tiling_32b[i] = tiling_global_32b[i];
@@ -1659,9 +1660,9 @@ using CubeOutType_t = typename CubeOutType<T>::type;
  */
 template <typename InputT, bool accumulate_c = false, bool free_a = true,
           bool free_b = true>
-__aicore__ inline void Multiply(TQue<QuePosition::A2, 1> &q_a,
-                                TQue<QuePosition::B2, 1> &q_b,
-                                TQue<QuePosition::CO1, 1> &q_c, uint16_t M,
+__aicore__ inline void Multiply(TQue<QuePosition::A2, 1>& q_a,
+                                TQue<QuePosition::B2, 1>& q_b,
+                                TQue<QuePosition::CO1, 1>& q_c, uint16_t M,
                                 uint16_t N, uint16_t K) {
   exec_mode::AssertIsAIC();
   static_assert(IsCubeSupported<InputT>,
@@ -1701,7 +1702,7 @@ __aicore__ inline void Multiply(TQue<QuePosition::A2, 1> &q_a,
  * @param [in] len Length of the local tensor to populate starting from index 0.
  */
 template <typename T, TPosition Pos>
-__aicore__ inline void InitConstL1(const LocalTensor<T> &local_tensor, T value,
+__aicore__ inline void InitConstL1(const LocalTensor<T>& local_tensor, T value,
                                    uint16_t len) {
   exec_mode::AssertIsAIC();
   static_assert(Pos == TPosition::A1 || Pos == TPosition::B1 ||
@@ -1730,7 +1731,7 @@ __aicore__ inline void InitConstL1(const LocalTensor<T> &local_tensor, T value,
  * @param len Length of the local tensor to populate starting from index 0.
  */
 template <typename T, TPosition Pos>
-__aicore__ inline void InitConstAllOnesL1(LocalTensor<T> &lt, uint16_t len) {
+__aicore__ inline void InitConstAllOnesL1(LocalTensor<T>& lt, uint16_t len) {
   static_assert(Pos == TPosition::A1 || Pos == TPosition::B1 ||
                     Pos == TPosition::A2 || Pos == TPosition::B2,
                 "Local tensor must be either in A1, B1, A2 or B2");
@@ -1756,24 +1757,24 @@ __aicore__ inline void InitConstAllOnesL1(LocalTensor<T> &lt, uint16_t len) {
 }
 
 }  // namespace cube_unit
-
-namespace fp32 {
+// 0x1400
+namespace fp16 {
 /// @brief Float number with the smallest aboslute value.
-const float FP32_MIN_NORMAL = 0x1.000000p-126f;
+const float FP16_MIN_NORMAL = std::numeric_limits<half>::min();
 /// @brief Float number with the largest value.
-const float FP32_MAX_NORMAL = 0x1.fffffep+127f;
+const float FP16_MAX_NORMAL = std::numeric_limits<half>::max();
 /// @brief Difference between float 1 and the next representable value.
-const float FP32_EPSILON = 0x1.0p-23f;
+const float FP16_EPSILON = 0x1.0p-10;
 /// @brief Float 1.
-const float FP32_ONE = 1.0f;
+const float FP16_ONE = 1.0f;
 /// @brief Float 0.5.
-const float FP32_HALF = 0.5f;
+const float FP16_HALF = 0.5f;
 /// @brief Float 0.
-const float FP32_ZERO = 0.0f;
+const float FP16_ZERO = 0.0f;
 /// @brief Next representable value after float 1.
-const float FP32_ONE_P_ULP = FP32_ONE + FP32_EPSILON;
+const float FP16_ONE_P_ULP = FP16_ONE + FP16_EPSILON;
 /// @brief Increment ratio
-const float FP32_INC = FP32_ONE_P_ULP * FP32_EPSILON * FP32_HALF;
+const float FP16_INC = FP16_ONE_P_ULP * FP16_EPSILON * FP16_HALF;
 
 /**
  * @brief Computes the next representable value
@@ -1782,7 +1783,7 @@ const float FP32_INC = FP32_ONE_P_ULP * FP32_EPSILON * FP32_HALF;
  *
  * @return Next representable value after the current value.
  */
-__aicore__ inline float next_after(float val) { return val * FP32_INC + val; }
-}  // namespace fp32
+__aicore__ inline float next_after(float val) { return val * FP16_INC + val; }
+}  // namespace fp16
 
 }  // namespace kernel_utils

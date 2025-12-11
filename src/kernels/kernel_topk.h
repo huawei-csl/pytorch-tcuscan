@@ -121,7 +121,7 @@ __aicore__ inline void run_topk(GM_ADDR x, uint32_t k, GM_ADDR y,
     if constexpr (std::is_same_v<DataT, int16_t>) {
       same_values = current_min + 1 >= current_max;
     } else {
-      same_values = fp32::next_after(current_min) >= current_max;
+      same_values = fp16::next_after(current_min) >= current_max;
     }
 
     if (same_values) {
