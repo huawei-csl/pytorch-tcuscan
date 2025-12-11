@@ -13,6 +13,8 @@
 using namespace AscendC;
 using namespace kernel_utils;
 
+namespace tcuscan {
+
 /**
  * @brief Compress the input based on the binary mask.
  *
@@ -78,10 +80,11 @@ class KernelCompress {
     global_input_.SetGlobalBuffer((__gm__ T*)input, vec_len_);
     global_output_.SetGlobalBuffer((__gm__ T*)output, vec_len_);
     global_mask_.SetGlobalBuffer((__gm__ MaskT*)mask, vec_len_);
-    global_pos_.SetGlobalBuffer((__gm__ PosT*)pos, vec_len_);
+    global_pos_.SetGlobalBuffer((__gm__ PosT*)pos, vec_core_num_);
 
     pipe_.InitBuffer(vec_in_q_, 1, tile_len_ * sizeof(T));
     pipe_.InitBuffer(mask_in_q_, 1, tile_len_ * sizeof(MaskT));
+    pipe_.InitBuffer(pos_in_q_, 1, tile_len_ * sizeof(PosT));
     pipe_.InitBuffer(mask_fp16_buf_, tile_len_ * sizeof(half));
     pipe_.InitBuffer(packed_mask_buf_,
                      packed_mask_tile_size_ * sizeof(PackedMaskT));
@@ -126,12 +129,16 @@ class KernelCompress {
 
  private:
   __aicore__ inline uint32_t CalculatePartsOffsets() {
+    uint32_t output_offset = 0;
     if (num_elems_before_block_ > 0) {
-      data_cache::InvalidateLine(global_pos_[num_elems_before_block_ - 1]);
-      return global_pos_.GetValue(num_elems_before_block_ - 1);
+      copy::CopyGmToVec(pos_in_q_, global_pos_, vec_core_num_);
+      LocalTensor<PosT> pos_lt = pos_in_q_.DeQue<PosT>();
+
+      output_offset =
+          reduce::ReduceScalarAdd(pos_lt, static_cast<uint32_t>(GetBlockIdx()));
+      pos_in_q_.FreeTensor(pos_lt);
     }
-    // Offset is zero, if no element exist before block.
-    return 0;
+    return output_offset;
   }
 
   __aicore__ inline void LoadAndConvertMask(uint32_t global_offset,
@@ -202,6 +209,7 @@ class KernelCompress {
 
   TQue<QuePosition::VECIN, 1> vec_in_q_;
   TQue<QuePosition::VECIN, 1> mask_in_q_;
+  TQue<QuePosition::VECIN, 1> pos_in_q_;
   TBuf<QuePosition::VECCALC> mask_fp16_buf_;
   TBuf<QuePosition::VECCALC> packed_mask_buf_;
   TQue<QuePosition::VECOUT, 2> gathered_out_q_;
@@ -226,39 +234,35 @@ class KernelCompress {
  * dtypes.
  *
  * @tparam T Data type of the input vector.
+ *
  * @param [in] in Pointer to input vector.
  * @param [in] mask Pointer to mask vector.
  * @param [in] out Pointer to output vector.
- * @param [in] upper Pointer to an upper-triangular matrix filled
- * with ones of size `scan_tile_size` x `scan_tile_size`.
  * @param [in] workspace Pointer to workspace.
- * @param [in] in_size Length of the input vector.
- * @param [in] scan_tile_size Size of the tile processed in a single
- * iteration of the scan kernel.
- * @param [in] compress_tile_size Size of the tile processed in a single
- * iteration of the compress kernel.
+ * @param [in] vec_len Length of the input vector.
+ * @param [in] tile_len Tile length.
  */
 template <typename InputT>
-__aicore__ inline void _run_compress(GM_ADDR in, GM_ADDR mask, GM_ADDR out,
-                                     GM_ADDR upper, GM_ADDR workspace,
-                                     uint32_t in_size, uint32_t scan_tile_size,
-                                     uint32_t compress_tile_size) {
-  using OutputT = kernel_utils::cube_unit::CubeOutType_t<InputT>;
+__aicore__ inline void run_compress(GM_ADDR in, GM_ADDR mask, GM_ADDR out,
+                                    GM_ADDR workspace, uint32_t vec_len,
+                                    uint32_t tile_len) {
+  exec_mode::EnableCubeCores();
 
-  const uint32_t scan_res_size =
-      scalar::AlignUp(in_size * sizeof(OutputT), GM_ALIGNMENT);
-
-  GM_ADDR const scan_res = workspace;
-  GM_ADDR const scan_workspace = scan_res + scan_res_size;
-
-  run_scan_multi_core_kernel<int8_t>(mask, upper, scan_res, scan_workspace,
-                                     in_size, scan_tile_size);
-
-  SyncAll<true /*isAIVOnly*/>();
+  GM_ADDR const num_ones_per_block = workspace;
 
   if ASCEND_IS_AIV {
-    KernelCompress<InputT> op(in_size, compress_tile_size);
-    op.Init(in, mask, scan_res, out);
+    KernelReduceTiles<int8_t> op_reduce(tile_len * tile_len / 2, vec_len);
+    op_reduce.Init(mask, num_ones_per_block);
+    op_reduce.Process();
+  }
+
+  SyncAll<false /*isAIVOnly*/>();
+
+  if ASCEND_IS_AIV {
+    KernelCompress<InputT> op(vec_len, tile_len * tile_len / 4);
+    op.Init(in, mask, num_ones_per_block, out);
     op.Process();
   }
 }
+
+}  // namespace tcuscan

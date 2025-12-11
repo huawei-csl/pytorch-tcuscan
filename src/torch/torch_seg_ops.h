@@ -77,17 +77,19 @@ at::Tensor run_seg_scan_vec(const at::Tensor& x, const at::Tensor& f, int S) {
  * @return Segmented sum of (x, f). Output length is `sum(f == 1)`.
  */
 at::Tensor run_seg_sum(const at::Tensor& x, const at::Tensor& f, int S) {
+  using tcuscan::run_compress_pos;
+  using tcuscan::run_scan_multi_core;
+
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();
 
-  const at::Tensor scan_x = tcuscan::run_scan_multi_core(x, S);
-  const at::Tensor out_positions = tcuscan::run_scan_multi_core(f, S);
+  const at::Tensor scan_x = run_scan_multi_core(x, S);
+  const int64_t sum_f = torch::sum(f).item<int64_t>();
   const at::Tensor compress_scan_x =
-      tcuscan::run_compress_pos(scan_x, f, out_positions, S);
+      run_compress_pos(scan_x, f, static_cast<uint32_t>(sum_f), S);
 
   const at::Tensor prepend =
-      at::empty({1}, at::TensorOptions().dtype(at::kFloat).device(device))
-          .zero_();
+      at::zeros({1}, at::TensorOptions().dtype(at::kFloat).device(device));
   aclrtSynchronizeStream(acl_stream);
 
   const at::Tensor prep_compress_scan_x =

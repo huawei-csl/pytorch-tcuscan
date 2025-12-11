@@ -31,14 +31,11 @@ def _test_compress_pos(vec_len: int, s: int, dtype: torch.dtype):
     mask = (torch.randn(vec_len) > 0).to(torch.int8).npu()
 
     # Pos contains the position where the element of x should be written.
-    pos = torch.cumsum(mask, dim=-1, dtype=torch.int32)
+    pos = torch.sum(mask).to(torch.int32)
 
     expected = torch.masked_select(x, mask.to(torch.uint8))
     actual = tcuscan_ops.run_compress_pos(x, mask, pos, s)
 
-    assert (
-        len(actual) == pos[-1]
-    ), "Compress output size must equal number of ones in mask"
     assert len(expected) == len(actual)
     assert torch.equal(expected, actual)
 

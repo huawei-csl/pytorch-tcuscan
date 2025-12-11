@@ -142,6 +142,12 @@ test_compress:
     - make setup_ci
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_compress
 
+test_compress_pos:
+  <<: *test_config
+  script:
+    - make setup_ci
+    - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_compress_pos
+
 test_copy:
   <<: *test_config
   script:

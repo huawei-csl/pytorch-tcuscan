@@ -13,8 +13,6 @@
 #include "../tiling/tiling_compress.h"
 #include "aclrtlaunch_compress_fp16.h"
 #include "aclrtlaunch_compress_fp32.h"
-#include "aclrtlaunch_compress_pos_fp16.h"
-#include "aclrtlaunch_compress_pos_fp32.h"
 #include "commons.h"
 #include "tiling/platform/platform_ascendc.h"
 #include "torch_npu/csrc/core/npu/NPUStream.h"
@@ -85,18 +83,16 @@ at::Tensor run_compress(const at::Tensor& x, const at::Tensor& mask, int S) {
 }
 
 /**
- * @brief Run the compress kernel with positions. Kernel also takes a position
- * vector on the input which is an output of inclusive scan on the binary input
- * mask.
+ * @brief Run the compress kernel given the output length.
  *
- * @param x Input data 1D vector.
- * @param mask Input boolean mask vector.
- * @param pos Input position vector.
- * @param S Tiling parameter. Typical values: 32, 64, 128.
+ * @param [in] x Input data 1D vector.
+ * @param [in] mask Input boolean flag/mask vector of dtype int8.
+ * @param [in] output_len Output length. `output_len` equals to `sum(mask)`
+ * @param [in] S Tiling parameter. Typical values: 32, 64, 128.
  * @return The subvector of `x`: `x[f == 1]`. Output length is `sum(f == 1)`.
  */
 at::Tensor run_compress_pos(const at::Tensor& x, const at::Tensor& mask,
-                            const at::Tensor& pos, int S) {
+                            uint32_t output_len, int S) {
   const auto ascendc_platform =
       platform_ascendc::PlatformAscendCManager::GetInstance();
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
@@ -121,8 +117,7 @@ at::Tensor run_compress_pos(const at::Tensor& x, const at::Tensor& mask,
 
   // Last entry of pos tensor contains number of output elements.
   const at::Tensor z =
-      at::empty({pos[total_length - 1].item<int32_t>()},
-                at::TensorOptions().dtype(dtype).device(device));
+      at::empty({output_len}, at::TensorOptions().dtype(dtype).device(device));
 
   const CompressTiling tiling{total_length, matmul_size, vec_tile_size};
   uint8_t* tiling_device = alloc_copy_tiling(tiling);
@@ -133,17 +128,15 @@ at::Tensor run_compress_pos(const at::Tensor& x, const at::Tensor& mask,
       alloc_workspace(user_workspace_size, device);
 
   if (dtype == torch::kHalf or dtype == torch::kInt16) {
-    ACLRT_LAUNCH_KERNEL(compress_pos_fp16)
+    ACLRT_LAUNCH_KERNEL(compress_fp16)
     (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
      const_cast<void*>(mask.storage().data()),
-     const_cast<void*>(pos.storage().data()),
      const_cast<void*>(z.storage().data()),
      const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else {
-    ACLRT_LAUNCH_KERNEL(compress_pos_fp32)
+    ACLRT_LAUNCH_KERNEL(compress_fp32)
     (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
      const_cast<void*>(mask.storage().data()),
-     const_cast<void*>(pos.storage().data()),
      const_cast<void*>(z.storage().data()),
      const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   }
