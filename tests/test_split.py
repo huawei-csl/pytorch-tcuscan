@@ -36,7 +36,7 @@ VEC_LENS = [
 ]
 
 
-def _test_split_ind(vec_len: int, s: int, dtype: torch.dtype = torch.int16):
+def _test_split(vec_len: int, s: int, dtype: torch.dtype = torch.int16):
     "Unit tests split_ind operator for given input length, s and dtype."
     x = torch.randint(0, 2**7 - 1, (vec_len,), dtype=dtype, device=NPU_DEVICE)
     mask = (torch.randn(vec_len) > 0).to(torch.int8).npu()
@@ -58,13 +58,6 @@ def _test_split_ind(vec_len: int, s: int, dtype: torch.dtype = torch.int16):
 
 @pytest.mark.parametrize("dtype", [torch.int16, torch.float16])
 @pytest.mark.parametrize("s", [32, 64, 128])
-def test_tcuscan_split(dtype: torch.dtype, s):
-    vec_len = 8 * NUM_CORES * s * s
-    _test_split_ind(vec_len, s, dtype)
-
-
-@pytest.mark.parametrize("dtype", [torch.int16, torch.float16])
 @pytest.mark.parametrize("vec_len", VEC_LENS)
-def test_tcuscan_split_s_32_padded(dtype, vec_len):
-    s = 32
-    _test_split_ind(vec_len, s, dtype)
+def test_tcuscan_split(dtype: torch.dtype, s, vec_len):
+    _test_split(vec_len, s, dtype)

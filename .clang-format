@@ -3,4 +3,4 @@
 
 Language: Cpp
 BasedOnStyle: Google
-PointerAlignment: Right
+PointerAlignment: Left

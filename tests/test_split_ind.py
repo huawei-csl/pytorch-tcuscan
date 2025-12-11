@@ -49,57 +49,25 @@ def _test_split_ind(vec_len: int, s: int, dtype: torch.dtype = torch.int16):
     assert len(z) == len(indices_out)
 
     expected_left_part = torch.masked_select(x, mask == 1)
+    expected_left_indices = (
+        torch.nonzero(mask == 1, as_tuple=True)[0].to(torch.int32) + 1
+    )
     num_selected = len(expected_left_part)
     assert torch.allclose(expected_left_part, z[:num_selected])
+    assert torch.allclose(expected_left_indices, indices_out[:num_selected])
 
     expected_right_part = torch.masked_select(x, mask == 0)
+    expected_right_indices = (
+        torch.nonzero(mask == 0, as_tuple=True)[0].to(torch.int32) + 1
+    )
+
     num_tail = len(expected_right_part)
     assert torch.equal(expected_right_part, z[-num_tail:])
+    assert torch.equal(expected_right_indices, indices_out[-num_tail:])
 
 
-def test_tcuscan_split_ind_int16_s32():
-    s = 32
-    vec_len = 8 * NUM_CORES * s * s
-    _test_split_ind(vec_len, s)
-
-
-def test_tcuscan_split_ind_int16_s64():
-    s = 64
-    vec_len = 8 * NUM_CORES * s * s
-    _test_split_ind(vec_len, s)
-
-
-def test_tcuscan_split_int16_s128():
-    s = 128
-    vec_len = 8 * NUM_CORES * s * s
-    _test_split_ind(vec_len, s)
-
-
-def test_tcuscan_split_ind_fp16_s32():
-    s = 32
-    vec_len = 8 * NUM_CORES * s * s
-    _test_split_ind(vec_len, s, torch.float16)
-
-
-def test_tcuscan_split_ind_fp16_s64():
-    s = 64
-    vec_len = 8 * NUM_CORES * s * s
-    _test_split_ind(vec_len, s, torch.float16)
-
-
-def test_tcuscan_split_fp16_s128():
-    s = 128
-    vec_len = 8 * NUM_CORES * s * s
-    _test_split_ind(vec_len, s, torch.float16)
-
-
+@pytest.mark.parametrize("dtype", [torch.int16, torch.float16])
+@pytest.mark.parametrize("s", [32, 64, 128])
 @pytest.mark.parametrize("vec_len", VEC_LENS)
-def test_tcuscan_split_s_32_padded(vec_len):
-    s = 32
-    _test_split_ind(vec_len, s, torch.int16)
-
-
-@pytest.mark.parametrize("vec_len", VEC_LENS)
-def test_tcuscan_split_fp16_s32_padded(vec_len):
-    s = 32
-    _test_split_ind(vec_len, s, torch.float16)
+def test_tcuscan_split(dtype: torch.dtype, s, vec_len):
+    _test_split_ind(vec_len, s, dtype)

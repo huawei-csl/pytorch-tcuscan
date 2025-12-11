@@ -28,11 +28,9 @@ extern "C" __global__ __aicore__ void split_uint16(GM_ADDR in, GM_ADDR mask,
   tiling::GetTilingData(&tiling_data, tiling);
 
   GM_ADDR const usrWorkspace = AscendC::GetUserWorkspace(workspace);
-  GM_ADDR const lower = load_tril_matrix<int8_t>(tiling_data.scan_matmul_size);
 
-  run_split_uint16(in, mask, out, lower, usrWorkspace, tiling_data.num_elems,
-                   tiling_data.scan_matmul_size, tiling_data.vec_tile_size,
-                   zeros_first);
+  run_split_uint16(in, mask, out, usrWorkspace, tiling_data.num_elems,
+                   tiling_data.vec_tile_size, zeros_first);
 }
 
 /**
@@ -54,10 +52,8 @@ extern "C" __global__ __aicore__ void split_ind_uint16(
   tiling::GetTilingData(&tiling_data, tiling);
 
   GM_ADDR const usrWorkspace = AscendC::GetUserWorkspace(workspace);
-  GM_ADDR const lower = load_tril_matrix<int8_t>(tiling_data.scan_matmul_size);
 
-  run_split_ind_uint16(vec_in, mask_in, indices_in, vec_out, indices_out, lower,
+  run_split_ind_uint16(vec_in, mask_in, indices_in, vec_out, indices_out,
                        usrWorkspace, tiling_data.num_elems,
-                       tiling_data.scan_matmul_size, tiling_data.vec_tile_size,
-                       zeros_first);
+                       tiling_data.vec_tile_size, zeros_first);
 }

@@ -179,19 +179,14 @@ namespace split {
 /**
  * @brief Calculate the workspace size for split.
  *
- * @param [in] input_elems Number of elements in the input vector.
- * @param [in] matmul_size Size of the matmul used in scan.
  * @param [in] num_blocks Number of blocks.
  * @return Size of the workspace in bytes.
  */
-constexpr uint32_t get_workspace_size(size_t input_elems, size_t matmul_size,
-                                      size_t num_blocks) {
-  const uint32_t scan_res_size = host_utils::AlignUp(
-      input_elems * sizeof(int32_t), host_utils::GM_ALIGNMENT);
-  const uint32_t scan_ws_size =
-      mc_scan::get_workspace_size<int8_t>(input_elems, matmul_size, num_blocks);
+constexpr uint32_t get_workspace_size(size_t num_blocks) {
+  const uint32_t red_res_size = host_utils::AlignUp(
+      num_blocks * sizeof(int32_t), host_utils::GM_ALIGNMENT);
 
-  return scan_res_size + scan_ws_size;
+  return red_res_size;
 }
 
 /**
@@ -203,8 +198,7 @@ constexpr uint32_t get_workspace_size(size_t input_elems, size_t matmul_size,
  * @return Size of the workspace in bytes.
  */
 constexpr uint32_t get_workspace_size(const SplitTiling &tiling) {
-  return workspace::split::get_workspace_size(
-      tiling.num_elems, tiling.scan_matmul_size, tiling.num_blocks);
+  return workspace::split::get_workspace_size(tiling.num_blocks);
 }
 }  // namespace split
 
@@ -227,8 +221,7 @@ uint32_t get_workspace_size(const RadixSortTiling &t) {
   const uint32_t radices_size =
       host_utils::AlignUp(t.num_elems * sizeof(uint8_t), sizeof(int32_t));
   const uint32_t indices_size = t.num_elems * sizeof(int32_t);
-  const uint32_t split_ws_size =
-      split::get_workspace_size(t.num_elems, t.matmul_size, t.num_blocks);
+  const uint32_t split_ws_size = split::get_workspace_size(t.num_blocks);
 
   const uint32_t total_size =
       tmp_output_size + radices_size + indices_size + split_ws_size;
@@ -258,16 +251,11 @@ constexpr uint32_t get_workspace_size(size_t input_elems, size_t matmul_size,
   const uint32_t split_output_size = split_input_size;
   const uint32_t indices_ws_size = host_utils::AlignUp(
       input_elems * sizeof(uint32_t) * 2, host_utils::GM_ALIGNMENT);
-  const bool is_input_size_aligned =
-      input_elems % (matmul_size * matmul_size) == 0;
   // if the input size is aligned, the workspace of the first split may be
   // smaller than the workspace of the second split; so we force it to be
   // unaligned to avoid memory access errors
   const uint32_t split_ws_size =
-      is_input_size_aligned ? workspace::split::get_workspace_size(
-                                  input_elems + 1, matmul_size, num_blocks)
-                            : workspace::split::get_workspace_size(
-                                  input_elems, matmul_size, num_blocks);
+      workspace::split::get_workspace_size(num_blocks);
 
   const uint32_t total_size = mask_size + split_ws_size + indices_ws_size +
                               split_input_size + split_output_size;

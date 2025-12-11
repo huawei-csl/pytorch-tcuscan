@@ -1,11 +1,15 @@
+import os
+
 import numpy as np
 import pytest
-import torch
 import torch_npu  # noqa
 
 import tcuscan_ops
+import torch
 
 _VEC_LENS = [5 * 1024, 10 * 1024, 10 * 1024 * 1024 - 1, 20 * 1024 * 1024 - 10]
+NPU_DEVICE = os.environ.get("NPU_DEVICE", "npu:0")
+torch.npu.set_device(NPU_DEVICE)
 
 
 def generate_random_int(dtype, vec_len):
@@ -31,7 +35,11 @@ def _test_topk(size: int, k: int, dtype: torch.dtype) -> None:
     max_x = torch.max(x)
 
     torch.npu.synchronize()
-    actual_topk, actual_indices = tcuscan_ops.run_topk_int16(x, k, min_x, max_x, s)
+    if dtype == torch.int16:
+        actual_topk, actual_indices = tcuscan_ops.run_topk_int16(x, k, min_x, max_x, s)
+    else:
+        actual_topk, actual_indices = tcuscan_ops.run_topk_fp16(x, k, min_x, max_x, s)
+
     torch.npu.synchronize()
 
     (
@@ -58,25 +66,28 @@ def _test_topk(size: int, k: int, dtype: torch.dtype) -> None:
     assert torch.allclose(expected_indices.float(), actual_indices.float())
 
 
+dtype = torch.float16
+
+
 @pytest.mark.parametrize("vec_len", _VEC_LENS)
 def test_topk_K_1(vec_len):
     k = 1
-    _test_topk(vec_len, k, torch.int16)
+    _test_topk(vec_len, k, dtype)
 
 
 @pytest.mark.parametrize("vec_len", _VEC_LENS)
 def test_topk_K_2(vec_len):
     k = 2
-    _test_topk(vec_len, k, torch.int16)
+    _test_topk(vec_len, k, dtype)
 
 
 @pytest.mark.parametrize("vec_len", _VEC_LENS)
 def test_topk_K_5(vec_len):
     k = 5
-    _test_topk(vec_len, k, torch.int16)
+    _test_topk(vec_len, k, dtype)
 
 
 @pytest.mark.parametrize("vec_len", _VEC_LENS)
 def test_topk_K_SQRT(vec_len):
     k = int(np.sqrt(vec_len))
-    _test_topk(vec_len, k, torch.int16)
+    _test_topk(vec_len, k, dtype)

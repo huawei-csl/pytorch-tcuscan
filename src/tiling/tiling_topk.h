@@ -30,7 +30,7 @@ struct TopKTiling {
   uint32_t num_blocks;
   /// @brief Total number of input elements in a single vector.
   uint32_t num_elems;
-  /// @brief Size of the matmul tile.
+  /// @brief Size of the matmul tile used in the cube part of scan.
   uint32_t matmul_size;
   /// @brief Size of the vector tiles.
   uint32_t vec_tile_size;

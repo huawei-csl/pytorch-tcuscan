@@ -71,7 +71,6 @@ std::tuple<at::Tensor, at::Tensor> run_topk_int16(const at::Tensor& x,
 
   TopKTiling tiling;
   tiling.num_elems = total_length;
-  tiling.matmul_size = matmul_size;
   tiling.num_blocks = block_dim;
   tiling.vec_tile_size = vec_tile_size;
   tiling.x_min.value_i32 = static_cast<int32_t>(x_min);
@@ -140,7 +139,6 @@ std::tuple<at::Tensor, at::Tensor> run_topk_fp16(const at::Tensor& x,
 
   TopKTiling tiling;
   tiling.num_elems = total_length;
-  tiling.matmul_size = matmul_size;
   tiling.num_blocks = block_dim;
   tiling.vec_tile_size = vec_tile_size;
   tiling.x_min.value_fp32 = x_min;

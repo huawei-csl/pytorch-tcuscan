@@ -23,21 +23,17 @@
  * @param [in] k Number of output elements.
  * @param [in] y Pointer to output vector.
  * @param [in] indices Pointer to output indices vector.
- * @param [in] upper Pointer to an upper-triangular matrix filled
- * with ones of size `cube_tile_size` x `cube_tile_size`.
  * @param [in] workspace Pointer to workspace.
  * @param [in] x_min Minimum value of the input vector.
  * @param [in] x_max Maximum value of the input vector.
  * @param [in] vec_len Size of the input vector.
- * @param [in] vec_tile_size Size of the vector tile.
- * @param [in] cube_tile_size Size of the matmul tile.
+ * @param [in] tile_size Size of the vector tile.
  */
 template <typename DataT>
 __aicore__ inline void run_topk(GM_ADDR x, uint32_t k, GM_ADDR y,
-                                GM_ADDR indices, GM_ADDR upper,
-                                GM_ADDR workspace, DataT x_min, DataT x_max,
-                                uint32_t vec_len, uint32_t vec_tile_size,
-                                uint32_t cube_tile_size) {
+                                GM_ADDR indices, GM_ADDR workspace, DataT x_min,
+                                DataT x_max, uint32_t vec_len,
+                                uint32_t tile_size) {
   const uint32_t mask_size =
       scalar::AlignUp(vec_len * sizeof(uint8_t), GM_ALIGNMENT);
   const uint32_t split_input_size =
@@ -65,7 +61,7 @@ __aicore__ inline void run_topk(GM_ADDR x, uint32_t k, GM_ADDR y,
   bool first_iter = true;
 
   run_arithmetic_progression<int32_t, 0, 1, false /* ForceMixMode */>(
-      indices_in, vec_len, vec_tile_size);
+      indices_in, vec_len, tile_size);
   SyncAll<false /*isAIVOnly*/>();
 
   pivot = (current_min + current_max) / 2;
@@ -73,29 +69,29 @@ __aicore__ inline void run_topk(GM_ADDR x, uint32_t k, GM_ADDR y,
   const int16_t MAX_ITERS = 10000;
   while (iters < MAX_ITERS) {
     iters++;
+    uint32_t num_ones;
     if (first_iter) {
       run_less_or_equal<false, DataT>(x, mask, static_cast<DataT>(pivot),
-                                      current_vec_len, vec_tile_size);
+                                      current_vec_len, tile_size);
       SyncAll<false /*isAIVOnly*/>();
-      run_split_ind_uint16(x, mask, indices_in, split_output, indices_out,
-                           upper, split_ws, current_vec_len, cube_tile_size,
-                           vec_tile_size, true);
+
+      num_ones =
+          run_split_ind_uint16(x, mask, indices_in, split_output, indices_out,
+                               split_ws, current_vec_len, tile_size, true);
       first_iter = false;
     } else {
       run_less_or_equal<false, DataT>(split_input, mask,
                                       static_cast<DataT>(pivot),
-                                      current_vec_len, vec_tile_size);
+                                      current_vec_len, tile_size);
       SyncAll<false /*isAIVOnly*/>();
-      run_split_ind_uint16(split_input, mask, indices_in, split_output,
-                           indices_out, upper, split_ws, current_vec_len,
-                           cube_tile_size, vec_tile_size, true);
+      num_ones = run_split_ind_uint16(split_input, mask, indices_in,
+                                      split_output, indices_out, split_ws,
+                                      current_vec_len, tile_size, true);
     }
 
     SyncAll<false /*isAIVOnly*/>();
 
-    const uint32_t L =
-        current_vec_len - scalar::GetGMValue<int32_t>(
-                              split_ws, current_vec_len - 1, current_vec_len);
+    const uint32_t L = current_vec_len - num_ones;
 
     if (current_k < L) {
       current_vec_len = L;
@@ -105,9 +101,9 @@ __aicore__ inline void run_topk(GM_ADDR x, uint32_t k, GM_ADDR y,
       current_min = current_max;
     } else if (current_k > L) {
       run_copy<DataT, false /* ForceMixMode */>(
-          split_output, y + offset * sizeof(DataT), L, vec_tile_size);
+          split_output, y + offset * sizeof(DataT), L, tile_size);
       run_copy<int32_t, false /* ForceMixMode */>(
-          indices_out, indices + offset * sizeof(int32_t), L, vec_tile_size);
+          indices_out, indices + offset * sizeof(int32_t), L, tile_size);
       offset += L;
       current_max = pivot;
 
@@ -130,10 +126,10 @@ __aicore__ inline void run_topk(GM_ADDR x, uint32_t k, GM_ADDR y,
 
     if (same_values) {
       run_copy<DataT, false /* ForceMixMode */>(
-          split_output, y + offset * sizeof(DataT), current_k, vec_tile_size);
+          split_output, y + offset * sizeof(DataT), current_k, tile_size);
       run_copy<int32_t, false /* ForceMixMode */>(
           indices_out, indices + offset * sizeof(int32_t), current_k,
-          vec_tile_size);
+          tile_size);
 
       return;
     }

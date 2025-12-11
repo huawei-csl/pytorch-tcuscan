@@ -30,14 +30,12 @@ extern "C" __global__ __aicore__ void topk_int16(GM_ADDR vec_in,
   tiling::GetTilingData(&tiling, tiling_ptr);
 
   GM_ADDR const usrWorkspace = AscendC::GetUserWorkspace(workspace);
-  GM_ADDR const lower = load_tril_matrix<int8_t>(tiling.matmul_size);
 
   const int32_t x_min = tiling.x_min.value_i32;
   const int32_t x_max = tiling.x_max.value_i32;
 
-  run_topk<int16_t>(vec_in, tiling.k, vec_out, indices_out, lower, usrWorkspace,
-                    x_min, x_max, tiling.num_elems, tiling.vec_tile_size,
-                    tiling.matmul_size);
+  run_topk<int16_t>(vec_in, tiling.k, vec_out, indices_out, usrWorkspace, x_min,
+                    x_max, tiling.num_elems, tiling.vec_tile_size);
 }
 
 /**
@@ -57,14 +55,12 @@ extern "C" __global__ __aicore__ void topk_fp16(GM_ADDR vec_in, GM_ADDR vec_out,
   tiling::GetTilingData(&tiling, tiling_ptr);
 
   GM_ADDR const usrWorkspace = AscendC::GetUserWorkspace(workspace);
-  GM_ADDR const lower = load_tril_matrix<half>(tiling.matmul_size);
 
   const half x_min = static_cast<half>(tiling.x_min.value_fp32);
   const half x_max = static_cast<half>(tiling.x_max.value_fp32);
 
-  run_topk<half>(vec_in, tiling.k, vec_out, indices_out, lower, usrWorkspace,
-                 x_min, x_max, tiling.num_elems, tiling.vec_tile_size,
-                 tiling.matmul_size);
+  run_topk<half>(vec_in, tiling.k, vec_out, indices_out, usrWorkspace, x_min,
+                 x_max, tiling.num_elems, tiling.vec_tile_size);
 }
 
 /**

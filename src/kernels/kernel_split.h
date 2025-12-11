@@ -84,7 +84,7 @@ class KernelSplit {
     global_input_.SetGlobalBuffer((__gm__ T*)input, vec_len_);
     global_output_.SetGlobalBuffer((__gm__ T*)output, vec_len_);
     global_mask_.SetGlobalBuffer((__gm__ MaskT*)mask, vec_len_);
-    global_pos_.SetGlobalBuffer((__gm__ PosT*)pos, vec_len_);
+    global_pos_.SetGlobalBuffer((__gm__ PosT*)pos, block_num_);
 
     pipe.InitBuffer(vec_in_q_, 1, tile_len_ * sizeof(T));
     pipe.InitBuffer(mask_in_q_, 1, tile_len_ * sizeof(MaskT));
@@ -92,10 +92,7 @@ class KernelSplit {
     pipe.InitBuffer(packed_mask_buf_,
                     packed_mask_tile_size_ * sizeof(PackedMaskT));
     pipe.InitBuffer(gathered_out_q_, 2, tile_len_ * sizeof(T));
-
-    total_num_ones_ = global_pos_.GetValue(vec_len_ - 1);
-    data_cache::InvalidateLine(global_pos_[vec_len_ - 1]);
-    total_num_zeros_ = vec_len_ - total_num_ones_;
+    pipe.InitBuffer(pos_in_q_, 1, block_num_ * sizeof(PosT));
   }
 
  public:
@@ -194,7 +191,6 @@ class KernelSplit {
     uint32_t offset_within_block = 0;
     uint32_t zeros_offset, ones_offset;
     CalculatePartsOffsets(num_elems_before_block_, zeros_offset, ones_offset);
-
     for (uint32_t tile_idx = 0; tile_idx < num_tiles_to_process; tile_idx++) {
       const uint32_t global_offset =
           num_elems_before_block_ + offset_within_block;
@@ -206,9 +202,6 @@ class KernelSplit {
 
       copy::CopyGmToVec(vec_in_q_, global_input_[global_offset], num_elems);
       copy::CopyGmToVec(ind_in_q_, global_ind_in_[global_offset], num_elems);
-
-      uint32_t zeros_offset, ones_offset;
-      CalculatePartsOffsets(global_offset, zeros_offset, ones_offset);
 
       LocalTensor<T> input_lt = vec_in_q_.DeQue<T>();
       LocalTensor<IndicesT> ind_input_lt = ind_in_q_.DeQue<IndicesT>();
@@ -238,20 +231,27 @@ class KernelSplit {
                                                uint32_t& zeros_offset,
                                                uint32_t& ones_offset) {
     const uint32_t num_elems_before_tile = global_offset;
-
     uint32_t num_ones_before_tile = 0;
-    if (num_elems_before_tile > 0) {
-      num_ones_before_tile = global_pos_.GetValue(num_elems_before_tile - 1);
-      data_cache::InvalidateLine(global_pos_[num_elems_before_tile - 1]);
-    }
+
+    copy::CopyGmToVec(pos_in_q_, global_pos_, block_num_);
+    LocalTensor<PosT> pos_lt = pos_in_q_.DeQue<PosT>();
+    if (GetBlockIdx() > 0)
+      num_ones_before_tile =
+          reduce::ReduceScalarAdd(pos_lt, static_cast<uint32_t>(GetBlockIdx()));
+    const uint32_t total_num_ones =
+        reduce::ReduceScalarAdd(pos_lt, static_cast<uint32_t>(block_num_));
+    const uint32_t total_num_zeros = vec_len_ - total_num_ones;
+
+    pos_in_q_.FreeTensor(pos_lt);
+
     const uint32_t num_zeros_before_tile =
         num_elems_before_tile - num_ones_before_tile;
 
     if (zeros_first_) {
       zeros_offset = num_zeros_before_tile;
-      ones_offset = total_num_zeros_ + num_ones_before_tile;
+      ones_offset = total_num_zeros + num_ones_before_tile;
     } else {
-      zeros_offset = total_num_ones_ + num_zeros_before_tile;
+      zeros_offset = total_num_ones + num_zeros_before_tile;
       ones_offset = num_ones_before_tile;
     }
   }
@@ -334,6 +334,7 @@ class KernelSplit {
 
   TQue<QuePosition::VECIN, 1> vec_in_q_;
   TQue<QuePosition::VECIN, 1> mask_in_q_;
+  TQue<QuePosition::VECIN, 1> pos_in_q_;
   TBuf<QuePosition::VECCALC> mask_fp16_buf_;
   TBuf<QuePosition::VECCALC> packed_mask_buf_;
   TQue<QuePosition::VECOUT, 2> gathered_out_q_;
@@ -352,9 +353,6 @@ class KernelSplit {
   const uint32_t max_num_elems_per_block_;
   const uint32_t num_elems_before_block_;
 
-  uint32_t total_num_ones_;
-  uint32_t total_num_zeros_;
-
   constexpr static uint16_t SMALLEST_MASK =
       kernel_utils::UB_ALIGNMENT / sizeof(PackedMaskT);
   constexpr static uint16_t IN_ELEMS_PER_MASK_ELEM = sizeof(PackedMaskT) * 8;
@@ -366,23 +364,74 @@ namespace split {
  * @brief Calculate the workspace size for split.
  *
  * @tparam InputT Input data type.
- *
- * @param [in] input_elems Number of elements in the input vector.
- * @param [in] scan_tile_size Size of the matmul used in scan.
  * @return Size of the workspace in bytes.
  */
-template <typename InputT>
-__aicore__ inline uint32_t get_workspace_size(uint32_t input_elems,
-                                              uint32_t scan_tile_size) {
-  const uint32_t scan_res_size =
-      scalar::AlignUp(input_elems * sizeof(int32_t), GM_ALIGNMENT);
-  const uint32_t scan_ws_size =
-      mc_scan::get_workspace_size<int8_t, int32_t, true>(input_elems,
-                                                         scan_tile_size);
-  return scan_res_size + scan_ws_size;
+__aicore__ inline uint32_t get_workspace_size() {
+  return scalar::AlignUp(GetBlockNum() * GetTaskRation() * sizeof(uint32_t),
+                         UB_ALIGNMENT);
 }
 
 }  // namespace split
+
+/**
+ * @brief Computes the reduction of a small vector.
+ *
+ * @tparam T Data type of the input vector.
+ */
+template <typename T>
+class KernelReduce {
+ public:
+  /**
+   * @brief Class constructor.
+   *
+   * @param [in] vec_len Number of elements in an input vector.
+   */
+  __aicore__ inline KernelReduce(uint32_t vec_len) : vec_len_(vec_len) {}
+
+  /**
+   * @brief Initialize global and local memory structures.
+   *
+   * @param [in] input Pointer to input vector in global memory.
+   * @param [in] output Pointer to output vector in global memory.
+   */
+  __aicore__ inline void Init(GM_ADDR input, GM_ADDR output) {
+    global_input_.SetGlobalBuffer((__gm__ T*)input, vec_len_);
+    global_output_.SetGlobalBuffer((__gm__ T*)output, vec_len_);
+    pipe.InitBuffer(vec_in_q_, 1, vec_len_ * sizeof(T));
+    pipe.InitBuffer(vec_out_q_, 1, sizeof(T));
+  }
+
+  /**
+   * @brief Run the kernel.
+   */
+  __aicore__ inline void Process() {
+    if (GetBlockIdx() != 0) return;
+
+    copy::CopyGmToVec(vec_in_q_, global_input_, vec_len_);
+    LocalTensor<T> input_lt = vec_in_q_.DeQue<T>();
+    T sum;
+    if constexpr (reduce::IsAscendReduceSumSupported<T>) {
+      ReduceSum(input_lt, input_lt, input_lt, vec_len_);
+      sum = AscendC::GetAccVal<T>();
+    } else {
+      sum = reduce::ReduceScalarAdd<T>(input_lt, input_lt.GetSize());
+    }
+    vec_in_q_.FreeTensor(input_lt);
+
+    copy::CopyScalarToGm(global_output_, vec_out_q_, sum);
+  }
+
+ private:
+  TPipe pipe;
+
+  GlobalTensor<T> global_input_;
+  GlobalTensor<T> global_output_;
+
+  TQue<QuePosition::VECIN, 1> vec_in_q_;
+  TQue<QuePosition::VECOUT, 1> vec_out_q_;
+
+  const uint32_t vec_len_;
+};
 
 /**
  * @brief Run the `split_uint16` kernel.
@@ -390,42 +439,34 @@ __aicore__ inline uint32_t get_workspace_size(uint32_t input_elems,
  * @param [in] in Pointer to input vector.
  * @param [in] mask Pointer to mask vector.
  * @param [in] out Pointer to output vector.
- * @param [in] upper Pointer to an upper-triangular matrix filled
- * with ones of size `scan_tile_size` x `scan_tile_size`.
  * @param [in] workspace Pointer to workspace.
- * @param [in] in_len Length of the input vector.
- * @param [in] scan_tile_size Size of the tile processed in a single
- * iteration of the scan kernel.
- * @param [in] split_tile_size Size of the tile processed in a single
- * iteration of the split kernel.
+ * @param [in] vec_len Length of the input vector.
+ * @param [in] tile_len Length of the tile processed in a single
+ * iteration.
  * @param [in] zeros_first Indicates whether the first elements in the output
  * vector are the ones with corresponding mask value set to zero or one.
  */
 __aicore__ inline void run_split_uint16(GM_ADDR in, GM_ADDR mask, GM_ADDR out,
-                                        GM_ADDR upper, GM_ADDR workspace,
-                                        uint32_t in_len,
-                                        uint16_t scan_tile_size,
-                                        uint32_t split_tile_size,
-                                        bool zeros_first) {
-  const uint32_t scan_res_size =
-      scalar::AlignUp(in_len * sizeof(int32_t), GM_ALIGNMENT);
+                                        GM_ADDR workspace, uint32_t vec_len,
+                                        uint32_t tile_len, bool zeros_first) {
+  exec_mode::EnableCubeCores();
 
-  GM_ADDR const scan_res = workspace;
-  GM_ADDR const scan_workspace = scan_res + scan_res_size;
+  GM_ADDR const sums = workspace;
 
-  run_scan_multi_core_kernel<int8_t, true>(
-      mask, upper, scan_res, scan_workspace, in_len, scan_tile_size);
-
-  if ASCEND_IS_AIC {
-    return;
+  if ASCEND_IS_AIV {
+    KernelReduceTiles<int8_t> op_reduce(tile_len, vec_len);
+    op_reduce.Init(mask, sums);
+    op_reduce.Process();
   }
 
   SyncAll<true /*isAIVOnly*/>();
 
-  constexpr bool with_indices = false;
-  KernelSplit<uint16_t, with_indices> op(in_len, split_tile_size, zeros_first);
-  op.Init(in, mask, scan_res, out);
-  op.Process();
+  if ASCEND_IS_AIV {
+    constexpr bool with_indices = false;
+    KernelSplit<uint16_t, with_indices> op(vec_len, tile_len, zeros_first);
+    op.Init(in, mask, sums, out);
+    op.Process();
+  }
 }
 
 /**
@@ -436,38 +477,46 @@ __aicore__ inline void run_split_uint16(GM_ADDR in, GM_ADDR mask, GM_ADDR out,
  * @param [in] indices_in Pointer to the input indices vector.
  * @param [in] out Pointer to output vector.
  * @param [in] indices_out Pointer to the output indices vector.
- * @param [in] upper Pointer to an upper-triangular matrix filled
- * with ones of size `scan_tile_size` x `scan_tile_size`.
  * @param [in] workspace Pointer to workspace.
- * @param [in] in_len Length of the input vector.
- * @param [in] scan_tile_size Size of the tile processed in a single
- * iteration of the scan kernel.
- * @param [in] split_tile_size Size of the tile processed in a single
- * iteration of the split kernel.
+ * @param [in] vec_len Length of the input vector.
+ * @param [in] tile_len Length of the tile processed in a single
+ * iteration.
  * @param [in] zeros_first Indicates whether the first elements in the output
  * vector are the ones with corresponding mask value set to zero or one.
+ * @return Number of ones in the mask.
  */
-__aicore__ inline void run_split_ind_uint16(
+__aicore__ inline uint32_t run_split_ind_uint16(
     GM_ADDR in, GM_ADDR mask, GM_ADDR indices_in, GM_ADDR out,
-    GM_ADDR indices_out, GM_ADDR upper, GM_ADDR workspace, uint32_t in_len,
-    uint16_t scan_tile_size, uint32_t split_tile_size, bool zeros_first) {
-  const uint32_t scan_res_size =
-      scalar::AlignUp(in_len * sizeof(int32_t), GM_ALIGNMENT);
+    GM_ADDR indices_out, GM_ADDR workspace, uint32_t vec_len, uint32_t tile_len,
+    bool zeros_first) {
+  exec_mode::EnableCubeCores();
 
-  GM_ADDR const scan_res = workspace;
-  GM_ADDR const scan_workspace = scan_res + scan_res_size;
+  GM_ADDR const sums = workspace;
 
-  run_scan_multi_core_kernel<int8_t, true>(
-      mask, upper, scan_res, scan_workspace, in_len, scan_tile_size);
-
-  if ASCEND_IS_AIC {
-    return;
+  if ASCEND_IS_AIV {
+    KernelReduceTiles<int8_t> op_reduce_tiles(tile_len, vec_len);
+    op_reduce_tiles.Init(mask, sums);
+    op_reduce_tiles.Process();
   }
 
-  SyncAll<true /*isAIVOnly*/>();
+  SyncAll<false /*isAIVOnly*/>();
 
-  constexpr bool with_indices = true;
-  KernelSplit<uint16_t, with_indices> op(in_len, split_tile_size, zeros_first);
-  op.Init(in, mask, scan_res, out, indices_in, indices_out);
-  op.Process();
+  if ASCEND_IS_AIV {
+    constexpr bool with_indices = true;
+    KernelSplit<uint16_t, with_indices> op(vec_len, tile_len, zeros_first);
+    op.Init(in, mask, sums, out, indices_in, indices_out);
+    op.Process();
+  }
+
+  SyncAll<false /*isAIVOnly*/>();
+
+  if ASCEND_IS_AIV {
+    KernelReduce<uint32_t> op_reduce(GetBlockNum());
+    op_reduce.Init(sums, sums);
+    op_reduce.Process();
+  }
+
+  SyncAll<false /*isAIVOnly*/>();
+
+  return scalar::GetGMValue<int32_t>(sums, 0, GetBlockNum());
 }
