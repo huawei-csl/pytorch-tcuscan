@@ -1691,6 +1691,62 @@ __aicore__ inline void Multiply(TQue<QuePosition::A2, 1>& q_a,
 }
 
 /**
+ * @brief Performs matrix multiplication C = A @ C (where C lies in L0C).
+ *
+ * The function deques the input matrices from A2 and L0C and computes their
+ * product using the cube unit. The output can be accumulated.
+ * After execution the input matrix A is either freed or enqued again.
+ *
+ * @tparam InputT Data type of the input matrices.
+ * @tparam free_a If true it frees the input matrix A, otherwise it enques A
+ * back to `q_a` to reuse it.
+ *
+ * @param [in] q_a Input queue where matrix A must be already unqueued.
+ * @param [in] b1_q Intermediate empty L1 queue for enqueuing C from L0C.
+ * @param [in] b2_q Intermediate empty L0B queue for enqueuing C from L1.
+ * @param [in] c_q Output queue where C (+)= A @ C will be unqueued. Must be
+ * already enqueued with C.
+ * @param [in] M Height of matrix A.
+ * @param [in] N Width of matrix C.
+ * @param [in] K Width of matrix A and height of matrix C.
+ */
+template <typename InputT, bool free_a = true>
+__aicore__ inline void MultiplyAWithC(TQue<QuePosition::A2, 1>& q_a,
+                                      TQue<QuePosition::B1, 1>& b1_q,
+                                      TQue<QuePosition::B2, 1>& b2_q,
+                                      TQue<QuePosition::CO1, 1>& c_q,
+                                      uint16_t M, uint16_t N, uint16_t K) {
+  exec_mode::AssertIsAIC();
+  static_assert(IsCubeSupported<InputT>,
+                "Unsupported input Cube dtype. Please use half or int8_t.");
+  using OutputT = CubeOutType_t<InputT>;
+  LocalTensor<InputT> a2_lt = q_a.DeQue<InputT>();
+
+  // Load C matrix from L0C into L0B.
+  copy::CopyC01ToB1<InputT, OutputT /* Source */, 1, 1>(b1_q, c_q, M, N);
+  const uint32_t k_blocks_ = M / kernel_utils::GetFractalK<InputT>();
+  const uint32_t n_blocks_ = N / kernel_utils::GetFractalMN<InputT>();
+  copy::CopyL1ToL0B<InputT, true /* free_src */>(b2_q, b1_q, k_blocks_,
+                                                 n_blocks_);
+  LocalTensor<InputT> b2_lt = b2_q.DeQue<InputT>();
+
+  LocalTensor<OutputT> c1_lt = c_q.AllocTensor<OutputT>();
+
+  Mmad(c1_lt, a2_lt, b2_lt,
+       {M, N, K, false /* accumulate_c */, 0, false, false, false});
+
+  c_q.EnQue<OutputT>(c1_lt);
+
+  if constexpr (free_a) {
+    q_a.FreeTensor(a2_lt);
+  } else {
+    q_a.EnQue(a2_lt);
+  }
+
+  b2_q.FreeTensor(b2_lt);
+}
+
+/**
  * @brief Initialize a local tensor that is allocated in Cube L1/L0
  * (A1/A2/B1/B2) with a constant value
  *

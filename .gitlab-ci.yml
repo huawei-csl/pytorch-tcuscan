@@ -354,6 +354,13 @@ test_tri_inv_col_sweep:
     - make setup_ci
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_tri_inv_col_sweep
 
+test_tri_inv_cube_col_sweep:
+  <<: *test_config
+  script:
+    - make setup_ci
+    - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_tri_inv_cube_col_sweep
+
+
 # Uncomment to run all tests in a single run
 unit_test:
   tags:

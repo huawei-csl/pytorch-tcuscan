@@ -19,6 +19,7 @@
 #include "../tiling/tiling_seg_sum_single_core.h"
 #include "../tiling/tiling_seg_sum_single_cube.h"
 #include "../tiling/tiling_split.h"
+#include "../tiling/tiling_tri_inv_cube_col_sweep.h"
 
 namespace tcuscan::workspace {
 
@@ -341,6 +342,23 @@ constexpr uint32_t get_workspace_size(const CubeReduceTiling &tiling) {
       num_blocks * matmul_size * matmul_size * sizeof(OutputT);
 
   return padded_input_size + cube_reductions_size;
+}
+
+/**
+ * @brief Calculate the workspace size for `tri_inv_cube_col_sweep`.
+ *
+ * @tparam T Input data type.
+ *
+ * @param [in] tiling Tiling parameters used in the kernel.
+ * @return Size of the workspace in bytes.
+ */
+template <typename T>
+constexpr uint32_t get_workspace_size(const TriInvCubeColSweepTiling &tiling) {
+  const uint32_t num_elems =
+      tiling.num_blocks * tiling.matrix_size * tiling.matrix_size;
+  const uint32_t workspace_size = num_elems * sizeof(T);
+
+  return workspace_size;
 }
 
 }  // namespace tcuscan::workspace

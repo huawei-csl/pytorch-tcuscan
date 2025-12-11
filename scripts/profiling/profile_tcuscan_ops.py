@@ -981,6 +981,20 @@ def tri_inv_col_sweep_benchmark(
     return _run_benchmark(device, run_tri_inv_cs), len(x)
 
 
+def tri_inv_cube_col_sweep_benchmark(
+    device: Device, size: int, s: int, dtype: torch.dtype
+) -> Tuple[float, int]:
+    if dtype in {torch.float16}:
+        x = rand_tril_tensor(size, s, dtype=dtype)
+    else:
+        raise ValueError("tri_inv_cube_col_sweep benchmark only supports float16/half.")
+
+    def run_tri_inv_cube_col_sweep() -> None:
+        _ = tcuscan_ops.run_tri_inv_cube_col_sweep(x)
+
+    return _run_benchmark(device, run_tri_inv_cube_col_sweep), len(x)
+
+
 def cube_reduce_benchmark(
     device: Device, size: int, dtype: torch.dtype, num_cores: int
 ) -> Tuple[float, int]:
@@ -1098,6 +1112,7 @@ if __name__ == "__main__":  # noqa
             "scan_batch",
             "scan_batch_tcuscan",
             "tri_inv_col_sweep",
+            "tri_inv_cube_col_sweep",
             "tri_inv_baseline",
             "cube_reduce",
             "reduce_tiles",
@@ -1549,7 +1564,7 @@ if __name__ == "__main__":  # noqa
             density,
         )
     elif bench == "tri_inv_col_sweep" and dtype in ["fp16"]:
-        batch_sizes = range(4, 256, 4)
+        batch_sizes = range(4, 256, 2)
 
         tdtype = STR_TO_DTYPE[dtype]
         benchmark(
@@ -1559,8 +1574,19 @@ if __name__ == "__main__":  # noqa
             partial(tri_inv_col_sweep_benchmark, dtype=tdtype, s=s),
             batch_sizes,
         )
+    elif bench == "tri_inv_cube_col_sweep" and dtype in ["fp16"]:
+        batch_sizes = range(4, 256, 2)
+
+        tdtype = STR_TO_DTYPE[dtype]
+        benchmark(
+            device,
+            f"tri_inv_cube_col_sweep_{s}",
+            dtype,
+            partial(tri_inv_cube_col_sweep_benchmark, dtype=tdtype, s=s),
+            batch_sizes,
+        )
     elif bench == "tri_inv_baseline" and dtype in ["fp16"]:
-        batch_sizes = range(4, 256, 4)
+        batch_sizes = range(4, 256, 2)
 
         tdtype = STR_TO_DTYPE[dtype]
         benchmark(
