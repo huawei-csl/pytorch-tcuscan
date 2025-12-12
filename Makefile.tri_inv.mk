@@ -15,3 +15,7 @@ profile_tri_inv:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench tri_inv_baseline --s 32 --dtype fp16
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench tri_inv_baseline --s 64 --dtype fp16
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench tri_inv_baseline --s 128 --dtype fp16
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench triu_inv_rec_unroll --s 16 --dtype fp16
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench triu_inv_rec_unroll --s 32 --dtype fp16
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench triu_inv_rec_unroll --s 64 --dtype fp16
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench triu_inv_rec_unroll --s 128 --dtype fp16

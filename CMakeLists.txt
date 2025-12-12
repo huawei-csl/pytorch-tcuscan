@@ -76,6 +76,7 @@ ascendc_library(
   src/seg_sum_single_cube.cpp
   src/row_scan.cpp
   src/block_scan.cpp
+  src/triu_inv_rec_unroll.cpp
   src/scan_multi_cube.cpp
   src/simple_pad.cpp
   src/cube_reduce.cpp

@@ -87,6 +87,13 @@ def rand_tril_tensor(batch_size: int, n: int, dtype: np.dtype):
     return A
 
 
+def rand_triu_tensor(batch_size: int, n: int, dtype: np.dtype):
+    "Returns a random unit lower triangular matrix of size n."
+    A = torch.rand(batch_size, n, n, dtype=dtype, device=NPU_DEVICE)
+    A = A - torch.tril(A)
+    return A
+
+
 def _run_benchmark(
     device: Device,
     fn: typing.Callable,
@@ -998,6 +1005,20 @@ def tri_inv_cube_col_sweep_benchmark(
     return _run_benchmark(device, run_tri_inv_cube_col_sweep), len(x)
 
 
+def triu_inv_rec_unroll_benchmark(
+    device: Device, size: int, s: int, dtype: torch.dtype
+) -> Tuple[float, int]:
+    if dtype in {torch.float16}:
+        x = rand_triu_tensor(size, s, dtype=dtype)
+    else:
+        raise ValueError("triu_inv_rec_unroll benchmark only supports float16/half.")
+
+    def run_triu_inv_rec_unroll() -> None:
+        _ = tcuscan_ops.run_triu_inv_rec_unroll(x)
+
+    return _run_benchmark(device, run_triu_inv_rec_unroll), size
+
+
 def cube_reduce_benchmark(
     device: Device, size: int, dtype: torch.dtype, num_cores: int
 ) -> Tuple[float, int]:
@@ -1117,6 +1138,7 @@ if __name__ == "__main__":  # noqa
             "tri_inv_col_sweep",
             "tri_inv_cube_col_sweep",
             "tri_inv_baseline",
+            "triu_inv_rec_unroll",
             "cube_reduce",
             "reduce_tiles",
         ],
@@ -1597,6 +1619,16 @@ if __name__ == "__main__":  # noqa
             f"tri_inv_baseline_{s}",
             dtype,
             partial(tri_inv_baseline, dtype=tdtype, s=s),
+            batch_sizes,
+        )
+    elif bench == "triu_inv_rec_unroll" and dtype in ["fp16"]:
+        batch_sizes = range(4, 256, 4)
+        tdtype = STR_TO_DTYPE[dtype]
+        benchmark(
+            device,
+            f"triu_inv_rec_unroll_{s}",
+            dtype,
+            partial(triu_inv_rec_unroll_benchmark, dtype=tdtype, s=s),
             batch_sizes,
         )
     elif bench == "cube_reduce" and dtype in ["int8", "fp16"]:

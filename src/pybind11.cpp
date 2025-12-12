@@ -100,4 +100,6 @@ PYBIND11_MODULE(tcuscan_ops, m) {
         "Unit upper triangular matrix inverses (fp16)");
   m.def("run_tri_inv_cube_col_sweep", &tcuscan::run_tri_inv_cube_col_sweep,
         "Triangular matrix inverse using AIV/AICs(fp16)");
+  m.def("run_triu_inv_rec_unroll", &tcuscan::run_triu_inv_rec_unroll,
+        "Upper triangular inverse");
 }
