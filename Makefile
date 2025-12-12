@@ -265,6 +265,12 @@ profile_int16_topk:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench tcuscan_topk --dtype int16 --s 64 --num_cores 20
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench tcuscan_topk --dtype int16 --s 128 --num_cores 20
 
+profile_fp16_topk:
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench topk --dtype fp16 --s 128 --num_cores 20 --k 2048
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench tcuscan_topk --dtype fp16 --s 32 --num_cores 20 --iter-step-multiplier 4 --k 2048
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench tcuscan_topk --dtype fp16 --s 64 --num_cores 20 --iter-step-multiplier 2 --k 2048
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench tcuscan_topk --dtype fp16 --s 128 --num_cores 20 --k 2048
+
 profile_topp:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench topp --dtype fp16 --s 128 --num_cores 20 --max_size 16000000 --iter-step-divider 8
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench tcuscan_topp --dtype fp16 --s 32 --num_cores 20 --max_size 16000000 --iter-step-divider 2

@@ -281,7 +281,10 @@ def topk_tcuscan_benchmark(
     def run_tcuscan_topk() -> None:
         min_x = torch.min(x)
         max_x = torch.max(x)
-        _, _ = tcuscan_ops.run_topk_int16(x, k, min_x, max_x, s)
+        if dtype == torch.float16:
+            _, _ = tcuscan_ops.run_topk_fp16(x, k, min_x, max_x, s)
+        else:
+            _, _ = tcuscan_ops.run_topk_int16(x, k, min_x, max_x, s)
 
     return _run_benchmark(device, run_tcuscan_topk), k
 
@@ -1423,7 +1426,7 @@ if __name__ == "__main__":  # noqa
             partial(topk_benchmark, dtype=tdtype, k=k),
             sizes,
         )
-    elif bench == "tcuscan_topk" and dtype in ["int16"]:
+    elif bench == "tcuscan_topk" and dtype in ["int16", "fp16"]:
         k = args.k
         tdtype = STR_TO_DTYPE[dtype]
         benchmark(
