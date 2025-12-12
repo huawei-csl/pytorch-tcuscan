@@ -23,7 +23,7 @@ extern "C" __global__ __aicore__ void seg_scan_vec_single_core(
     GM_ADDR tilingGm) {
   (void)workspace;
   tcuscan::SegScanVecSingleCoreTiling tiling_data;
-  tiling::GetTilingData(&tiling_data, tilingGm);
+  GetTilingData(&tiling_data, tilingGm);
 
   if ASCEND_IS_AIV {
     KernelSegScanVecSingleCore<half, int8_t> op_vec(tiling_data.num_elems,

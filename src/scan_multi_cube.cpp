@@ -21,7 +21,7 @@ __aicore__ inline void _run_scan_multi_cube(GM_ADDR input_vec, GM_ADDR lower,
   using OutputT = kernel_utils::cube_unit::CubeOutType_t<InputT>;
 
   ScanMultiCubeTiling tiling;
-  tiling::GetTilingData(&tiling, tilingGm);
+  GetTilingData(&tiling, tilingGm);
 
   const uint32_t vec_len = tiling.num_elems;
   const uint32_t matmul_size = tiling.matmul_size;

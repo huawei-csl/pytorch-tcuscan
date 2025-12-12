@@ -78,7 +78,7 @@ extern "C" __global__ __aicore__ void seg_sum_single_core_fp16(
     GM_ADDR vec_in, GM_ADDR indptr, GM_ADDR vec_out, GM_ADDR workspace,
     GM_ADDR tiling_gm) {
   tcuscan::SegSumSingleCoreTiling tiling;
-  tiling::GetTilingData(&tiling, tiling_gm);
+  GetTilingData(&tiling, tiling_gm);
 
   const uint32_t vec_len = tiling.num_elems;
   const uint32_t num_segments = tiling.num_segments;
@@ -107,7 +107,7 @@ extern "C" __global__ __aicore__ void seg_sum_single_core_int8(
     GM_ADDR vec_in, GM_ADDR indptr, GM_ADDR vec_out, GM_ADDR workspace,
     GM_ADDR tiling_gm) {
   tcuscan::SegSumSingleCoreTiling tiling;
-  tiling::GetTilingData(&tiling, tiling_gm);
+  GetTilingData(&tiling, tiling_gm);
 
   const uint32_t vec_len = tiling.num_elems;
   const uint32_t num_segments = tiling.num_segments;

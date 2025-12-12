@@ -14,7 +14,7 @@ template <typename InputT>
 __aicore__ inline void _run_row_scan(GM_ADDR input_vec, GM_ADDR output_vec,
                                      GM_ADDR tilingGm) {
   tcuscan::RowScanTiling tiling;
-  tiling::GetTilingData(&tiling, tilingGm);
+  GetTilingData(&tiling, tilingGm);
 
   const uint32_t vec_len = tiling.num_elems;
   const uint32_t matmul_size = tiling.S;

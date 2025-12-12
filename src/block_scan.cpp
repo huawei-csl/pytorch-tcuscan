@@ -15,7 +15,7 @@ __aicore__ inline void _run_block_scan(GM_ADDR input_vec, GM_ADDR lower,
                                        GM_ADDR upper_strict, GM_ADDR output_vec,
                                        GM_ADDR tilingGm) {
   tcuscan::BlockScanTiling tiling;
-  tiling::GetTilingData(&tiling, tilingGm);
+  GetTilingData(&tiling, tilingGm);
 
   const uint32_t vec_len = tiling.num_elems;
   const uint32_t matmul_size = tiling.matmul_size;

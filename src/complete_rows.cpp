@@ -14,7 +14,7 @@ __aicore__ inline void _run_complete_rows(GM_ADDR input_vec, GM_ADDR input_sums,
                                           GM_ADDR output_vec,
                                           GM_ADDR tilingGm) {
   tcuscan::CompleteRowsTiling tiling;
-  tiling::GetTilingData(&tiling, tilingGm);
+  GetTilingData(&tiling, tilingGm);
 
   const uint32_t vec_len = tiling.num_elems;
   const uint32_t tile_width = tiling.tile_width;

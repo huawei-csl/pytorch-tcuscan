@@ -47,7 +47,7 @@ extern "C" __global__ __aicore__ void reduce_tiles_fp16(GM_ADDR input_vec,
                                                         GM_ADDR workspace,
                                                         GM_ADDR tiling_gm) {
   tcuscan::ReduceTilesTiling tiling;
-  tiling::GetTilingData(&tiling, tiling_gm);
+  GetTilingData(&tiling, tiling_gm);
 
   const uint32_t vec_len = tiling.num_elems;
   const uint32_t tile_len = tiling.tile_len;
@@ -68,7 +68,7 @@ extern "C" __global__ __aicore__ void reduce_tiles_int8(GM_ADDR input_vec,
                                                         GM_ADDR workspace,
                                                         GM_ADDR tiling_gm) {
   tcuscan::ReduceTilesTiling tiling;
-  tiling::GetTilingData(&tiling, tiling_gm);
+  GetTilingData(&tiling, tiling_gm);
 
   const uint32_t vec_len = tiling.num_elems;
   const uint32_t tile_len = tiling.tile_len;

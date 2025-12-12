@@ -21,7 +21,7 @@ extern "C" __global__ __aicore__ void gen_lower_fp16(GM_ADDR dst,
                                                      GM_ADDR tiling) {
   (void)workspace;
   tcuscan::GenLowerTiling tiling_data;
-  tiling::GetTilingData(&tiling_data, tiling);
+  GetTilingData(&tiling_data, tiling);
   run_gen_lower<half, false>(dst, tiling_data.matrix_size);
 }
 
@@ -37,7 +37,7 @@ extern "C" __global__ __aicore__ void gen_lower_fp16(GM_ADDR dst,
 //                                                      GM_ADDR tiling) {
 //   (void)workspace;
 //   GenLowerTiling tiling_data;
-//   tiling::GetTilingData(&tiling_data, tiling);
+//   GetTilingData(&tiling_data, tiling);
 //   run_gen_lower<float>(dst, tiling_data.matrix_size);
 // }
 
@@ -53,6 +53,6 @@ extern "C" __global__ __aicore__ void gen_lower_int8(GM_ADDR dst,
                                                      GM_ADDR tiling) {
   (void)workspace;
   tcuscan::GenLowerTiling tiling_data;
-  tiling::GetTilingData(&tiling_data, tiling);
+  GetTilingData(&tiling_data, tiling);
   run_gen_lower<int8_t, false>(dst, tiling_data.matrix_size);
 }

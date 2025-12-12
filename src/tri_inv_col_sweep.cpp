@@ -21,7 +21,7 @@ extern "C" __global__ __aicore__ void tri_inv_col_sweep_fp16(
     GM_ADDR vec_in, GM_ADDR vec_out, GM_ADDR workspace, GM_ADDR tiling_gm) {
   (void)workspace;
   tcuscan::TriInvColumnSweepTiling tiling;
-  tiling::GetTilingData(&tiling, tiling_gm);
+  GetTilingData(&tiling, tiling_gm);
 
   tcuscan::tri_inv_col_sweep<half>(vec_in, vec_out, tiling.num_elems,
                                    tiling.matrix_size);
@@ -39,7 +39,7 @@ extern "C" __global__ __aicore__ void tri_inv_col_sweep_fp32(
     GM_ADDR vec_in, GM_ADDR vec_out, GM_ADDR workspace, GM_ADDR tiling_gm) {
   (void)workspace;
   tcuscan::TriInvColumnSweepTiling tiling;
-  tiling::GetTilingData(&tiling, tiling_gm);
+  GetTilingData(&tiling, tiling_gm);
 
   tcuscan::tri_inv_col_sweep<float>(vec_in, vec_out, tiling.num_elems,
                                     tiling.matrix_size);

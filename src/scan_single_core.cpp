@@ -24,7 +24,7 @@ extern "C" __global__ __aicore__ void scan_single_core_int8(GM_ADDR vec_in,
                                                             GM_ADDR workspace,
                                                             GM_ADDR tilingGm) {
   tcuscan::SingleCoreScanTiling tiling;
-  tiling::GetTilingData(&tiling, tilingGm);
+  GetTilingData(&tiling, tilingGm);
 
   const uint32_t vec_len = tiling.num_elems;
   const uint32_t matmul_size = tiling.matmul_size;
@@ -50,7 +50,7 @@ extern "C" __global__ __aicore__ void scan_single_core_fp16(GM_ADDR vec_in,
                                                             GM_ADDR workspace,
                                                             GM_ADDR tilingGm) {
   tcuscan::SingleCoreScanTiling tiling;
-  tiling::GetTilingData(&tiling, tilingGm);
+  GetTilingData(&tiling, tilingGm);
 
   const uint32_t vec_len = tiling.num_elems;
   const uint32_t matmul_size = tiling.matmul_size;
@@ -77,7 +77,7 @@ extern "C" __global__ __aicore__ void scan_single_core_fp32(GM_ADDR vec_in,
                                                             GM_ADDR workspace,
                                                             GM_ADDR tilingGm) {
   tcuscan::SingleCoreScanTiling tiling;
-  tiling::GetTilingData(&tiling, tilingGm);
+  GetTilingData(&tiling, tilingGm);
 
   const uint32_t vec_len = tiling.num_elems;
   const uint32_t matmul_size = tiling.matmul_size;

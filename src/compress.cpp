@@ -26,7 +26,7 @@ extern "C" __global__ __aicore__ void compress_fp16(GM_ADDR x, GM_ADDR mask,
                                                     GM_ADDR workspace,
                                                     GM_ADDR tilingGm) {
   tcuscan::CompressTiling tiling;
-  tiling::GetTilingData(&tiling, tilingGm);
+  GetTilingData(&tiling, tilingGm);
 
   const uint32_t in_size = tiling.size;
   const uint32_t scan_tile_size = tiling.scan_tile_size;
@@ -48,7 +48,7 @@ extern "C" __global__ __aicore__ void compress_fp32(GM_ADDR x, GM_ADDR mask,
                                                     GM_ADDR workspace,
                                                     GM_ADDR tilingGm) {
   tcuscan::CompressTiling tiling;
-  tiling::GetTilingData(&tiling, tilingGm);
+  GetTilingData(&tiling, tilingGm);
 
   const uint32_t in_size = tiling.size;
   const uint32_t scan_tile_size = tiling.scan_tile_size;

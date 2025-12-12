@@ -95,7 +95,7 @@ extern "C" __global__ __aicore__ void seg_scan_single_core(GM_ADDR input_vec,
                                                            GM_ADDR workspace,
                                                            GM_ADDR tilingGm) {
   tcuscan::SegScanSingleCoreTiling tiling;
-  tiling::GetTilingData(&tiling, tilingGm);
+  GetTilingData(&tiling, tilingGm);
 
   GM_ADDR const lower_half = load_tril_matrix<half>(tiling.matmul_size);
   GM_ADDR const lower_int8 = load_tril_matrix<int8_t>(tiling.matmul_size);

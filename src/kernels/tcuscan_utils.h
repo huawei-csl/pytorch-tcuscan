@@ -46,6 +46,25 @@ constexpr __aicore__ inline uint16_t GetFractalMN() {
   return 16;
 }
 
+/**
+ * @brief Copies tiling structure from global memory to registers.
+ *
+ * @tparam TilingT Structure representing kernel tiling parameters.
+ * @param [in] tiling Pointer to the structure allocated in registers.
+ * @param [in] tiling_global Pointer to the structure in global memory.
+ */
+template <typename TilingT>
+__aicore__ inline void GetTilingData(TilingT* const tiling,
+                                     GM_ADDR tiling_global) {
+  uint32_t* const tiling_32b = reinterpret_cast<uint32_t*>(tiling);
+  const __gm__ uint32_t* const tiling_global_32b =
+      reinterpret_cast<__gm__ uint32_t*>(tiling_global);
+
+  for (uint32_t i = 0; i < sizeof(TilingT) / sizeof(uint32_t); i++) {
+    tiling_32b[i] = tiling_global_32b[i];
+  }
+}
+
 namespace exec_mode {
 
 /**
@@ -1525,29 +1544,6 @@ __aicore__ inline DataType ReduceScalarOr(const LocalTensor<DataType>& src) {
 }
 
 }  // namespace reduce
-
-namespace tiling {
-
-/**
- * @brief Copies tiling structure from global memory to registers.
- *
- * @tparam TilingT Structure representing kernel tiling parameters.
- * @param [in] tiling Pointer to the structure allocated in registers.
- * @param [in] tiling_global Pointer to the structure in global memory.
- */
-template <typename TilingT>
-__aicore__ inline void GetTilingData(TilingT* const tiling,
-                                     GM_ADDR tiling_global) {
-  uint32_t* const tiling_32b = reinterpret_cast<uint32_t*>(tiling);
-  const __gm__ uint32_t* const tiling_global_32b =
-      reinterpret_cast<__gm__ uint32_t*>(tiling_global);
-
-  for (uint32_t i = 0; i < sizeof(TilingT) / sizeof(uint32_t); i++) {
-    tiling_32b[i] = tiling_global_32b[i];
-  }
-}
-
-}  // namespace tiling
 
 namespace duplicate {
 

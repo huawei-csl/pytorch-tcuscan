@@ -24,7 +24,7 @@ extern "C" __global__ __aicore__ void tri_inv_cube_col_sweep_fp16(
   using tcuscan::KernelVecColSweepMatGen;
 
   tcuscan::TriInvCubeColSweepTiling tiling;
-  tiling::GetTilingData(&tiling, tiling_gm);
+  GetTilingData(&tiling, tiling_gm);
 
   const uint32_t matrix_size = tiling.matrix_size;
 

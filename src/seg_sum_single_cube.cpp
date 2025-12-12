@@ -80,7 +80,7 @@ extern "C" __global__ __aicore__ void seg_sum_single_cube_fp16(
     GM_ADDR vec_in, GM_ADDR upper, GM_ADDR lower, GM_ADDR segm_ind_in,
     GM_ADDR vec_out, GM_ADDR workspace, GM_ADDR tiling) {
   tcuscan::SegSumSingleCubeTiling t;
-  tiling::GetTilingData(&t, tiling);
+  GetTilingData(&t, tiling);
 
   const uint32_t vec_len = t.num_elems;
   const uint32_t num_segments = t.num_segments;

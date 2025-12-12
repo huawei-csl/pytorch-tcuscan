@@ -25,7 +25,7 @@ extern "C" __global__ __aicore__ void vadd_custom(GM_ADDR x, GM_ADDR y,
                                                   GM_ADDR tilingGm) {
   (void)workspace;
   tcuscan::VaddTiling tiling_data;
-  tiling::GetTilingData(&tiling_data, tilingGm);
+  GetTilingData(&tiling_data, tilingGm);
 
   if ASCEND_IS_AIV {
     KernelAdd op(tiling_data.vec_len, tiling_data.tile_len);

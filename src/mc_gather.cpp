@@ -24,7 +24,7 @@ extern "C" __global__ __aicore__ void mc_gather(GM_ADDR values_in,
                                                 GM_ADDR tiling_gm) {
   (void)workspace;
   tcuscan::McGatherTiling tiling;
-  tiling::GetTilingData(&tiling, tiling_gm);
+  GetTilingData(&tiling, tiling_gm);
 
   run_mc_gather(values_in, indexes_in, z_out, tiling.idx_len, tiling.val_len,
                 tiling.tile_len);

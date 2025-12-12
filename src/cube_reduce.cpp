@@ -22,7 +22,7 @@ extern "C" __global__ __aicore__ void cube_reduce_fp16(GM_ADDR vec_in,
                                                        GM_ADDR workspace,
                                                        GM_ADDR tiling_gm) {
   tcuscan::CubeReduceTiling tiling;
-  tiling::GetTilingData(&tiling, tiling_gm);
+  GetTilingData(&tiling, tiling_gm);
 
   const uint32_t vec_len = tiling.vec_len;
   const uint32_t matmul_size = tiling.matmul_size;
@@ -45,7 +45,7 @@ extern "C" __global__ __aicore__ void cube_reduce_int8(GM_ADDR vec_in,
                                                        GM_ADDR workspace,
                                                        GM_ADDR tiling_gm) {
   tcuscan::CubeReduceTiling tiling;
-  tiling::GetTilingData(&tiling, tiling_gm);
+  GetTilingData(&tiling, tiling_gm);
 
   const uint32_t vec_len = tiling.vec_len;
   const uint32_t matmul_size = tiling.matmul_size;

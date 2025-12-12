@@ -40,7 +40,7 @@ extern "C" __global__ __aicore__ void radix_sort_fp16(GM_ADDR in, GM_ADDR out,
   /// Indicates the order of sorting
   constexpr bool descending = false;
   tcuscan::RadixSortTiling tiling_data;
-  tiling::GetTilingData(&tiling_data, tiling);
+  GetTilingData(&tiling_data, tiling);
 
   GM_ADDR const usrWorkspace = AscendC::GetUserWorkspace(workspace);
 
@@ -112,7 +112,7 @@ extern "C" __global__ __aicore__ void radix_sort_int16(GM_ADDR in, GM_ADDR out,
   /// Indicates the order of sorting
   constexpr bool descending = false;
   tcuscan::RadixSortTiling tiling_data;
-  tiling::GetTilingData(&tiling_data, tiling);
+  GetTilingData(&tiling_data, tiling);
 
   // Arrays in workspace have to be aligned to their data type size. Therefore
   // we align the size of the radices array to 4 bytes, so that the
