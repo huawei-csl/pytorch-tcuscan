@@ -43,8 +43,6 @@ namespace tcuscan {
  */
 template <typename T = half>
 class KernelVecColSweepMatGen {
-  constexpr static uint32_t BUFFER_NUM = 1;
-
  public:
   /**
    * @brief Class constructor.
@@ -65,54 +63,28 @@ class KernelVecColSweepMatGen {
    */
   __aicore__ inline void Init(GM_ADDR vec_in, GM_ADDR vec_out) {
     const uint32_t vec_len = GetBlockNum() * tile_len_;
-    global_in_.SetGlobalBuffer((__gm__ T *)vec_in, vec_len);
-    global_out_.SetGlobalBuffer((__gm__ T *)vec_out, vec_len);
+    global_in_.SetGlobalBuffer((__gm__ T*)vec_in, vec_len);
+    global_out_.SetGlobalBuffer((__gm__ T*)vec_out, vec_len);
 
-    pipe_.InitBuffer(in_q_, BUFFER_NUM, tile_len_ * sizeof(T));
-    pipe_.InitBuffer(out_q_, BUFFER_NUM, tile_len_ * sizeof(T));
+    pipe_.InitBuffer(in_q_, 1, tile_len_ * sizeof(T));
+    pipe_.InitBuffer(out_q_, 2, tile_len_ * sizeof(T));
     pipe_.InitBuffer(work_buf_, tile_len_ * sizeof(T));
-  }
-
-  /**
-   * @brief Run the kernel - process all tiles.
-   *
-   */
-  __aicore__ inline void Process() {
-    // TODO(anastasios): optimization so that AIV0 and AIV handle the even and
-    // odd iterations, respectively.
-    if (GetSubBlockIdx() == 0) {
-      ProcessWorker();
-    } else {
-      ProcessDummy();
-    }
-  }
-
-  /**
-   * @brief Noop work by AIV. Synchronizes `matrix_size_ + 1` times with AI
-   * group to avoid deadlocks.
-   *
-   */
-  __aicore__ inline void ProcessDummy() {
-    sync::SyncGroup<sync::GroupSyncDirection::FULL>();
-    for (uint32_t iter = 0; iter < matrix_size_; iter++) {
-      (void)iter;
-      // Sync with all AIVs in group, to write the matrix.
-      sync::SyncGroup<sync::GroupSyncDirection::FULL>();
-    }
   }
 
   /**
    * @brief Run the kernel.
    *
    */
-  __aicore__ inline void ProcessWorker() {
+  __aicore__ inline void Process() {
     // Read input matrix into work_buf_.
     copy::CopyGmToVec(in_q_, global_in_[global_offset_]);
     ReadInputMatrixInUB();
 
-    // Write identity matrix for AIC
-    EnQueueIdentityMatrix();
-    copy::CopyVecToGm(global_out_[global_offset_], out_q_);
+    // AIV-0 writes identity matrix for AIC
+    if (GetSubBlockIdx() == 0) {
+      EnQueueIdentityMatrix();
+      copy::CopyVecToGm(global_out_[global_offset_], out_q_);
+    }
 
     //  Sync with all AIVs in group, to write the matrix.
     sync::SyncGroup<sync::GroupSyncDirection::FULL>();
@@ -120,8 +92,11 @@ class KernelVecColSweepMatGen {
     // Matrix column sweep algorithm requires `matrix_size_` iterations.
     for (uint32_t column_index = 0; column_index < matrix_size_;
          column_index++) {
-      ColumnSweepMatrixGenerator(matrix_size_ - (column_index + 1));
-      copy::CopyVecToGm(global_out_[global_offset_], out_q_);
+      // Each iteration is handled by 1 AIV core (round-robin)
+      if (GetBlockIdx() % GetTaskRation() == GetSubBlockIdx()) {
+        ColumnSweepMatrixGenerator(matrix_size_ - (column_index + 1));
+        copy::CopyVecToGm(global_out_[global_offset_], out_q_);
+      }
 
       // Sync with all AIVs in group, to write the matrix.
       sync::SyncGroup<sync::GroupSyncDirection::FULL>();
@@ -135,7 +110,7 @@ class KernelVecColSweepMatGen {
    * @param [in] lt Input local tensor of length \f$ matrix_size_ \times
    * matrix_size_\f$ where the identity matrix will be written.
    */
-  __aicore__ inline void FillIdentityMatrix(const LocalTensor<T> &lt) {
+  __aicore__ inline void FillIdentityMatrix(const LocalTensor<T>& lt) {
     Duplicate(lt, static_cast<T>(0), lt.GetSize());
 
     // Set one on the main diagonal
@@ -152,7 +127,7 @@ class KernelVecColSweepMatGen {
    * matrix_size_\f$.
    * @param [in] j Column index to set.
    */
-  __aicore__ inline void FillColumnWithStandardVector(const LocalTensor<T> &lt,
+  __aicore__ inline void FillColumnWithStandardVector(const LocalTensor<T>& lt,
                                                       uint32_t j) {
     const uint32_t offset = j * matrix_size_;
     // Write zeros on j-th column of input matrix
@@ -166,8 +141,8 @@ class KernelVecColSweepMatGen {
    * @brief Generates a "column-sweep" matrix and enqueues it into
    * `out_q_`.
    *
-   * Example of enqueued matrix in `out_q_` for matrix_size_ = 4 and col_index =
-   * 1
+   * Example of enqueued matrix in `out_q_` for `matrix_size_ = 4` and
+   * `col_index = 1`
    *
    * output = [[1   0  0 0],
    *            [0   1  0 0],
@@ -216,8 +191,8 @@ class KernelVecColSweepMatGen {
 
   TPipe pipe_;
 
-  TQue<QuePosition::VECIN, BUFFER_NUM> in_q_;
-  TQue<QuePosition::VECOUT, BUFFER_NUM> out_q_;
+  TQue<QuePosition::VECIN, 1> in_q_;
+  TQue<QuePosition::VECOUT, 2> out_q_;
 
   TBuf<QuePosition::VECCALC> work_buf_;
 

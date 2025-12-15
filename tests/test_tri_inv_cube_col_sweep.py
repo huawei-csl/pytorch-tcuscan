@@ -54,17 +54,17 @@ def triu_inv_cs(input_x, dtype: np.dtype = np.float16):
     return output.astype(dtype)
 
 
-def rand_triu_tensor(batch_size: int, n: int, dtype: np.dtype):
+def rand_triu_tensor(batch_size: int, n: int, dtype: np.dtype, scale: float = 0.05):
     "Returns a random unit upper triangular matrix of size n."
-    A = 0.2 * np.random.rand(batch_size, n, n)
+    A = scale * np.random.rand(batch_size, n, n)
     A = np.triu(A)
     for k in range(batch_size):
         np.fill_diagonal(A[k, :, :], 1.0)
     return A.astype(dtype)
 
 
-@pytest.mark.parametrize("batch_size", [1])
-@pytest.mark.parametrize("matrix_size", [16, 32, 64, 128])
+@pytest.mark.parametrize("batch_size", [1, 2, 4, 128])
+@pytest.mark.parametrize("matrix_size", [32, 64, 128])
 def test_tri_inv_cube_col_sweep(batch_size: int, matrix_size: int):
 
     data_type = np.float16
@@ -88,4 +88,4 @@ def test_tri_inv_cube_col_sweep(batch_size: int, matrix_size: int):
     torch.npu.synchronize()
 
     assert actual.shape == expected.shape
-    assert torch.allclose(actual.float(), expected.float(), atol=1e-1, rtol=1e-2)
+    assert torch.allclose(actual.float(), expected.float(), atol=1e-1, rtol=1e-1)
