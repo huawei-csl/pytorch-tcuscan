@@ -164,11 +164,12 @@ std::tuple<at::Tensor, at::Tensor> run_topk_fp16(const at::Tensor& x,
  *
  * @param x Input 1D tensor.
  * @param k Input parameter k (of top-k).
- * @param tile_len Tile length.
- * @return Returns Tensor of length 16, where second element is estimator
+ * @param num_samples Number of samples of length 32.
+ * @return Returns vector containing the k-largest value estimates per block.
+ * Vector length is `block_dim`
  */
 at::Tensor run_topk_pivot_fp16(const at::Tensor& x, uint32_t k,
-                               uint32_t tile_len = 32) {
+                               uint32_t num_samples) {
   const auto ascendc_platform =
       platform_ascendc::PlatformAscendCManager::GetInstance();
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
@@ -176,21 +177,24 @@ at::Tensor run_topk_pivot_fp16(const at::Tensor& x, uint32_t k,
   const auto dtype = x.options().dtype();
 
   const uint32_t total_length = x.numel();
+  const uint32_t tile_len = num_samples * 32 * 32;
   const uint32_t num_tiles = host_utils::CeilDiv(total_length, tile_len);
 
-  uint32_t block_dim = ascendc_platform->GetCoreNumAic();
+  uint32_t block_dim = ascendc_platform->GetCoreNumAiv();
   if (num_tiles < block_dim) {
     block_dim = num_tiles;
   }
 
   const at::Tensor vec_out =
-      at::empty({16}, at::TensorOptions().dtype(dtype).device(device));
+      at::empty({block_dim}, at::TensorOptions().dtype(dtype).device(device));
 
-  const uint32_t user_workspace_size = 0;
-  const at::Tensor workspace_tensor =
-      tcuscan::alloc_workspace(user_workspace_size, device);
+  const at::Tensor workspace_tensor = tcuscan::alloc_workspace(0, device);
 
-  const TopKPivotTiling tiling{block_dim, total_length, tile_len, k};
+  // TODO(anastasios): relate k_inner and k_outer with input k.
+  (void)k;
+  const uint32_t k_inner = 8;
+  const uint32_t k_outer = 8;
+  const TopKPivotTiling tiling{total_length, num_samples, k_inner, k_outer};
 
   uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
 

@@ -66,7 +66,8 @@ PYBIND11_MODULE(tcuscan_ops, m) {
   m.def("run_topk_fp16", &tcuscan::run_topk_fp16,
         "TopK using parallel splits (fp16)");
   m.def("run_topk_pivot_fp16", &tcuscan::run_topk_pivot_fp16,
-        "K-largest value estimator (fp16)");
+        pybind11::arg("x"), pybind11::arg("k"),
+        pybind11::arg("num_samples") = 16, "K-largest value estimator (fp16)");
   m.def("run_split", &tcuscan::run_split, "Split (16-bits)");
   m.def("run_split_ind", &tcuscan::run_split_ind,
         "Split with indices (16-bits)");

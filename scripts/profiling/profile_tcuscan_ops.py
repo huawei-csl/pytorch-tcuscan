@@ -1445,7 +1445,7 @@ if __name__ == "__main__":  # noqa
             device,
             f"topk_pivot_{k}",
             dtype,
-            partial(topk_benchmark, dtype=tdtype, k=k),
+            partial(topk_pivot_benchmark, dtype=tdtype, k=k),
             sizes,
         )
     elif bench == "tcuscan_topk" and dtype in ["int16", "fp16"]:

@@ -79,6 +79,7 @@ extern "C" __global__ __aicore__ void topk_pivot_fp16(GM_ADDR vec_in,
   tcuscan::TopKPivotTiling tiling;
   GetTilingData(&tiling, tiling_ptr);
 
-  run_pivot_topk_estimator<true, half>(vec_in, vec_out, tiling.num_elems,
-                                       tiling.tile_len, tiling.k);
+  tcuscan::run_topk_pivot<false, half>(vec_in, vec_out, tiling.num_elems,
+                                       tiling.num_samples, tiling.k_inner,
+                                       tiling.k_outer);
 }

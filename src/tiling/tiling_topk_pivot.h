@@ -15,14 +15,14 @@ namespace tcuscan {
  * @brief Vector K-largest estimator kernel tiling parameter structure.
  */
 struct TopKPivotTiling {
-  /// @brief Number of blocks.
-  uint32_t num_blocks;
   /// @brief Total number of input elements.
   uint32_t num_elems;
-  /// @brief Tiling length.
-  uint32_t tile_len;
-  /// @brief Top-K parameter.
-  uint32_t k;
+  /// @brief Number of samples of length *exactly* 32.
+  uint32_t num_samples;
+  /// @brief Inner top-k parameter. Integer in range (1,32).
+  uint32_t k_inner;
+  /// @brief Top-K parameter. Integer in range (1, num_samples).
+  uint32_t k_outer;
 };
 #pragma pack(pop)
 }  // namespace tcuscan
