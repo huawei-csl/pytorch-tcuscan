@@ -47,6 +47,66 @@ constexpr __aicore__ inline uint16_t GetFractalMN() {
 }
 
 /**
+ * @brief Fill input with identity martix like `np.eye(matrix_size)`.
+ *
+ * It is assumed that the input local tensor has size at least \f$ matrix_size^2
+ * \f$.
+ *
+ * @param [in] mat_lt Input local tensor of length \f$ matrix_size \times
+ * matrix_size\f$ where the identity matrix will be written.
+ * @param [in] matrix_size Matrix size.
+ */
+template <typename T>
+__aicore__ inline void FillIdentity(const LocalTensor<T>& mat_lt,
+                                    uint32_t matrix_size) {
+  AscendC::Duplicate(mat_lt, static_cast<T>(0), matrix_size * matrix_size);
+
+  // Set one on the main diagonal
+  for (uint32_t i = 0; i < matrix_size; i++) {
+    mat_lt.SetValue(i * matrix_size + i, static_cast<T>(1));
+  }
+}
+
+/**
+ * @brief Fill vector with the (column_index)-th column of the identity matrix.
+ *
+ * @param [in] lt Input vector of length \f$ matrix_size \f$.
+ * @param [in] matrix_size Identity matrix size.
+ * @param [in] column_index Column index to identity matrix.
+ */
+template <typename T>
+__aicore__ inline void FillStandardVector(const LocalTensor<T>& lt,
+                                          uint32_t matrix_size,
+                                          uint32_t column_index) {
+  // Write zeros on j-th column of input matrix
+  Duplicate<T>(lt, static_cast<T>(0), matrix_size);
+
+  // Write one on the diagonal (j,j)-th element of input matrix.
+  lt.SetValue(column_index, static_cast<T>(1));
+}
+
+/**
+ * @brief Fill diagonal entries like `np.filldiagonal(A, value)`.
+ *
+ * It is assumed that the input local tensor has size at least \f$ matrix_size^2
+ * \f$.
+ *
+ * @tparam Data type.
+ *
+ * @param [in] mat_lt Input local tensor of length \f$ matrix_size \times
+ * matrix_size\f$
+ * @param [in] matrix_size Matrix size.
+ * @param [in] value Value to fill in diagonals.
+ */
+template <typename T>
+__aicore__ inline void FillDiagonal(const LocalTensor<T>& mat_lt,
+                                    uint32_t matrix_size, T value) {
+  for (uint32_t i = 0; i < matrix_size; i++) {
+    mat_lt.SetValue(i * matrix_size + i, value);
+  }
+}
+
+/**
  * @brief Copies tiling structure from global memory to registers.
  *
  * @tparam TilingT Structure representing kernel tiling parameters.
@@ -1442,6 +1502,10 @@ __aicore__ inline T Min(T v1, T v2) {
  *
  * Avoids the compilation message: `error: half precision operation is not
  * allowed in aicore function`
+ *
+ * @param [in] v1 First value.
+ * @param [in] v2 Second value.
+ * @return Smaller value.
  */
 template <>
 __aicore__ inline half Min(half v1, half v2) {
