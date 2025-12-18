@@ -96,31 +96,24 @@ class KernelVecColSweepMatGen {
     // First matrix is identity (just wait one more round)
     sync::SyncGroup<sync::GroupSyncDirection::FULL>();
 
+    const LocalTensor<T> work_lt = work_buf_.Get<T>();
+
     // Matrix column sweep algorithm requires `matrix_size_` iterations.
     for (int32_t col_index = matrix_size_ - 2; col_index >= 0; col_index--) {
-      // AIV-0: writes the  (col_index + 1)-th column of the identity matrix
-      // AIV-1: writes the "column-sweep" column of matrix `M`.
+      // AIV-0: writes the  (col_index + 1)-th column of the identity matrix and
+      // writes the "column-sweep" column of matrix `M`.
       if (GetSubBlockIdx() == 0) {
-        const uint32_t out_offset =
-            global_offset_ + (col_index + 1) * matrix_size_;
         const LocalTensor<T> vec_out_lt = out_q_.AllocTensor<T>();
+        kernel_utils::FillIdentity(vec_out_lt, matrix_size_);
 
-        // Write the (col_index + 1)-th column of identity matrix on first
-        // `matrix_size_` elements of vec_out_lt.
-        FillStandardVector(vec_out_lt, matrix_size_, col_index + 1);
-
-        out_q_.EnQue<T>(vec_out_lt);
-        copy::CopyVecToGm(global_out_[out_offset], out_q_, matrix_size_);
-
-      } else if (GetSubBlockIdx() == 1) {
-        const uint32_t out_offset = global_offset_ + col_index * matrix_size_;
-        const LocalTensor<T> vec_out_lt = out_q_.AllocTensor<T>();
-
+        AscendC::PipeBarrier<PIPE_ALL>();
         // Write the (col_index)-th column of matrix M.
-        LocalTensor<T> work_lt = work_buf_.Get<T>();
-        DataCopy(vec_out_lt, work_lt[col_index * matrix_size_], matrix_size_);
+        const uint32_t col_offset = col_index * matrix_size_;
+        DataCopy(vec_out_lt[col_offset], work_lt[col_offset], matrix_size_);
+        AscendC::PipeBarrier<PIPE_ALL>();
+
         out_q_.EnQue<T>(vec_out_lt);
-        copy::CopyVecToGm(global_out_[out_offset], out_q_, matrix_size_);
+        copy::CopyVecToGm(global_out_[global_offset_], out_q_);
       }
 
       // Sync with all AIVs in group, to write the matrix.
@@ -130,12 +123,12 @@ class KernelVecColSweepMatGen {
 
  private:
   /**
-   * @brief Read the input triangular matrix A into the `work_buf_`.
+   * @brief Read (and transform) the input triangular matrix A into the
+   * `work_buf_`. The transformation is `2*I_n - A`.
    */
   __aicore__ inline void ReadInputMatrixInUB() {
     LocalTensor<T> vec_in_lt = in_q_.DeQue<T>();
     LocalTensor<T> work_lt = work_buf_.Get<T>();
-    Duplicate(work_lt, static_cast<T>(0), work_lt.GetSize());
     Muls(work_lt, vec_in_lt, static_cast<T>(-1), vec_in_lt.GetSize());
     kernel_utils::FillDiagonal(work_lt, matrix_size_, static_cast<T>(1));
     in_q_.FreeTensor<T>(vec_in_lt);
@@ -157,6 +150,7 @@ class KernelVecColSweepMatGen {
   TQue<QuePosition::VECOUT, 1> out_q_;
 
   TBuf<QuePosition::VECCALC> work_buf_;
+  TBuf<QuePosition::VECCALC> identity_buf_;
 
   GlobalTensor<T> global_in_;
   GlobalTensor<T> global_out_;

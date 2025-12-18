@@ -52,8 +52,8 @@ class KernelTriInvCubeColSweep {
   __aicore__ inline void Init(GM_ADDR matrix_stream_in,
                               GM_ADDR inv_matrix_out) {
     const uint32_t vec_len = GetBlockNum() * tile_len_;
-    global_A_.SetGlobalBuffer((__gm__ InputT *)matrix_stream_in, vec_len);
-    global_C_.SetGlobalBuffer((__gm__ OutputT *)inv_matrix_out, vec_len);
+    global_A_.SetGlobalBuffer((__gm__ InputT*)matrix_stream_in, vec_len);
+    global_C_.SetGlobalBuffer((__gm__ OutputT*)inv_matrix_out, vec_len);
 
     pipe_.InitBuffer(a1_q_, 1, tile_len_ * sizeof(InputT));
     pipe_.InitBuffer(a2_q_, 1, tile_len_ * sizeof(InputT));
@@ -80,6 +80,7 @@ class KernelTriInvCubeColSweep {
       // Load next matrix A and perform C = A @ C
       LoadMatrixAintoL0A();
       MultiplyAWithC();
+      AscendC::PipeBarrier<PIPE_ALL>();
     }
 
     // Write L0C matrix to global memory

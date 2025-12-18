@@ -63,12 +63,20 @@ def rand_triu_tensor(batch_size: int, n: int, dtype: np.dtype, scale: float = 0.
     return A.astype(dtype)
 
 
-@pytest.mark.parametrize("batch_size", [1, 2, 4, 128])
-@pytest.mark.parametrize("matrix_size", [32, 64, 128])
-def test_tri_inv_cube_col_sweep(batch_size: int, matrix_size: int):
+def identity_tensor(batch_size: int, n: int, dtype: np.dtype):
+    A = np.ones((batch_size, n, n))
+    A = np.triu(A)
+    A = np.tril(A)
+    return A.astype(dtype)
 
-    data_type = np.float16
-    input_x_cpu = rand_triu_tensor(batch_size, matrix_size, data_type)
+
+def ones_tensor(batch_size: int, n: int, dtype: np.dtype):
+    A = np.ones((batch_size, n, n))
+    A = np.triu(A)
+    return A.astype(dtype)
+
+
+def _run_test(input_x_cpu: torch.tensor, atol: float, rtol: float):
     expected_cpu = triu_inv_cs(input_x_cpu)
 
     # Convert input matrices from row-major order to column-major order
@@ -78,14 +86,32 @@ def test_tri_inv_cube_col_sweep(batch_size: int, matrix_size: int):
     torch.npu.synchronize()
     expected = torch.from_numpy(expected_cpu).half().npu()
     torch.npu.synchronize()
-
-    print("*" * 40)
-    print(f"Input_x (shape: {input_x.shape})")
-    print("*" * 40)
-
-    torch.npu.synchronize()
     actual = tcuscan_ops.run_tri_inv_cube_col_sweep(input_x)
     torch.npu.synchronize()
 
     assert actual.shape == expected.shape
-    assert torch.allclose(actual.float(), expected.float(), atol=1e-1, rtol=1e-1)
+    assert torch.allclose(actual.float(), expected.float(), atol=atol, rtol=rtol)
+
+
+@pytest.mark.parametrize("batch_size", [1, 2, 4, 128])
+@pytest.mark.parametrize("matrix_size", [16, 32, 64, 128])
+def test_tri_inv_cube_col_sweep_random(batch_size: int, matrix_size: int):
+    data_type = np.float16
+    input_x_cpu = rand_triu_tensor(batch_size, matrix_size, data_type)
+    _run_test(input_x_cpu, atol=1e-1, rtol=1e-1)
+
+
+@pytest.mark.parametrize("batch_size", [1, 2, 4])
+@pytest.mark.parametrize("matrix_size", [16, 32, 64, 128])
+def test_tri_inv_cube_col_sweep_identity(batch_size: int, matrix_size: int):
+    data_type = np.float16
+    input_x_cpu = identity_tensor(batch_size, matrix_size, data_type)
+    _run_test(input_x_cpu, atol=0, rtol=0)
+
+
+@pytest.mark.parametrize("batch_size", [1, 2, 4])
+@pytest.mark.parametrize("matrix_size", [16, 32, 64, 128])
+def test_tri_inv_cube_col_sweep_ones_tensor(batch_size: int, matrix_size: int):
+    data_type = np.float16
+    input_x_cpu = ones_tensor(batch_size, matrix_size, data_type)
+    _run_test(input_x_cpu, atol=0, rtol=0)
