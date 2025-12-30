@@ -41,7 +41,7 @@ at::Tensor run_compress(const at::Tensor& x, const at::Tensor& mask, int S) {
   const uint32_t tile_elems = matmul_size * matmul_size;
   const uint32_t vec_tile_size = tile_elems / 2;
 
-  const uint32_t num_tiles = total_length / tile_elems;
+  const uint32_t num_tiles = host_utils::CeilDiv(total_length, tile_elems);
 
   uint32_t block_dim = ascendc_platform->GetCoreNumAic();
   while (num_tiles % block_dim != 0) {

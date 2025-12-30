@@ -16,8 +16,7 @@ NPU_DEVICE = os.environ.get("NPU_DEVICE", "npu:1")
 torch.npu.config.allow_internal_format = False
 torch.npu.set_device(NPU_DEVICE)
 
-# _OFFSETS = [-127, -13, 13, 65, 129]
-_OFFSETS = [0]
+_OFFSETS = [-127, -13, 13, 65, 129]
 
 
 def get_lengths(s: int, max_iters: int):

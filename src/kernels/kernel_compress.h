@@ -259,7 +259,7 @@ __aicore__ inline void run_compress(GM_ADDR in, GM_ADDR mask, GM_ADDR out,
   SyncAll<false /*isAIVOnly*/>();
 
   if ASCEND_IS_AIV {
-    KernelCompress<InputT> op(vec_len, tile_len * tile_len / 4);
+    KernelCompress<InputT> op(vec_len, tile_len * tile_len / 2);
     op.Init(in, mask, num_ones_per_block, out);
     op.Process();
   }
