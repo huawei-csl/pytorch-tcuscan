@@ -9,6 +9,7 @@ extern "C" __global__ __aicore__ void csr_gather(
   tcuscan::CSRGatherTiling t;
   GetTilingData(&t, tiling_gm);
 
-  run_csr_gather<false>(values_in, cols_in, rows_in, x_in, z_out, t.num_elems,
-                        t.num_row_ptr, t.num_x_elems, t.tile_len);
+  tcuscan::run_csr_gather<false>(values_in, cols_in, rows_in, x_in, z_out,
+                                 t.num_elems, t.num_row_ptr, t.num_x_elems,
+                                 t.tile_len);
 }

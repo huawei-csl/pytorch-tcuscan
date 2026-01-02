@@ -10,10 +10,24 @@
 #include "kernels/tcuscan_utils.h"
 #include "tiling/tiling_seg_scan_single_core.h"
 
-__aicore__ inline void _run_kernel(GM_ADDR input_vec, GM_ADDR input_flag,
-                                   GM_ADDR u_s_half, GM_ADDR u_s_int8,
-                                   GM_ADDR output_vec, uint32_t vec_len,
-                                   uint32_t matmul_size, GM_ADDR workspace) {
+namespace tcuscan {
+
+/**
+ * @brief Run the single core segmented scan kernel.
+ *
+ * @param input_vec
+ * @param input_flag
+ * @param u_s_half
+ * @param u_s_int8
+ * @param output_vec
+ * @param vec_len
+ * @param matmul_size
+ * @param workspace
+ */
+__aicore__ inline void run_seg_scan_single_core_kernel(
+    GM_ADDR input_vec, GM_ADDR input_flag, GM_ADDR u_s_half, GM_ADDR u_s_int8,
+    GM_ADDR output_vec, uint32_t vec_len, uint32_t matmul_size,
+    GM_ADDR workspace) {
   using InputT = half;
   using OutputT = float;
   using FlagT = int8_t;
@@ -78,7 +92,9 @@ __aicore__ inline void _run_kernel(GM_ADDR input_vec, GM_ADDR input_flag,
       op_vec.Process();
     }
   }
-}
+};
+
+}  // namespace tcuscan
 
 /**
  * @brief Run the single core segmented scan kernel.
@@ -100,8 +116,7 @@ extern "C" __global__ __aicore__ void seg_scan_single_core(GM_ADDR input_vec,
   GM_ADDR const lower_half = load_tril_matrix<half>(tiling.matmul_size);
   GM_ADDR const lower_int8 = load_tril_matrix<int8_t>(tiling.matmul_size);
 
-  GM_ADDR const usrWorkspace = AscendC::GetUserWorkspace(workspace);
-
-  _run_kernel(input_vec, input_flag, lower_half, lower_int8, output_vec,
-              tiling.vec_len, tiling.matmul_size, usrWorkspace);
+  tcuscan::run_seg_scan_single_core_kernel(
+      input_vec, input_flag, lower_half, lower_int8, output_vec, tiling.vec_len,
+      tiling.matmul_size, workspace);
 }

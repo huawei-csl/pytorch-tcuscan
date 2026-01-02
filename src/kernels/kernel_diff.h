@@ -12,6 +12,8 @@
 using namespace AscendC;
 using namespace kernel_utils;
 
+namespace tcuscan {
+
 /**
  * @brief Returns the difference give an input vector x.
  *
@@ -163,3 +165,5 @@ __aicore__ inline void run_diff(GM_ADDR vec_in, GM_ADDR vec_out,
     op.Process();
   }
 }
+
+}  // namespace tcuscan

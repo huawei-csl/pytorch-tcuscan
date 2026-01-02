@@ -12,6 +12,8 @@
 using namespace AscendC;
 using namespace kernel_utils;
 
+namespace tcuscan {
+
 /**
  * @brief Performs multi-core AIV gather operation given an 1D vector
 `values_in` and an 1D indices vector `idx_in`. Returns
@@ -379,3 +381,5 @@ __aicore__ inline void run_mc_gather(GM_ADDR values_in, GM_ADDR idx_in,
     op.Process();
   }
 }
+
+}  // namespace tcuscan

@@ -13,6 +13,8 @@
 using namespace AscendC;
 using namespace kernel_utils;
 
+namespace tcuscan {
+
 /**
  * @brief Kernel that pads an ND tensor from GM to GM by padding the inner
  * dimension by an alignment legnth.
@@ -173,3 +175,5 @@ __aicore__ inline void run_pad_batch(GM_ADDR vec_in, GM_ADDR vec_out,
     op.Process();
   }
 }
+
+}  // namespace tcuscan

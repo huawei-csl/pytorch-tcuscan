@@ -23,7 +23,8 @@ extern "C" __global__ __aicore__ void copy_fp16(GM_ADDR in, GM_ADDR out,
   (void)workspace;
   tcuscan::CopyTiling tiling_data;
   GetTilingData(&tiling_data, tiling);
-  run_copy<half>(in, out, tiling_data.num_elems, tiling_data.tile_size);
+  tcuscan::run_copy<half>(in, out, tiling_data.num_elems,
+                          tiling_data.tile_size);
 }
 
 /**
@@ -40,5 +41,6 @@ extern "C" __global__ __aicore__ void copy_fp32(GM_ADDR in, GM_ADDR out,
   (void)workspace;
   tcuscan::CopyTiling tiling_data;
   GetTilingData(&tiling_data, tiling);
-  run_copy<float>(in, out, tiling_data.num_elems, tiling_data.tile_size);
+  tcuscan::run_copy<float>(in, out, tiling_data.num_elems,
+                           tiling_data.tile_size);
 }

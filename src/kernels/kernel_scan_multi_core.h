@@ -86,22 +86,24 @@ __aicore__ inline void run_scan_multi_core_kernel(
     GM_ADDR const padded_rowwise_scan = padded_input + padded_input_size;
     GM_ADDR const sums = padded_rowwise_scan + padded_rowwise_size;
 
-    run_pad_kernel<InputT, false>(input_vec, padded_input, vec_len, align_size);
+    tcuscan::run_pad_kernel<InputT, false>(input_vec, padded_input, vec_len,
+                                           align_size);
 
     sync::SyncAllCores();
     sync::SyncGroup<sync::GroupSyncDirection::FULL>();
     PipeBarrier<PIPE_ALL>();
 
     if ASCEND_IS_AIC {
-      KernelRowScan<InputT> op_cube(matmul_size, matmul_size, padded_vec_len_c);
+      tcuscan::KernelRowScan<InputT> op_cube(matmul_size, matmul_size,
+                                             padded_vec_len_c);
       op_cube.Init(padded_input, upper_triangular, padded_rowwise_scan);
       op_cube.Process();
       PipeBarrier<PIPE_ALL>();
     }
 
     if ASCEND_IS_AIV {
-      KernelReduceTiles<InputT> op_reduce(matmul_size * matmul_size / 2,
-                                          padded_vec_len_v);
+      tcuscan::KernelReduceTiles<InputT> op_reduce(
+          matmul_size * matmul_size / 2, padded_vec_len_v);
       op_reduce.Init(padded_input, sums);
       op_reduce.Process();
     }
@@ -109,8 +111,8 @@ __aicore__ inline void run_scan_multi_core_kernel(
     SyncAll<false /*isAIVOnly*/>();
 
     if ASCEND_IS_AIV {
-      KernelCompleteRows<OutputT, IsInclusive> op(matmul_size, matmul_size / 2,
-                                                  vec_len);
+      tcuscan::KernelCompleteRows<OutputT, IsInclusive> op(
+          matmul_size, matmul_size / 2, vec_len);
       op.Init(padded_rowwise_scan, sums, output_vec);
       op.Process(starting_value);
     }
@@ -125,15 +127,15 @@ __aicore__ inline void run_scan_multi_core_kernel(
         IsInclusive ? workspace : padded_rowwise_scan + padded_rowwise_size;
 
     if ASCEND_IS_AIC {
-      KernelRowScan<InputT> op_cube(matmul_size, matmul_size, vec_len);
+      tcuscan::KernelRowScan<InputT> op_cube(matmul_size, matmul_size, vec_len);
       op_cube.Init(input_vec, upper_triangular, intermediate_res);
       op_cube.Process();
       PipeBarrier<PIPE_ALL>();
     }
 
     if ASCEND_IS_AIV {
-      KernelReduceTiles<InputT> op_reduce(matmul_size * matmul_size / 2,
-                                          vec_len);
+      tcuscan::KernelReduceTiles<InputT> op_reduce(
+          matmul_size * matmul_size / 2, vec_len);
       op_reduce.Init(input_vec, sums);
       op_reduce.Process();
     }
@@ -141,8 +143,8 @@ __aicore__ inline void run_scan_multi_core_kernel(
     SyncAll<false /*isAIVOnly*/>();
 
     if ASCEND_IS_AIV {
-      KernelCompleteRows<OutputT, IsInclusive> op(matmul_size, matmul_size / 2,
-                                                  vec_len);
+      tcuscan::KernelCompleteRows<OutputT, IsInclusive> op(
+          matmul_size, matmul_size / 2, vec_len);
       op.Init(intermediate_res, sums, output_vec);
       op.Process(starting_value);
     }

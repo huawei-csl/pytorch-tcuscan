@@ -12,6 +12,8 @@
 using namespace AscendC;
 using namespace kernel_utils;
 
+namespace tcuscan {
+
 /**
  * @brief Kernel that moves data from GM to GM and adds padding to it
  *
@@ -153,3 +155,5 @@ __aicore__ inline void run_pad_kernel(GM_ADDR in, GM_ADDR out, uint32_t vec_len,
     op_pad.Process();
   }
 }
+
+}  // namespace tcuscan

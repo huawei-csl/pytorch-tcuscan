@@ -12,6 +12,8 @@
 using namespace AscendC;
 using namespace kernel_utils;
 
+namespace tcuscan {
+
 /**
  * @brief Performs a block-wise inclusive scan on an input vector using the
  * "cube-only" algorithm.
@@ -228,3 +230,5 @@ class KernelBlockScan {
   const uint32_t b_cube_tile_size_ = K_ * N_;
   const uint32_t c_cube_tile_size_ = M_ * N_;
 };
+
+}  // namespace tcuscan

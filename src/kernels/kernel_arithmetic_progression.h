@@ -9,6 +9,8 @@
 #include "ascendc_kernel_operator.h"
 #include "tcuscan_utils.h"
 
+namespace tcuscan {
+
 using namespace AscendC;
 using namespace kernel_utils;
 
@@ -160,3 +162,5 @@ __aicore__ inline void run_arithmetic_progression(GM_ADDR buffer,
     op.Process();
   }
 }
+
+}  // namespace tcuscan

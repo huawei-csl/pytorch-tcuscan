@@ -32,8 +32,8 @@ extern "C" __global__ __aicore__ void scan_single_core_int8(GM_ADDR vec_in,
   GM_ADDR const usrWorkspace = AscendC::GetUserWorkspace(workspace);
   GM_ADDR const lower = load_tril_matrix<int8_t>(matmul_size);
 
-  run_scan_single_core<int8_t>(vec_in, lower, vec_out, vec_len, matmul_size,
-                               usrWorkspace, running_sum);
+  tcuscan::run_scan_single_core<int8_t>(vec_in, lower, vec_out, vec_len,
+                                        matmul_size, usrWorkspace, running_sum);
 }
 
 /**
@@ -59,8 +59,8 @@ extern "C" __global__ __aicore__ void scan_single_core_fp16(GM_ADDR vec_in,
   GM_ADDR const usrWorkspace = AscendC::GetUserWorkspace(workspace);
   GM_ADDR const lower = load_tril_matrix<half>(matmul_size);
 
-  run_scan_single_core<half>(vec_in, lower, vec_out, vec_len, matmul_size,
-                             usrWorkspace, running_sum);
+  tcuscan::run_scan_single_core<half>(vec_in, lower, vec_out, vec_len,
+                                      matmul_size, usrWorkspace, running_sum);
 }
 
 /**
@@ -86,6 +86,6 @@ extern "C" __global__ __aicore__ void scan_single_core_fp32(GM_ADDR vec_in,
   GM_ADDR const usrWorkspace = AscendC::GetUserWorkspace(workspace);
   GM_ADDR const lower = load_tril_matrix<float>(matmul_size);
 
-  run_scan_single_core<float>(vec_in, lower, vec_out, vec_len, matmul_size,
-                              usrWorkspace, running_sum);
+  tcuscan::run_scan_single_core<float>(vec_in, lower, vec_out, vec_len,
+                                       matmul_size, usrWorkspace, running_sum);
 }

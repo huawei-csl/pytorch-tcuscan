@@ -15,6 +15,8 @@
 using namespace AscendC;
 using namespace kernel_utils;
 
+namespace tcuscan {
+
 /**
  * @brief Performs a "row-wise" inclusive scan on an input vector.
  *
@@ -258,3 +260,5 @@ __aicore__ inline void run_row_scan_kernel(GM_ADDR input_vec,
     }
   }
 }
+
+}  // namespace tcuscan

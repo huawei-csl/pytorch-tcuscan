@@ -13,6 +13,8 @@
 using namespace AscendC;
 using namespace kernel_utils;
 
+namespace tcuscan {
+
 /**
  * @brief Given a vector `vec_in` along with a segments indicator vector
  * `vec_f_in`, returns the following (Python notation)
@@ -244,3 +246,5 @@ __aicore__ inline void run_seg_scan_mc_revert(GM_ADDR vec_in, GM_ADDR vec_f_in,
     op.Process();
   }
 }
+
+}  // namespace tcuscan

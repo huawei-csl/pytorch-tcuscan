@@ -12,6 +12,8 @@
 using namespace AscendC;
 using namespace kernel_utils;
 
+namespace tcuscan {
+
 /**
  * @brief Performs a multi-core AIV gather operation given an 1D vector
  *   `values_in` and an 1D indices vector `indices_in` that returns a vector:
@@ -407,3 +409,5 @@ __aicore__ inline void run_gather_spmv(GM_ADDR values_in, GM_ADDR idx_in,
     op.Process();
   }
 }
+
+}  // namespace tcuscan

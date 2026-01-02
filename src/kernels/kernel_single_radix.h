@@ -12,6 +12,8 @@
 using namespace AscendC;
 using namespace kernel_utils;
 
+namespace tcuscan {
+
 /**
  * @brief Retrieves a bit at the given index from all input values.
  *
@@ -158,3 +160,5 @@ __aicore__ inline void run_single_radix(GM_ADDR input, GM_ADDR output,
     op.Process();
   }
 }
+
+}  // namespace tcuscan

@@ -10,12 +10,27 @@
 #include "kernels/tcuscan_utils.h"
 #include "tiling/tiling_block_scan.h"
 
+namespace tcuscan {
+
+/**
+ * @brief Run the multi core inclusive block scan kernel
+ *
+ *
+ * @tparam InputT Input data type.
+ *
+ * @param [in] input_vec Pointer to an input vector.
+ * @param [in] lower Pointer to upper-triangular matrix filled with ones.
+ * @param [in] upper_strict Pointer to strict upper-triangular matrix filled
+ * with ones
+ * @param [in] output_vec Pointer to an output vector.
+ * @param [in] tiling_gm Pointer to the tiling buffer.
+ */
 template <typename InputT>
-__aicore__ inline void _run_block_scan(GM_ADDR input_vec, GM_ADDR lower,
-                                       GM_ADDR upper_strict, GM_ADDR output_vec,
-                                       GM_ADDR tilingGm) {
-  tcuscan::BlockScanTiling tiling;
-  GetTilingData(&tiling, tilingGm);
+__aicore__ inline void run_block_scan(GM_ADDR input_vec, GM_ADDR lower,
+                                      GM_ADDR upper_strict, GM_ADDR output_vec,
+                                      GM_ADDR tiling_gm) {
+  BlockScanTiling tiling;
+  GetTilingData(&tiling, tiling_gm);
 
   const uint32_t vec_len = tiling.num_elems;
   const uint32_t matmul_size = tiling.matmul_size;
@@ -26,6 +41,8 @@ __aicore__ inline void _run_block_scan(GM_ADDR input_vec, GM_ADDR lower,
     op_cube.Process();
   }
 }
+
+}  // namespace tcuscan
 
 /**
  * @brief Run the multi core inclusive block scan kernel with dtype fp16
@@ -42,5 +59,6 @@ extern "C" __global__ __aicore__ void block_scan_fp16(
     GM_ADDR input_vec, GM_ADDR lower, GM_ADDR upper_strict, GM_ADDR output_vec,
     GM_ADDR workspace, GM_ADDR tilingGm) {
   (void)workspace;
-  _run_block_scan<half>(input_vec, lower, upper_strict, output_vec, tilingGm);
+  tcuscan::run_block_scan<half>(input_vec, lower, upper_strict, output_vec,
+                                tilingGm);
 }

@@ -12,6 +12,8 @@
 using namespace AscendC;
 using namespace kernel_utils;
 
+namespace tcuscan {
+
 /**
  * @brief Row scan on two input vectors using matrix multiplications
  *
@@ -201,3 +203,5 @@ __aicore__ inline void run_scan2p_single_core(GM_ADDR vec_in, GM_ADDR vec_f_in,
     op.Process();
   }
 }
+
+}  // namespace tcuscan

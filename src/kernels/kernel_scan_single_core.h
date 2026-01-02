@@ -13,6 +13,8 @@
 using namespace AscendC;
 using namespace kernel_utils;
 
+namespace tcuscan {
+
 /**
  * @brief Transforms an inclusive row-wise scan of a vector into an
  * inclusive scan of it.
@@ -241,3 +243,5 @@ __aicore__ inline void run_scan_single_core(
     }
   }
 }
+
+}  // namespace tcuscan

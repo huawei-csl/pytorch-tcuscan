@@ -12,6 +12,8 @@
 using namespace AscendC;
 using namespace kernel_utils;
 
+namespace tcuscan {
+
 /**
  * @brief Compute the segmented scan of an input vector and flag.
  *
@@ -330,3 +332,5 @@ class KernelSegScanVecSingleCore {
   const uint32_t tile_len_;
   const uint32_t num_tiles_;
 };
+
+}  // namespace tcuscan

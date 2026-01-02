@@ -16,6 +16,8 @@
 using namespace AscendC;
 using namespace kernel_utils;
 
+namespace tcuscan {
+
 /**
  * @brief Reverts speculative scan operation for each segment.
  *
@@ -415,3 +417,5 @@ class KernelSegScanRevertSpec {
   const uint32_t matrix_tile_len_;
   const uint32_t num_matrix_tiles_;
 };
+
+}  // namespace tcuscan

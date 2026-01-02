@@ -28,7 +28,7 @@ extern "C" __global__ __aicore__ void seg_scan_mc_revert(
   tcuscan::SegScanMcRevertTiling tiling_data;
   GetTilingData(&tiling_data, tiling);
 
-  run_seg_scan_mc_revert<true, float>(
+  tcuscan::run_seg_scan_mc_revert<true, float>(
       vec_in, vec_f_in, vec_diff_in, vec_out, tiling_data.num_elems,
       tiling_data.num_segments, tiling_data.tile_len);
 }

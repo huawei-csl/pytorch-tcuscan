@@ -12,6 +12,8 @@
 using namespace AscendC;
 using namespace kernel_utils;
 
+namespace tcuscan {
+
 /**
  * @brief Returns a torch.tril(torch.ones(s, s)) for matrix length s.
  *
@@ -125,3 +127,5 @@ __aicore__ inline void run_gen_lower(GM_ADDR dst, uint32_t matrix_size) {
     op_gen.Process();
   }
 }
+
+}  // namespace tcuscan

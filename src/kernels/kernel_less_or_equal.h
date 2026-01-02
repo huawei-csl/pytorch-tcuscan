@@ -12,6 +12,8 @@
 using namespace AscendC;
 using namespace kernel_utils;
 
+namespace tcuscan {
+
 /**
  * @brief Compares an array with a scalar with a less or equal operation
  *
@@ -153,3 +155,5 @@ __aicore__ inline void run_less_or_equal(GM_ADDR x, GM_ADDR y, InputT pivot,
     op.Process(pivot);
   }
 }
+
+}  // namespace tcuscan

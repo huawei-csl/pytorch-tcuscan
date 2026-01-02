@@ -12,6 +12,8 @@
 using namespace AscendC;
 using namespace kernel_utils;
 
+namespace tcuscan {
+
 /**
  * @brief Adds two vectors element-wise.
  *
@@ -130,3 +132,5 @@ class KernelAdd {
   const uint32_t max_num_tiles_per_block_;
   const uint32_t global_offset_;
 };
+
+}  // namespace tcuscan

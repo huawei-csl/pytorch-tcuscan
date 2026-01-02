@@ -13,6 +13,8 @@
 using namespace AscendC;
 using namespace kernel_utils;
 
+namespace tcuscan {
+
 /**
  * @brief Performs add-reduce operation on input tiles.
  *
@@ -196,3 +198,5 @@ class KernelReduceTiles {
   const int32_t red1_size_;
   constexpr static int32_t RED2_SIZE = 8;
 };
+
+}  // namespace tcuscan

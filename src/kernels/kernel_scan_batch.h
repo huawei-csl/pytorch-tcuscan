@@ -15,6 +15,8 @@
 using namespace AscendC;
 using namespace kernel_utils;
 
+namespace tcuscan {
+
 /**
  * @brief Performs a "row-wise" inclusive-scan on multiple input vectors.
  *
@@ -390,3 +392,5 @@ __aicore__ inline void run_scan_batch_kernel(
     }
   }
 }
+
+}  // namespace tcuscan

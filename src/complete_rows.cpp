@@ -9,12 +9,24 @@
 #include "kernels/tcuscan_utils.h"
 #include "tiling/tiling_complete_rows.h"
 
+namespace tcuscan {
+
+/**
+ * @brief Run the multi core vector reduce tiles kernel.
+ *
+ * @tparam InputT Input data type.
+ *
+ * @param [in] input_vec Pointer to an input vector.
+ * @param [in] input_sums Pointer to vector with partial sums
+ * @param [in] output_vec Pointer to an output vector.
+ * @param [in] tiling_gm Pointer to the tiling buffer.
+ */
 template <typename InputT>
-__aicore__ inline void _run_complete_rows(GM_ADDR input_vec, GM_ADDR input_sums,
-                                          GM_ADDR output_vec,
-                                          GM_ADDR tilingGm) {
+__aicore__ inline void run_complete_rows(GM_ADDR input_vec, GM_ADDR input_sums,
+                                         GM_ADDR output_vec,
+                                         GM_ADDR tiling_gm) {
   tcuscan::CompleteRowsTiling tiling;
-  GetTilingData(&tiling, tilingGm);
+  GetTilingData(&tiling, tiling_gm);
 
   const uint32_t vec_len = tiling.num_elems;
   const uint32_t tile_width = tiling.tile_width;
@@ -26,6 +38,8 @@ __aicore__ inline void _run_complete_rows(GM_ADDR input_vec, GM_ADDR input_sums,
     op_reduce.Process();
   }
 }
+
+}  // namespace tcuscan
 
 /**
  * @brief Run the multi core vector reduce tiles kernel with dtype fp32.
@@ -42,7 +56,8 @@ extern "C" __global__ __aicore__ void complete_rows_fp32(GM_ADDR input_vec,
                                                          GM_ADDR workspace,
                                                          GM_ADDR tilingGm) {
   (void)workspace;
-  _run_complete_rows<float>(input_vec, input_sums, output_vec, tilingGm);
+  tcuscan::run_complete_rows<float>(input_vec, input_sums, output_vec,
+                                    tilingGm);
 }
 
 /**
@@ -60,5 +75,6 @@ extern "C" __global__ __aicore__ void complete_rows_int32(GM_ADDR input_vec,
                                                           GM_ADDR workspace,
                                                           GM_ADDR tilingGm) {
   (void)workspace;
-  _run_complete_rows<int32_t>(input_vec, input_sums, output_vec, tilingGm);
+  tcuscan::run_complete_rows<int32_t>(input_vec, input_sums, output_vec,
+                                      tilingGm);
 }

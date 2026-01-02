@@ -9,6 +9,8 @@
 #include "ascendc_kernel_operator.h"
 #include "tcuscan_utils.h"
 
+namespace tcuscan {
+
 /**
  * @brief Kernel that un-pads an ND tensor from GM to GM by reducing the inner
  * dimension's size
@@ -107,3 +109,5 @@ class KernelUnpadBatch {
   const uint32_t num_tiles_per_batch_;
   const uint32_t num_batches_per_block_;
 };
+
+}  // namespace tcuscan

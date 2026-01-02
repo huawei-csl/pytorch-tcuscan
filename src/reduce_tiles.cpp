@@ -9,6 +9,7 @@
 #include "kernels/tcuscan_utils.h"
 #include "tiling/tiling_reduce_tiles.h"
 
+namespace tcuscan {
 /**
  * @brief Run the reduce_tiles kernel.
  *
@@ -22,9 +23,9 @@
  * output vector.
  */
 template <typename InputT>
-__aicore__ inline void _run_reduce_tiles(GM_ADDR vec_in, GM_ADDR vec_out,
-                                         GM_ADDR workspace, uint32_t vec_len,
-                                         uint32_t tile_len) {
+__aicore__ inline void run_reduce_tiles(GM_ADDR vec_in, GM_ADDR vec_out,
+                                        GM_ADDR workspace, uint32_t vec_len,
+                                        uint32_t tile_len) {
   (void)workspace;
 
   if ASCEND_IS_AIV {
@@ -33,6 +34,8 @@ __aicore__ inline void _run_reduce_tiles(GM_ADDR vec_in, GM_ADDR vec_out,
     op_reduce.Process();
   }
 }
+
+}  // namespace tcuscan
 
 /**
  * @brief Run the multi core vector reduce tiles kernel with dtype fp16.
@@ -52,7 +55,8 @@ extern "C" __global__ __aicore__ void reduce_tiles_fp16(GM_ADDR input_vec,
   const uint32_t vec_len = tiling.num_elems;
   const uint32_t tile_len = tiling.tile_len;
 
-  _run_reduce_tiles<half>(input_vec, output_vec, workspace, vec_len, tile_len);
+  tcuscan::run_reduce_tiles<half>(input_vec, output_vec, workspace, vec_len,
+                                  tile_len);
 }
 
 /**
@@ -73,6 +77,6 @@ extern "C" __global__ __aicore__ void reduce_tiles_int8(GM_ADDR input_vec,
   const uint32_t vec_len = tiling.num_elems;
   const uint32_t tile_len = tiling.tile_len;
 
-  _run_reduce_tiles<int8_t>(input_vec, output_vec, workspace, vec_len,
-                            tile_len);
+  tcuscan::run_reduce_tiles<int8_t>(input_vec, output_vec, workspace, vec_len,
+                                    tile_len);
 }

@@ -14,6 +14,8 @@
 using namespace AscendC;
 using namespace kernel_utils;
 
+namespace tcuscan {
+
 /**
  * @brief Splits the input vector into two parts based on the binary mask.
  *
@@ -520,3 +522,5 @@ __aicore__ inline uint32_t run_split_ind_uint16(
 
   return scalar::GetGMValue<int32_t>(sums, 0, GetBlockNum());
 }
+
+}  // namespace tcuscan

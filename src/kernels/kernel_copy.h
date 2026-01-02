@@ -12,6 +12,8 @@
 using namespace AscendC;
 using namespace kernel_utils;
 
+namespace tcuscan {
+
 /**
  * @brief Copy data between tensors in GM through UB using AscendC queues.
  *
@@ -109,3 +111,5 @@ __aicore__ inline void run_copy(GM_ADDR src, GM_ADDR dst, uint32_t buffer_len,
     op.Process();
   }
 }
+
+}  // namespace tcuscan

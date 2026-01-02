@@ -15,6 +15,8 @@
 using namespace AscendC;
 using namespace kernel_utils;
 
+namespace tcuscan {
+
 /**
  * @brief Run the `seg_sum_single_core` kernel.
  *
@@ -61,6 +63,8 @@ __aicore__ inline void run_seg_sum_single_core(
   }
 }
 
+}  // namespace tcuscan
+
 /**
  * @brief Run the `seg_sum_single_core` kernel with half/float16 dtype.
  *
@@ -86,8 +90,9 @@ extern "C" __global__ __aicore__ void seg_sum_single_core_fp16(
 
   GM_ADDR const lower = load_tril_matrix<half>(matmul_size);
 
-  run_seg_sum_single_core<half>(vec_in, lower, indptr, vec_out, workspace,
-                                vec_len, num_segments, matmul_size);
+  tcuscan::run_seg_sum_single_core<half>(vec_in, lower, indptr, vec_out,
+                                         workspace, vec_len, num_segments,
+                                         matmul_size);
 }
 
 /**
@@ -115,6 +120,7 @@ extern "C" __global__ __aicore__ void seg_sum_single_core_int8(
 
   GM_ADDR const lower = load_tril_matrix<int8_t>(matmul_size);
 
-  run_seg_sum_single_core<int8_t>(vec_in, lower, indptr, vec_out, workspace,
-                                  vec_len, num_segments, matmul_size);
+  tcuscan::run_seg_sum_single_core<int8_t>(vec_in, lower, indptr, vec_out,
+                                           workspace, vec_len, num_segments,
+                                           matmul_size);
 }

@@ -11,6 +11,7 @@
 
 using namespace AscendC;
 using namespace kernel_utils;
+namespace tcuscan {
 
 /**
  * @brief Finish the scan operation based on row-wise partial scans and reduced
@@ -184,3 +185,5 @@ class KernelCompleteRows {
   const uint32_t num_tiles_;
   const uint32_t max_num_tiles_per_block_;
 };
+
+}  // namespace tcuscan

@@ -13,6 +13,8 @@
 using namespace AscendC;
 using namespace kernel_utils;
 
+namespace tcuscan {
+
 /**
  * @brief Corrects the (speculative block scan) output of the `KernelBlockScan`
  * so that the segmented sum of a vector is returned.
@@ -241,3 +243,5 @@ class KernelSegSumCubeRevert {
   uint32_t segments_offset_ = 0;
   uint32_t out_offset_ = 0;
 };
+
+}  // namespace tcuscan

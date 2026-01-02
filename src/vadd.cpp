@@ -9,8 +9,6 @@
 #include "kernels/tcuscan_utils.h"
 #include "tiling/tiling_vadd.h"
 
-using namespace kernel_utils;
-
 /**
  * @brief Run the `vadd` kernel.
  *
@@ -28,7 +26,7 @@ extern "C" __global__ __aicore__ void vadd_custom(GM_ADDR x, GM_ADDR y,
   GetTilingData(&tiling_data, tilingGm);
 
   if ASCEND_IS_AIV {
-    KernelAdd op(tiling_data.vec_len, tiling_data.tile_len);
+    tcuscan::KernelAdd op(tiling_data.vec_len, tiling_data.tile_len);
     op.Init(x, y, z);
     op.Process();
   }

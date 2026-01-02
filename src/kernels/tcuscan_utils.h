@@ -1532,6 +1532,10 @@ __aicore__ inline T Max(T v1, T v2) {
  *
  * Avoids the compilation message: `error: half precision operation is not
  * allowed in aicore function`
+ *
+ * @param [in] v1 First value.
+ * @param [in] v2 Second value.
+ * @return Smaller value.
  */
 template <>
 __aicore__ inline half Max(half v1, half v2) {

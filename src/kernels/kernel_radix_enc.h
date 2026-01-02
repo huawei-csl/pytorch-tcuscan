@@ -13,6 +13,8 @@
 using namespace AscendC;
 using namespace kernel_utils;
 
+namespace tcuscan {
+
 /**
  * @brief Encodes/decodes fp16 values into a format that can be used to sort
  * them with (int16) radix-sort
@@ -170,3 +172,5 @@ __aicore__ inline void run_radix_encode(GM_ADDR x, GM_ADDR y, uint32_t vec_len,
     op.Process();
   }
 }
+
+}  // namespace tcuscan

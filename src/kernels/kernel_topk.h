@@ -16,6 +16,8 @@
 #include "tcuscan_utils.h"
 #include "tiling/tiling_topk.h"
 
+namespace tcuscan {
+
 /**
  * @brief Run the `topk` kernel.
  *
@@ -138,3 +140,5 @@ __aicore__ inline void run_topk(GM_ADDR x, uint32_t k, GM_ADDR y,
     scalar::Swap(indices_in, indices_out);
   }
 }
+
+}  // namespace tcuscan

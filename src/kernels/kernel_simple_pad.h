@@ -12,6 +12,8 @@
 using namespace AscendC;
 using namespace kernel_utils;
 
+namespace tcuscan {
+
 /**
  * @brief Returns a copy of the last unaligned chunk of the input data.
  *
@@ -111,3 +113,5 @@ __aicore__ inline void run_simple_pad(GM_ADDR vec_in, GM_ADDR vec_out,
     op.Process();
   }
 }
+
+}  // namespace tcuscan

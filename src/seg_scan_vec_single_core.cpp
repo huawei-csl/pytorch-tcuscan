@@ -26,8 +26,8 @@ extern "C" __global__ __aicore__ void seg_scan_vec_single_core(
   GetTilingData(&tiling_data, tilingGm);
 
   if ASCEND_IS_AIV {
-    KernelSegScanVecSingleCore<half, int8_t> op_vec(tiling_data.num_elems,
-                                                    tiling_data.tile_len);
+    tcuscan::KernelSegScanVecSingleCore<half, int8_t> op_vec(
+        tiling_data.num_elems, tiling_data.tile_len);
     op_vec.Init(vec_in, f_in, vec_out);
     op_vec.Process();
   }

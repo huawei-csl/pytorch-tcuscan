@@ -12,6 +12,8 @@
 using namespace AscendC;
 using namespace kernel_utils;
 
+namespace tcuscan {
+
 /**
  * @brief Performs the CSR gather operation as described in SEGMV algorithm in
  * [1].
@@ -193,3 +195,5 @@ __aicore__ inline void run_csr_gather(GM_ADDR values_in, GM_ADDR cols_in,
     op.Process();
   }
 }
+
+}  // namespace tcuscan

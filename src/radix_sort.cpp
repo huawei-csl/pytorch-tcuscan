@@ -18,10 +18,11 @@ __aicore__ inline void _radix_sort_iter(GM_ADDR in, GM_ADDR radices_ws,
                                         GM_ADDR indices_out, GM_ADDR split_ws,
                                         uint32_t in_len, uint32_t vec_tile_size,
                                         uint16_t bit_idx, bool zeros_first) {
-  run_single_radix<false>(in, radices_ws, in_len, vec_tile_size, bit_idx);
+  tcuscan::run_single_radix<false>(in, radices_ws, in_len, vec_tile_size,
+                                   bit_idx);
   SyncAll<false /*isAIVOnly*/>();
-  run_split_ind_uint16(in, radices_ws, indices_in, out, indices_out, split_ws,
-                       in_len, vec_tile_size, zeros_first);
+  tcuscan::run_split_ind_uint16(in, radices_ws, indices_in, out, indices_out,
+                                split_ws, in_len, vec_tile_size, zeros_first);
 }
 
 /**
@@ -49,7 +50,7 @@ extern "C" __global__ __aicore__ void radix_sort_fp16(GM_ADDR in, GM_ADDR out,
   // workspace that comes after starts at a valid address for int32_t.
   const uint32_t radices_size =
       scalar::AlignUp(tiling_data.num_elems * sizeof(uint8_t), sizeof(int32_t));
-  const uint32_t split_ws_size = split::get_workspace_size();
+  const uint32_t split_ws_size = tcuscan::split::get_workspace_size();
   const uint32_t output_size = tiling_data.num_elems * sizeof(half);
 
   GM_ADDR const radices = usrWorkspace;
@@ -57,12 +58,12 @@ extern "C" __global__ __aicore__ void radix_sort_fp16(GM_ADDR in, GM_ADDR out,
   GM_ADDR const out2 = split_workspace + split_ws_size;
   GM_ADDR const indices_ws = out2 + output_size;
 
-  run_arithmetic_progression<int32_t, 0, 1, false /* ForceMixMode */>(
+  tcuscan::run_arithmetic_progression<int32_t, 0, 1, false /* ForceMixMode */>(
       indices, tiling_data.num_elems, tiling_data.vec_tile_size);
   SyncAll<false /*isAIVOnly*/>();
 
-  run_radix_encode<false>(in, out, tiling_data.num_elems,
-                          tiling_data.vec_tile_size);
+  tcuscan::run_radix_encode<false>(in, out, tiling_data.num_elems,
+                                   tiling_data.vec_tile_size);
 
   bool are_zeros_first = !descending;
 
@@ -92,8 +93,8 @@ extern "C" __global__ __aicore__ void radix_sort_fp16(GM_ADDR in, GM_ADDR out,
   SyncAll<true /*isAIVOnly*/>();
 
   // Encode again to obtain the initial values (enc(enc(x)) = x)
-  run_radix_encode<false>(out, out, tiling_data.num_elems,
-                          tiling_data.vec_tile_size);
+  tcuscan::run_radix_encode<false>(out, out, tiling_data.num_elems,
+                                   tiling_data.vec_tile_size);
 }
 
 /**
@@ -119,7 +120,7 @@ extern "C" __global__ __aicore__ void radix_sort_int16(GM_ADDR in, GM_ADDR out,
   // workspace that comes after starts at a valid address for int32_t.
   const uint32_t radices_size =
       scalar::AlignUp(tiling_data.num_elems * sizeof(uint8_t), sizeof(int32_t));
-  const uint32_t split_ws_size = split::get_workspace_size();
+  const uint32_t split_ws_size = tcuscan::split::get_workspace_size();
   const uint32_t output_size = tiling_data.num_elems * sizeof(uint16_t);
 
   GM_ADDR const radices = workspace;
@@ -127,7 +128,7 @@ extern "C" __global__ __aicore__ void radix_sort_int16(GM_ADDR in, GM_ADDR out,
   GM_ADDR const out2 = split_workspace + split_ws_size;
   GM_ADDR const indices_ws = out2 + output_size;
 
-  run_arithmetic_progression<int32_t, 0, 1, false /* ForceMixMode */>(
+  tcuscan::run_arithmetic_progression<int32_t, 0, 1, false /* ForceMixMode */>(
       indices, tiling_data.num_elems, tiling_data.vec_tile_size);
   SyncAll<false /*isAIVOnly*/>();
 

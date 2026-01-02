@@ -29,8 +29,8 @@ extern "C" __global__ __aicore__ void split_uint16(GM_ADDR in, GM_ADDR mask,
 
   GM_ADDR const usrWorkspace = AscendC::GetUserWorkspace(workspace);
 
-  run_split_uint16(in, mask, out, usrWorkspace, tiling_data.num_elems,
-                   tiling_data.vec_tile_size, zeros_first);
+  tcuscan::run_split_uint16(in, mask, out, usrWorkspace, tiling_data.num_elems,
+                            tiling_data.vec_tile_size, zeros_first);
 }
 
 /**
@@ -53,7 +53,7 @@ extern "C" __global__ __aicore__ void split_ind_uint16(
 
   GM_ADDR const usrWorkspace = AscendC::GetUserWorkspace(workspace);
 
-  run_split_ind_uint16(vec_in, mask_in, indices_in, vec_out, indices_out,
-                       usrWorkspace, tiling_data.num_elems,
-                       tiling_data.vec_tile_size, zeros_first);
+  tcuscan::run_split_ind_uint16(
+      vec_in, mask_in, indices_in, vec_out, indices_out, usrWorkspace,
+      tiling_data.num_elems, tiling_data.vec_tile_size, zeros_first);
 }

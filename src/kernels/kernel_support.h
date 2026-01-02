@@ -6,6 +6,8 @@
  */
 #pragma once
 
+namespace tcuscan {
+
 /**
  * @brief Prints an amout of data N from the GM memory
  *
@@ -54,3 +56,5 @@ class KernelSupport {
   GlobalTensor<T> global_input_;
   const uint32_t size_;
 };
+
+}  // namespace tcuscan
