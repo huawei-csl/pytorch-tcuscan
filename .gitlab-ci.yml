@@ -378,6 +378,12 @@ test_triu_inv_rec_unroll:
     - make setup_ci
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_triu_inv_rec_unroll
 
+test_count_if:
+  <<: *test_config
+  script:
+    - make setup_ci
+    - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_count_if
+
 # Uncomment to run all tests in a single run
 unit_test:
   tags:

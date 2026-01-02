@@ -48,8 +48,8 @@ class KernelLessOrEqual {
    * @param [in] y Pointer to the output vector in global memory.
    */
   __aicore__ inline void Init(GM_ADDR x, GM_ADDR y) {
-    global_x_.SetGlobalBuffer((__gm__ InputT *)x, vec_len_);
-    global_y_.SetGlobalBuffer((__gm__ uint8_t *)y, vec_len_);
+    global_x_.SetGlobalBuffer((__gm__ InputT*)x, vec_len_);
+    global_y_.SetGlobalBuffer((__gm__ uint8_t*)y, vec_len_);
 
     pipe.InitBuffer(in_q_, BUFFER_NUM, tile_size_ * sizeof(InputT));
     pipe.InitBuffer(out_q_, BUFFER_NUM, tile_size_ * sizeof(uint8_t));
@@ -87,28 +87,9 @@ class KernelLessOrEqual {
     const LocalTensor<uint8_t> y_lt = out_q_.AllocTensor<uint8_t>();
     // These buffers point to the same UB location but have different
     // types. Manual synchronization is needed!
-    const LocalTensor<InputT> x_T_lt = x_buf_.Get<InputT>();
-    const LocalTensor<uint16_t> x_uint16_lt =
-        x_T_lt.template ReinterpretCast<uint16_t>();
-    const LocalTensor<int16_t> x_int16_lt =
-        x_T_lt.template ReinterpretCast<int16_t>();
-    const LocalTensor<half> x_half_lt = x_T_lt.template ReinterpretCast<half>();
+    const LocalTensor<InputT> work_lt = x_buf_.Get<InputT>();
 
-    const uint32_t size = x_T_lt.GetSize();
-
-    Muls(x_T_lt, x_lt, (InputT)-1, size);
-    Adds(x_T_lt, x_T_lt, pivot, size);
-
-    PipeBarrier<PIPE_V>();
-
-    Not(x_uint16_lt, x_uint16_lt, size);
-
-    ShiftRight(x_uint16_lt, x_uint16_lt, (uint16_t)15, size);
-
-    PipeBarrier<PIPE_V>();
-
-    Cast(x_half_lt, x_int16_lt, RoundMode::CAST_NONE, size);
-    Cast(y_lt, x_half_lt, RoundMode::CAST_NONE, size);
+    compare::LessThan<InputT, uint8_t>(y_lt, x_lt, pivot, work_lt);
 
     out_q_.EnQue<uint8_t>(y_lt);
     in_q_.FreeTensor(x_lt);

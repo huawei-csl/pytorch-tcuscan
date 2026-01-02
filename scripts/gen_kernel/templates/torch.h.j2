@@ -15,7 +15,6 @@
 #include "tiling/platform/platform_ascendc.h"
 #include "torch_npu/csrc/core/npu/NPUStream.h"
 
-namespace asc {
 
 namespace {{ cpp_namespace }} {
 
@@ -37,7 +36,7 @@ at::Tensor run_{{ kernel_cpp_name }}(const at::Tensor &x, int s) {
 
   const at::Tensor workspace_tensor = alloc_workspace(0, device);
 
-  const uint32_t block_dim = {{ num_blocks }};  
+  const uint32_t block_dim = {{ num_blocks }};
   const uint32_t tile_size = static_cast<uint32_t>(s);
   const {{ kernel_cpp_name_suffix }}Tiling tiling{block_dim, total_len, tile_size};
   uint8_t *tiling_device = allocCopyTiling(tiling);
@@ -57,5 +56,3 @@ at::Tensor run_{{ kernel_cpp_name }}(const at::Tensor &x, int s) {
   return z;
 }
 }  // namespace {{ cpp_namespace }}
-
-}  // namespace asc

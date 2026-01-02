@@ -1051,6 +1051,20 @@ def reduce_tiles_benchmark(
     return _run_benchmark(device, run_reduce_tiles), num_cores
 
 
+def count_if_benchmark(
+    device: Device, size: int, dtype: torch.dtype, s: int, num_cores: int
+) -> Tuple[float, int]:
+    if dtype == torch.float16:
+        x = torch.rand(size, device=device.str, dtype=dtype)
+    else:
+        raise RuntimeError(f"`count_if` supports fp16. Got {dtype}.")
+
+    def run_count_if_fn() -> None:
+        _ = tcuscan_ops.run_count_if(x, 0.1, s * s)
+
+    return _run_benchmark(device, run_count_if_fn), num_cores
+
+
 def benchmark(
     device: Device,
     op_name: str,
@@ -1141,6 +1155,7 @@ if __name__ == "__main__":  # noqa
             "triu_inv_rec_unroll",
             "cube_reduce",
             "reduce_tiles",
+            "count_if",
         ],
     )
     parser.add_argument("--dtype", choices=["int8", "fp16", "int16", "int32", "fp32"])
@@ -1648,6 +1663,16 @@ if __name__ == "__main__":  # noqa
             f"reduce_tiles_{s}",
             dtype,
             partial(reduce_tiles_benchmark, dtype=tdtype, s=s, num_cores=num_cores),
+            sizes,
+            density,
+        )
+    elif bench == "count_if" and dtype in ["fp16"]:
+        tdtype = STR_TO_DTYPE[dtype]
+        benchmark(
+            device,
+            f"count_if_{s}",
+            dtype,
+            partial(count_if_benchmark, dtype=tdtype, s=s, num_cores=2 * num_cores),
             sizes,
             density,
         )

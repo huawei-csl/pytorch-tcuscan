@@ -12,6 +12,7 @@
 
 #include "torch/torch_compress.h"
 #include "torch/torch_copy.h"
+#include "torch/torch_count_if.h"
 #include "torch/torch_diff.h"
 #include "torch/torch_gather.h"
 #include "torch/torch_gen_lower.h"
@@ -105,4 +106,5 @@ PYBIND11_MODULE(tcuscan_ops, m) {
         "Triangular matrix inverse using AIV/AICs(fp16)");
   m.def("run_triu_inv_rec_unroll", &tcuscan::run_triu_inv_rec_unroll,
         "Upper triangular inverse");
+  m.def("run_count_if", &tcuscan::run_count_if, "Count if");
 }

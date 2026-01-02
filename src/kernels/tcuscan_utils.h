@@ -1492,7 +1492,7 @@ __aicore__ inline void Swap(DataT& v1, DataT& v2) {
  * @tparam T Data type of the values.
  * @param [in] v1 First value.
  * @param [in] v2 Second value.
- * @return Smaller value.
+ * @return Minimum value.
  */
 template <typename T>
 __aicore__ inline T Min(T v1, T v2) {
@@ -1507,7 +1507,7 @@ __aicore__ inline T Min(T v1, T v2) {
  *
  * @param [in] v1 First value.
  * @param [in] v2 Second value.
- * @return Smaller value.
+ * @return Minimum value.
  */
 template <>
 __aicore__ inline half Min(half v1, half v2) {
@@ -1951,7 +1951,65 @@ __aicore__ inline void InitConstAllOnesL1(LocalTensor<T>& lt, uint16_t len) {
 }
 
 }  // namespace cube_unit
-// 0x1400
+
+namespace compare {
+
+/**
+ * @brief Performs a less-than comparison between an input local tensor and a
+ * pivot scalar, i.e., {x_i <= pivot}. Writes the 0/1 binary element-wise
+ * outcome of the comparison in `out_lt`.
+ *
+ * @tparam T Input data type. Supports half, int16_t and uint16_t.
+ * @tparam OutputT Output data type where binary outcome of comparison is
+ * stored. Supports int8_t and uint8_t.
+ *
+ * @param [in] out_lt Output where the binary outcome of the comparison is
+ * written.
+ * @param [in] input_lt Input tensor.
+ * @param [in] pivot Pivot value for less-than comparison.
+ * @param [in] work_lt Temporary workspace to use for internal calculations.
+ */
+template <typename T, typename OutputT>
+__aicore__ inline void LessThan(const LocalTensor<OutputT>& out_lt,
+                                const LocalTensor<T>& input_lt, T pivot,
+                                const LocalTensor<T>& work_lt) {
+  static_assert(
+      std::is_same_v<T, half> or std::is_same_v<T, int16_t> or
+          std::is_same_v<T, uint16_t>,
+      "LessThan supports only half, int16_t and uint16_t data types.");
+  static_assert(
+      std::is_same_v<OutputT, int8_t> or std::is_same_v<OutputT, uint8_t>,
+      "LessThan supports only int8_t or uint8_t output data types.");
+
+  const uint32_t size = work_lt.GetSize();
+
+  // These buffers point to the same UB location but have different
+  // types. Manual synchronization is needed!
+  const LocalTensor<uint16_t> x_uint16_lt =
+      work_lt.template ReinterpretCast<uint16_t>();
+  const LocalTensor<int16_t> x_int16_lt =
+      work_lt.template ReinterpretCast<int16_t>();
+  const LocalTensor<half> x_half_lt = work_lt.template ReinterpretCast<half>();
+
+  // Step 1. Perform work_lt = (pivot - x_i)
+  AscendC::Muls<T>(work_lt, input_lt, static_cast<T>(-1), size);
+  AscendC::Adds<T>(work_lt, work_lt, pivot, size);
+
+  AscendC::PipeBarrier<PIPE_V>();
+
+  // x_uint16_lt will be '1' iff (pivot - x_i) > 0, otherwise is zero.
+  AscendC::Not(x_uint16_lt, x_uint16_lt, size);
+  AscendC::ShiftRight(x_uint16_lt, x_uint16_lt, (uint16_t)15, size);
+
+  AscendC::PipeBarrier<PIPE_V>();
+
+  // Cast 0/1 values to OutputT local tensor.
+  AscendC::Cast<half, int16_t>(x_half_lt, x_int16_lt, RoundMode::CAST_NONE,
+                               size);
+  AscendC::Cast<OutputT, half>(out_lt, x_half_lt, RoundMode::CAST_NONE, size);
+}
+}  // namespace compare
+
 namespace fp16 {
 /// @brief Float number with the smallest aboslute value.
 const float FP16_MIN_NORMAL = std::numeric_limits<half>::min();

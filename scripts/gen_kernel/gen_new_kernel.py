@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 
 
+import argparse
+
 import jinja2
 from jinja2 import FileSystemLoader
-import argparse
 
 
 def camel(snake_str):
@@ -72,9 +73,9 @@ def main():
     with open(f"kernel_{kernel_cpp_name}.cpp", "w", encoding=enc) as fd:
         fd.write(kernel_cpp_contents)
 
-    torch_template = env.get_template("torch.cpp.j2")
+    torch_template = env.get_template("torch.h.j2")
     torch_contents = torch_template.render(**metadata)
-    with open(f"torch_{kernel_cpp_name}.cpp", "w", encoding=enc) as fd:
+    with open(f"torch_{kernel_cpp_name}.h", "w", encoding=enc) as fd:
         fd.write(torch_contents)
 
     pytest_template = env.get_template("pytest.py.j2")

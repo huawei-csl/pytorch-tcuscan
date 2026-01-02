@@ -105,7 +105,8 @@ ascendc_library(
   src/reduce_tiles.cpp
   src/complete_rows.cpp
   src/complete_blocks.cpp
-  src/tri_inv_col_sweep.cpp)
+  src/tri_inv_col_sweep.cpp
+  src/count_if.cpp)
 
 ascendc_compile_options(vector_kernels PRIVATE -Wall -Wextra -Werror)
 

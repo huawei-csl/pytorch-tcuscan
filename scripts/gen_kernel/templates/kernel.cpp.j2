@@ -22,7 +22,7 @@ extern "C" __global__ __aicore__ void {{ kernel_cpp_name }}_fp16(GM_ADDR vec_in,
 
     (void)workspace;
     {{ kernel_cpp_name_suffix }}Tiling tiling_data;
-    tiling::GetTilingData(&tiling_data, tiling);
+    GetTilingData(&tiling_data, tiling);
 
     run_{{kernel_cpp_name}}<true, {{ kernel_dtype }}>(vec_in, vec_out, tiling_data.num_elems, tiling_data.tile_len);
 }
