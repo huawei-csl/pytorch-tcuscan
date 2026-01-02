@@ -1515,6 +1515,30 @@ __aicore__ inline half Min(half v1, half v2) {
 }
 
 /**
+ * @brief Maximum of two values.
+ *
+ * @tparam T Data type of the values.
+ * @param [in] v1 First value.
+ * @param [in] v2 Second value.
+ * @return Smaller value.
+ */
+template <typename T>
+__aicore__ inline T Max(T v1, T v2) {
+  return v1 >= v2 ? v1 : v2;
+}
+
+/**
+ * @brief Specialization since AI-Core does not support half comparisons.
+ *
+ * Avoids the compilation message: `error: half precision operation is not
+ * allowed in aicore function`
+ */
+template <>
+__aicore__ inline half Max(half v1, half v2) {
+  return static_cast<float>(v1) >= static_cast<float>(v2) ? v1 : v2;
+}
+
+/**
  * @brief Rounds an integral value down to the nearest multiple of a given
  * alignment.
  *

@@ -24,6 +24,56 @@
 namespace tcuscan {
 
 /**
+ * @brief K-largest value estimator from an input vector of dtype fp16.
+ *
+ * @param x Input 1D tensor.
+ * @param k Input parameter k (of top-k).
+ * @param num_samples Number of samples of length 32.
+ * @return Returns vector containing the k-largest value estimates per block.
+ * Vector length is `block_dim`
+ */
+at::Tensor run_topk_pivot_fp16(const at::Tensor& x, uint32_t k,
+                               uint32_t num_samples) {
+  const auto ascendc_platform =
+      platform_ascendc::PlatformAscendCManager::GetInstance();
+  auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
+  const at::Device device = x.options().device();
+  const auto dtype = x.options().dtype();
+
+  const uint32_t total_length = x.numel();
+  const uint32_t tile_len = num_samples * 32 * 32;
+  const uint32_t num_tiles = host_utils::CeilDiv(total_length, tile_len);
+
+  uint32_t block_dim = ascendc_platform->GetCoreNumAiv();
+  if (num_tiles < block_dim) {
+    block_dim = num_tiles;
+  }
+
+  const at::Tensor vec_out =
+      at::empty({block_dim}, at::TensorOptions().dtype(dtype).device(device));
+
+  const at::Tensor workspace_tensor = tcuscan::alloc_workspace(0, device);
+
+  // TODO(anastasios): relate k_inner and k_outer with input k.
+  (void)k;
+  const uint32_t k_inner = 8;
+  const uint32_t k_outer = 4;
+  const TopKPivotTiling tiling{total_length, num_samples, k_inner, k_outer};
+
+  uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
+
+  ACLRT_LAUNCH_KERNEL(topk_pivot_fp16)
+  (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
+   const_cast<void*>(vec_out.storage().data()),
+   const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+
+  aclrtFree(tiling_device);
+  aclrtSynchronizeStream(acl_stream);
+
+  return vec_out;
+}
+
+/**
  * @brief Top-K elements from an input vector of dtype int16.
  *
  * @param x Input 1D tensor
@@ -157,56 +207,6 @@ std::tuple<at::Tensor, at::Tensor> run_topk_fp16(const at::Tensor& x,
   aclrtSynchronizeStream(acl_stream);
 
   return std::make_tuple(vec_out, indices_out);
-}
-
-/**
- * @brief K-largest value estimator from an input vector of dtype fp16.
- *
- * @param x Input 1D tensor.
- * @param k Input parameter k (of top-k).
- * @param num_samples Number of samples of length 32.
- * @return Returns vector containing the k-largest value estimates per block.
- * Vector length is `block_dim`
- */
-at::Tensor run_topk_pivot_fp16(const at::Tensor& x, uint32_t k,
-                               uint32_t num_samples) {
-  const auto ascendc_platform =
-      platform_ascendc::PlatformAscendCManager::GetInstance();
-  auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
-  const at::Device device = x.options().device();
-  const auto dtype = x.options().dtype();
-
-  const uint32_t total_length = x.numel();
-  const uint32_t tile_len = num_samples * 32 * 32;
-  const uint32_t num_tiles = host_utils::CeilDiv(total_length, tile_len);
-
-  uint32_t block_dim = ascendc_platform->GetCoreNumAiv();
-  if (num_tiles < block_dim) {
-    block_dim = num_tiles;
-  }
-
-  const at::Tensor vec_out =
-      at::empty({block_dim}, at::TensorOptions().dtype(dtype).device(device));
-
-  const at::Tensor workspace_tensor = tcuscan::alloc_workspace(0, device);
-
-  // TODO(anastasios): relate k_inner and k_outer with input k.
-  (void)k;
-  const uint32_t k_inner = 8;
-  const uint32_t k_outer = 8;
-  const TopKPivotTiling tiling{total_length, num_samples, k_inner, k_outer};
-
-  uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
-
-  ACLRT_LAUNCH_KERNEL(topk_pivot_fp16)
-  (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
-   const_cast<void*>(vec_out.storage().data()),
-   const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
-
-  aclrtFree(tiling_device);
-  aclrtSynchronizeStream(acl_stream);
-
-  return vec_out;
 }
 
 }  // namespace tcuscan

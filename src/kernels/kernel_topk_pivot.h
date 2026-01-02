@@ -26,7 +26,6 @@ template <typename T = half>
 class KernelPivotTopkEstimator {
   /// @brief Estimator has 32 buffers of length 32. Total length 1,024.
   constexpr static uint32_t ESTIMATOR_LEN = 32;
-  constexpr static uint32_t BUFFER_NUM = 1;
   constexpr static uint32_t MIN_VEC_SIZE = UB_ALIGNMENT / sizeof(T);
 
  public:
@@ -50,7 +49,8 @@ class KernelPivotTopkEstimator {
         k_outer_{k_outer},
         tile_len_(num_samples * ESTIMATOR_LEN),
         num_tiles_(scalar::CeilDiv(vec_len_, tile_len_)),
-        max_num_tiles_per_block_(scalar::CeilDiv(num_tiles_, vec_core_num_)) {
+        max_num_tiles_per_block_(scalar::CeilDiv(num_tiles_, vec_core_num_)),
+        num_iters_(8) {
     ASCENDC_ASSERT(k_inner_ < 32, {
       KERNEL_LOG(KERNEL_ERROR,
                  "K-largest (top-k) value estimator supports k_inner at most "
@@ -62,12 +62,6 @@ class KernelPivotTopkEstimator {
                  "K-largest (top-k) value estimator supports k_outer_ at most "
                  "31. Got (k_outer_=%d, AIVs=%d)",
                  k_inner_, vec_core_num_);
-    });
-    ASCENDC_ASSERT(num_samples_ == 16, {
-      KERNEL_LOG(KERNEL_ERROR,
-                 "Currently only 32 samples are supported. Got "
-                 "(num_samples_=%d, AIVs=%d)",
-                 NUM_SAMPLES, vec_core_num_);
     });
   }
 
@@ -81,8 +75,8 @@ class KernelPivotTopkEstimator {
     global_in_.SetGlobalBuffer((__gm__ T*)vec_in, vec_len_);
     global_out_.SetGlobalBuffer((__gm__ T*)vec_out, vec_core_num_);
 
-    pipe_.InitBuffer(in_q_, BUFFER_NUM, tile_len_ * sizeof(T));
-    pipe_.InitBuffer(out_q_, BUFFER_NUM, vec_core_num_ * sizeof(T));
+    pipe_.InitBuffer(in_q_, 2, num_iters_ * tile_len_ * sizeof(T));
+    pipe_.InitBuffer(out_q_, 1, vec_core_num_ * sizeof(T));
 
     // Sort32 writes into a Tuple 2 of (value, index). Each output element
     // of Sort32 is 8-bytes.
@@ -101,14 +95,20 @@ class KernelPivotTopkEstimator {
         GetBlockIdx() * tile_len_ * max_num_tiles_per_block_;
 
     // Calculate the k-largest estimate scalar and write back to GM.
-    copy::CopyGmToVec(in_q_, global_in_[global_offset], tile_len_);
-    const T estimate = ProcessTile();
-    copy::CopyScalarToGm(global_out_[GetBlockIdx()], out_q_, estimate);
+    T max_estimate = std::numeric_limits<T>::min();
+    copy::CopyGmToVec(in_q_, global_in_[global_offset], num_iters_ * tile_len_);
+    LocalTensor<T> vec_in_lt = in_q_.DeQue<T>();
+    for (uint32_t tile_idx = 0; tile_idx < num_iters_; tile_idx++) {
+      const T estimate = ProcessTile(vec_in_lt[tile_idx * tile_len_]);
+      max_estimate = scalar::Max(max_estimate, estimate);
+    }
+    in_q_.FreeTensor<T>(vec_in_lt);
+
+    copy::CopyScalarToGm(global_out_[GetBlockIdx()], out_q_, max_estimate);
   }
 
  private:
-  __aicore__ inline T ProcessTile() {
-    LocalTensor<T> vec_in_lt = in_q_.DeQue<T>();
+  __aicore__ inline T ProcessTile(const LocalTensor<T>& vec_in_lt) {
     LocalTensor<T> concat_values_indices_lt =
         concat_values_indices_buf_.Get<T>();
     LocalTensor<uint32_t> unused_index_lt = unused_indices_buf_.Get<uint32_t>();
@@ -143,15 +143,14 @@ class KernelPivotTopkEstimator {
     // Estimate is the (k_outer_)- largest value of the (k_inner_)-th
     // largest values.
     const T estimate = tmp_sorted_lt(k_outer_ - 1);
-    in_q_.FreeTensor<T>(vec_in_lt);
 
     return estimate;
   }
 
   TPipe pipe_;
 
-  TQue<QuePosition::VECIN, BUFFER_NUM> in_q_;
-  TQue<QuePosition::VECOUT, BUFFER_NUM> out_q_;
+  TQue<QuePosition::VECIN, 2> in_q_;
+  TQue<QuePosition::VECOUT, 1> out_q_;
 
   TBuf<QuePosition::VECCALC> concat_values_indices_buf_;
   TBuf<QuePosition::VECCALC> unused_indices_buf_;
@@ -168,6 +167,7 @@ class KernelPivotTopkEstimator {
   const uint32_t tile_len_;
   const uint32_t num_tiles_;
   const uint32_t max_num_tiles_per_block_;
+  const uint32_t num_iters_;
 };
 
 /**
