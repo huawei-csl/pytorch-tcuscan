@@ -17,11 +17,9 @@ namespace tcuscan {
  */
 struct CompressTiling {
   /// @brief Total number of input elements.
-  uint32_t size;
+  uint32_t vec_len;
   /// @brief Tile length.
-  uint32_t scan_tile_size;
-  /// @brief Compress tile.
-  uint32_t compress_tile_size;
+  uint32_t tile_len;
 };
 #pragma pack(pop)
 

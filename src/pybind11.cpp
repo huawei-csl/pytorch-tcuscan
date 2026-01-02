@@ -42,6 +42,8 @@ PYBIND11_MODULE(tcuscan_ops, m) {
         "Multi-core Scan (no L2 cache optimization)");
   m.def("run_csr_gather", &tcuscan::run_csr_gather, "CSR gather");
   m.def("run_compress", &tcuscan::run_compress, "Compaction/compress");
+  m.def("run_compress_ind", &tcuscan::run_compress_ind,
+        "Compaction with indices");
   m.def("run_compress_pos", &tcuscan::run_compress_pos,
         "Compaction/compress with pre-computed output positions");
   m.def("run_seg_sum", &tcuscan::run_seg_sum, "Segmented Sum");
