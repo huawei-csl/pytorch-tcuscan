@@ -74,8 +74,8 @@ class KernelCubeReduce {
    * @param [in] vec_out Pointer to output vector in global memory.
    */
   __aicore__ inline void Init(GM_ADDR vec_in, GM_ADDR vec_out) {
-    global_a_.SetGlobalBuffer((__gm__ InputT *)vec_in, vec_len_);
-    global_c_.SetGlobalBuffer((__gm__ OutputT *)vec_out,
+    global_a_.SetGlobalBuffer((__gm__ InputT*)vec_in, vec_len_);
+    global_c_.SetGlobalBuffer((__gm__ OutputT*)vec_out,
                               block_num_ * all_ones_len_);
 
     pipe_.InitBuffer(a1_q_, 1, tile_len_ * sizeof(InputT));
@@ -139,6 +139,7 @@ class KernelCubeReduce {
     cube_unit::Multiply<InputT, AccumulateL0C /* accumulate_c */,
                         true /* free_a*/, false /* free_b */>(
         a2_q_, b2_q_, co1_q_, matmul_size_, MAT_DIM_16, matmul_size_);
+    AscendC::PipeBarrier<PIPE_ALL>();
   }
 
   /**
@@ -232,9 +233,8 @@ class KernelCompleteCubeReduce {
    * @param [in] vec_out Pointer to output buffer in global memory.
    */
   __aicore__ inline void Init(GM_ADDR vec_in, GM_ADDR vec_out) {
-    global_input_.SetGlobalBuffer((__gm__ T *)vec_in,
-                                  GetBlockNum() * tile_len_);
-    global_output_.SetGlobalBuffer((__gm__ T *)vec_out, block_num_);
+    global_input_.SetGlobalBuffer((__gm__ T*)vec_in, GetBlockNum() * tile_len_);
+    global_output_.SetGlobalBuffer((__gm__ T*)vec_out, block_num_);
 
     pipe_.InitBuffer(vecin_q_, 1, tile_len_ * sizeof(T));
     pipe_.InitBuffer(res_out_q_, 1, MIN_VEC_SIZE * sizeof(T));
