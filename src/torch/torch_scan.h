@@ -74,7 +74,7 @@ at::Tensor run_scan_single_core(const at::Tensor& x, int S,
 
   if (dtype == torch::kInt8) {
     const uint32_t user_workspace_size =
-        workspace::sc_scan::get_workspace_size<int8_t>(tiling);
+        tcuscan::get_workspace_size<int8_t>(tiling);
     const at::Tensor workspace_tensor =
         alloc_zeros_workspace(user_workspace_size, device);
     ACLRT_LAUNCH_KERNEL(scan_single_core_int8)
@@ -83,7 +83,7 @@ at::Tensor run_scan_single_core(const at::Tensor& x, int S,
      const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else if (dtype == torch::kHalf) {
     const uint32_t user_workspace_size =
-        workspace::sc_scan::get_workspace_size<int16_t>(tiling);
+        tcuscan::get_workspace_size<int16_t>(tiling);
     const at::Tensor workspace_tensor =
         alloc_zeros_workspace(user_workspace_size, device);
     ACLRT_LAUNCH_KERNEL(scan_single_core_fp16)
@@ -92,7 +92,7 @@ at::Tensor run_scan_single_core(const at::Tensor& x, int S,
      const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else if (dtype == torch::kFloat32) {
     const uint32_t user_workspace_size =
-        workspace::sc_scan::get_workspace_size<float>(tiling);
+        tcuscan::get_workspace_size<float>(tiling);
     const at::Tensor workspace_tensor =
         alloc_zeros_workspace(user_workspace_size, device);
     ACLRT_LAUNCH_KERNEL(scan_single_core_fp32)
@@ -147,7 +147,7 @@ at::Tensor run_scan_batch(const at::Tensor& x, int S) {
 
   if (dtype == torch::kHalf) {
     const uint32_t user_workspace_size =
-        workspace::scan_batch::get_workspace_size<int16_t>(tiling);
+        tcuscan::get_workspace_size<int16_t>(tiling);
     const at::Tensor workspace_tensor =
         alloc_workspace(user_workspace_size, device);
     ACLRT_LAUNCH_KERNEL(scan_batch_fp16)
@@ -156,7 +156,7 @@ at::Tensor run_scan_batch(const at::Tensor& x, int S) {
      const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else if (dtype == torch::kFloat32) {
     const uint32_t user_workspace_size =
-        workspace::scan_batch::get_workspace_size<float>(tiling);
+        tcuscan::get_workspace_size<float>(tiling);
     const at::Tensor workspace_tensor =
         alloc_zeros_workspace(user_workspace_size, device);
     ACLRT_LAUNCH_KERNEL(scan_batch_fp32)
@@ -213,8 +213,7 @@ at::Tensor run_scan_multi_core(const at::Tensor& x, int S) {
 
   if (dtype == torch::kHalf) {
     const uint32_t user_workspace_size =
-        workspace::mc_scan::get_workspace_size<int16_t>(
-            tiling.num_elems, tiling.matmul_size, tiling.num_blocks);
+        tcuscan::get_workspace_size<int16_t>(tiling);
     const at::Tensor workspace_tensor =
         alloc_workspace(user_workspace_size, device);
     ACLRT_LAUNCH_KERNEL(scan_multi_core_fp16)
@@ -223,8 +222,7 @@ at::Tensor run_scan_multi_core(const at::Tensor& x, int S) {
      const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else {
     const uint32_t user_workspace_size =
-        workspace::mc_scan::get_workspace_size<int8_t>(
-            tiling.num_elems, tiling.matmul_size, tiling.num_blocks);
+        tcuscan::get_workspace_size<int8_t>(tiling);
     const at::Tensor workspace_tensor =
         alloc_workspace(user_workspace_size, device);
 
@@ -276,8 +274,7 @@ at::Tensor run_scan_multi_core_no_l2(const at::Tensor& x, int S) {
 
   if (dtype == torch::kHalf) {
     const uint32_t user_workspace_size =
-        workspace::mc_scan::get_workspace_size<int16_t>(
-            tiling.num_elems, tiling.matmul_size, tiling.num_blocks);
+        tcuscan::get_workspace_size<int16_t>(tiling);
     const at::Tensor workspace_tensor =
         alloc_workspace(user_workspace_size, device);
     ACLRT_LAUNCH_KERNEL(scan_multi_core_fp16_no_l2)
@@ -286,8 +283,7 @@ at::Tensor run_scan_multi_core_no_l2(const at::Tensor& x, int S) {
      const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else {
     const uint32_t user_workspace_size =
-        tcuscan::workspace::mc_scan::get_workspace_size<int8_t>(
-            tiling.num_elems, tiling.matmul_size, tiling.num_blocks);
+        tcuscan::get_workspace_size<int8_t>(tiling);
     const at::Tensor workspace_tensor =
         tcuscan::alloc_workspace(user_workspace_size, device);
 
@@ -448,8 +444,7 @@ at::Tensor run_scan_multi_cube(const at::Tensor& x, const at::Tensor& upper,
 
   if (dtype == torch::kHalf) {
     const uint32_t user_workspace_size =
-        workspace::mc_scan::get_workspace_size<int16_t>(
-            tiling.num_elems, tiling.matmul_size, tiling.num_blocks);
+        tcuscan::get_workspace_size<int16_t>(tiling);
     const at::Tensor workspace_tensor =
         alloc_workspace(user_workspace_size, device);
     ACLRT_LAUNCH_KERNEL(scan_multi_cube_fp16)

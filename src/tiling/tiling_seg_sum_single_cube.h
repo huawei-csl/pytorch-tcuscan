@@ -16,7 +16,7 @@ namespace tcuscan {
  */
 struct SegSumSingleCubeTiling {
   /// @brief Total number of input elements.
-  uint32_t num_elems;
+  uint32_t vec_len;
   /// @brief Total number of segments.
   uint32_t num_segments;
   /// @brief Tiling length.

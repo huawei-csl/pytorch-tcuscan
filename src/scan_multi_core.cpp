@@ -23,7 +23,7 @@ __aicore__ inline void _run_scan_multi_core_no_l2_split(GM_ADDR input_vec,
   MultiCoreScanTiling tiling;
   GetTilingData(&tiling, tilingGm);
 
-  const uint32_t vec_len = tiling.num_elems;
+  const uint32_t vec_len = tiling.vec_len;
   const uint32_t matmul_size = tiling.matmul_size;
   constexpr bool IsInclusive = true;
 
@@ -46,7 +46,7 @@ __aicore__ inline void _run_scan_multi_core(GM_ADDR input_vec,
   MultiCoreScanTiling tiling;
   GetTilingData(&tiling, tilingGm);
 
-  const uint32_t vec_len = tiling.num_elems;
+  const uint32_t vec_len = tiling.vec_len;
   const uint32_t matmul_size = tiling.matmul_size;
   constexpr bool IsInclusive = true;
 

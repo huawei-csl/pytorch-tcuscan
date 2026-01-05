@@ -1,5 +1,3 @@
-
-
 /**
  * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
  *
@@ -20,7 +18,7 @@ struct ScanMultiCubeTiling {
   /// @brief Number of blocks.
   uint32_t num_blocks;
   /// @brief Number of elements.
-  uint32_t num_elems;
+  uint32_t vec_len;
   /// @brief Matmul size used. Each block has length `matmul_size *
   /// matmul_size`.
   uint32_t matmul_size;

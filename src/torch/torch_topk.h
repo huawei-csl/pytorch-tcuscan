@@ -113,9 +113,8 @@ std::tuple<at::Tensor, at::Tensor> run_topk_int16(const at::Tensor& x,
   const at::Tensor indices_out =
       at::empty({k}, at::TensorOptions().dtype(torch::kInt32).device(device));
 
-  const uint32_t user_workspace_size =
-      workspace::topk::get_workspace_size<int32_t>(total_length, matmul_size,
-                                                   block_dim);
+  const uint32_t user_workspace_size = tcuscan::get_workspace_size<int32_t>(
+      total_length, matmul_size, block_dim);
   const at::Tensor workspace_tensor =
       tcuscan::alloc_workspace(user_workspace_size, device);
 
@@ -181,9 +180,8 @@ std::tuple<at::Tensor, at::Tensor> run_topk_fp16(const at::Tensor& x,
   const at::Tensor indices_out =
       at::empty({k}, at::TensorOptions().dtype(torch::kInt32).device(device));
 
-  const uint32_t user_workspace_size =
-      tcuscan::workspace::topk::get_workspace_size<int32_t>(
-          total_length, matmul_size, block_dim);
+  const uint32_t user_workspace_size = tcuscan::get_workspace_size<int32_t>(
+      total_length, matmul_size, block_dim);
   const at::Tensor workspace_tensor =
       tcuscan::alloc_workspace(user_workspace_size, device);
 

@@ -18,7 +18,7 @@ struct RadixSortTiling {
   /// @brief Number of blocks.
   uint32_t num_blocks;
   /// @brief Total number of input elements in a single vector.
-  uint32_t num_elems;
+  uint32_t vec_len;
   /// @brief Size of the matmul tile.
   uint32_t matmul_size;
   /// @brief Size of the vector tiles.

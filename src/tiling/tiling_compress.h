@@ -16,6 +16,8 @@ namespace tcuscan {
  * @brief Compress tiling parameter structure.
  */
 struct CompressTiling {
+  /// @brief Number of blocks.
+  uint32_t num_blocks;
   /// @brief Total number of input elements.
   uint32_t vec_len;
   /// @brief Tile length.

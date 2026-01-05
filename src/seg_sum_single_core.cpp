@@ -84,7 +84,7 @@ extern "C" __global__ __aicore__ void seg_sum_single_core_fp16(
   tcuscan::SegSumSingleCoreTiling tiling;
   GetTilingData(&tiling, tiling_gm);
 
-  const uint32_t vec_len = tiling.num_elems;
+  const uint32_t vec_len = tiling.vec_len;
   const uint32_t num_segments = tiling.num_segments;
   const uint32_t matmul_size = tiling.tile_len;
 
@@ -114,7 +114,7 @@ extern "C" __global__ __aicore__ void seg_sum_single_core_int8(
   tcuscan::SegSumSingleCoreTiling tiling;
   GetTilingData(&tiling, tiling_gm);
 
-  const uint32_t vec_len = tiling.num_elems;
+  const uint32_t vec_len = tiling.vec_len;
   const uint32_t num_segments = tiling.num_segments;
   const uint32_t matmul_size = tiling.tile_len;
 

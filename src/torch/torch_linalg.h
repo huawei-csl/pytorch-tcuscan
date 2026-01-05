@@ -99,7 +99,7 @@ at::Tensor run_tri_inv_cube_col_sweep(const at::Tensor& x) {
   uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
   if (dtype == torch::kHalf) {
     const size_t workspace_size =
-        workspace::get_workspace_size<uint16_t /* half */>(tiling);
+        tcuscan::get_workspace_size<uint16_t /* half */>(tiling);
     const at::Tensor workspace_tensor =
         tcuscan::alloc_workspace(workspace_size, device);
 

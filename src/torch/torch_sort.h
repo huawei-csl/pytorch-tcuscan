@@ -58,7 +58,7 @@ std::tuple<at::Tensor, at::Tensor> run_radix_sort(const at::Tensor& x, int S) {
   uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
 
   const uint32_t user_workspace_size =
-      tcuscan::workspace::radix_sort::get_workspace_size<int16_t>(tiling);
+      tcuscan::get_workspace_size<int16_t>(tiling);
   const at::Tensor workspace_tensor =
       tcuscan::alloc_workspace(user_workspace_size, device);
 

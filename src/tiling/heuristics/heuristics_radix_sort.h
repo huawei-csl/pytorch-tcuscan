@@ -23,7 +23,7 @@ namespace tcuscan::tiling::heuristics::radix_sort {
 RadixSortTiling CalculateTiling(uint32_t vec_len, uint32_t num_ai_cores,
                                 bool verbose = false) {
   RadixSortTiling tiling;
-  tiling.num_elems = vec_len;
+  tiling.vec_len = vec_len;
 
   // Experimentally selected thresholds
   if (vec_len >= 128 * 128 * 4) {

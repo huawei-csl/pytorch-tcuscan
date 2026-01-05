@@ -59,8 +59,7 @@ at::Tensor run_split(const at::Tensor& x, const at::Tensor& mask, int S) {
   const SplitTiling tiling{block_dim, total_length, matmul_size, vec_tile_size};
   uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
 
-  const uint32_t user_workspace_size =
-      tcuscan::workspace::split::get_workspace_size(tiling);
+  const uint32_t user_workspace_size = tcuscan::get_workspace_size(tiling);
   const at::Tensor workspace_tensor =
       tcuscan::alloc_workspace(user_workspace_size, device);
 
@@ -122,8 +121,7 @@ std::tuple<at::Tensor, at::Tensor> run_split_ind(const at::Tensor& x,
   const SplitTiling tiling{block_dim, total_length, matmul_size, vec_tile_size};
   uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
 
-  const uint32_t user_workspace_size =
-      tcuscan::workspace::split::get_workspace_size(tiling);
+  const uint32_t user_workspace_size = tcuscan::get_workspace_size(tiling);
   const at::Tensor workspace_tensor =
       tcuscan::alloc_workspace(user_workspace_size, device);
 

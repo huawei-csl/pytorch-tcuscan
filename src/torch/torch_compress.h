@@ -54,11 +54,10 @@ at::Tensor run_compress(const at::Tensor& x, const at::Tensor& mask, int S) {
 
   const at::Tensor z = at::empty_like(x);
 
-  const CompressTiling tiling{total_length, matmul_size};
+  const CompressTiling tiling{block_dim, total_length, matmul_size};
   uint8_t* tiling_device = alloc_copy_tiling(tiling);
 
-  const uint32_t user_workspace_size =
-      workspace::compress::get_workspace_size(tiling, block_dim);
+  const uint32_t user_workspace_size = tcuscan::get_workspace_size(tiling);
   const at::Tensor workspace_tensor =
       alloc_workspace(user_workspace_size, device);
 
@@ -117,11 +116,10 @@ at::Tensor run_compress_pos(const at::Tensor& x, const at::Tensor& mask,
   const at::Tensor z =
       at::empty({output_len}, at::TensorOptions().dtype(dtype).device(device));
 
-  const CompressTiling tiling{total_length, matmul_size};
+  const CompressTiling tiling{block_dim, total_length, matmul_size};
   uint8_t* tiling_device = alloc_copy_tiling(tiling);
 
-  const uint32_t user_workspace_size =
-      workspace::compress::get_workspace_size(tiling, block_dim);
+  const uint32_t user_workspace_size = tcuscan::get_workspace_size(tiling);
   const at::Tensor workspace_tensor =
       alloc_workspace(user_workspace_size, device);
 
@@ -181,11 +179,10 @@ std::tuple<at::Tensor, at::Tensor> run_compress_ind(
   const at::Tensor z = at::empty_like(x);
   const at::Tensor indices_out = at::empty_like(indices_in);
 
-  const CompressTiling tiling{total_length, matmul_size};
+  const CompressTiling tiling{block_dim, total_length, matmul_size};
   uint8_t* tiling_device = alloc_copy_tiling(tiling);
 
-  const uint32_t user_workspace_size =
-      workspace::compress::get_workspace_size(tiling, block_dim);
+  const uint32_t user_workspace_size = tcuscan::get_workspace_size(tiling);
   const at::Tensor workspace_tensor =
       alloc_workspace(user_workspace_size, device);
 

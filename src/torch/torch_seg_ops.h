@@ -169,9 +169,7 @@ at::Tensor run_seg_scan(const at::Tensor& x, const at::Tensor& f, int S) {
   uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
 
   const uint32_t user_workspace_size =
-      tcuscan::workspace::seg_scan::get_workspace_size<int16_t /* half */,
-                                                       int8_t>(total_length,
-                                                               matmul_size);
+      tcuscan::get_workspace_size<int16_t /* half */, int8_t>(tiling);
   const at::Tensor workspace_tensor =
       tcuscan::alloc_workspace(user_workspace_size, device);
 
@@ -216,8 +214,7 @@ at::Tensor run_seg_sum_single_core(const at::Tensor& x,
 
   if (dtype == torch::kHalf) {
     const uint32_t user_workspace_size =
-        tcuscan::workspace::seg_sum::get_workspace_size<int16_t /* half */,
-                                                        float>(tiling);
+        tcuscan::get_workspace_size<int16_t /* half */, float>(tiling);
 
     const at::Tensor workspace_tensor =
         tcuscan::alloc_workspace(user_workspace_size, device);
@@ -229,8 +226,7 @@ at::Tensor run_seg_sum_single_core(const at::Tensor& x,
      const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else {
     const uint32_t user_workspace_size =
-        tcuscan::workspace::seg_sum::get_workspace_size<int8_t, int32_t>(
-            tiling);
+        tcuscan::get_workspace_size<int8_t, int32_t>(tiling);
 
     const at::Tensor workspace_tensor =
         tcuscan::alloc_workspace(user_workspace_size, device);
@@ -280,8 +276,7 @@ at::Tensor run_seg_sum_single_cube(const at::Tensor& x, const at::Tensor& upper,
 
   if (dtype == torch::kHalf) {
     const uint32_t user_workspace_size =
-        tcuscan::workspace::seg_sum::get_workspace_size<int16_t /* half */,
-                                                        float>(tiling);
+        tcuscan::get_workspace_size<int16_t /* half */, float>(tiling);
 
     const at::Tensor workspace_tensor =
         tcuscan::alloc_workspace(user_workspace_size, device);

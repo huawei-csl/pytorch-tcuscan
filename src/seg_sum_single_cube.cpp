@@ -82,7 +82,7 @@ extern "C" __global__ __aicore__ void seg_sum_single_cube_fp16(
   tcuscan::SegSumSingleCubeTiling t;
   GetTilingData(&t, tiling);
 
-  const uint32_t vec_len = t.num_elems;
+  const uint32_t vec_len = t.vec_len;
   const uint32_t num_segments = t.num_segments;
   const uint32_t tile_len = t.tile_len;
 
