@@ -27,8 +27,7 @@ def get_lengths(s: int, max_iters: int):
 
 def tcuscan_compress_ind(x, indices_in, mask, s: int):
     z, indices_out = tcuscan_ops.run_compress_ind(x, indices_in, mask, s)
-    output_size = torch.sum(mask)
-    return z[:output_size], indices_out[:output_size]
+    return z, indices_out
 
 
 def _test_compress_ind(vec_len: int, s: int, dtype: torch.dtype):

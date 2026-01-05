@@ -27,8 +27,7 @@ def get_lengths(s: int, max_iters: int):
 
 def tcuscan_compress(x, mask, s: int):
     z = tcuscan_ops.run_compress(x, mask, s)
-    output_size = torch.sum(mask)
-    return z[:output_size]
+    return z
 
 
 def _test_compress(vec_len: int, s: int, dtype: torch.dtype):

@@ -52,7 +52,9 @@ at::Tensor run_compress(const at::Tensor& x, const at::Tensor& mask, int S) {
     block_dim = 1;
   }
 
-  const at::Tensor z = at::empty_like(x);
+  const int64_t num_ones = torch::sum(mask).item<int64_t>();
+  const at::Tensor z =
+      at::empty({num_ones}, at::TensorOptions().dtype(dtype).device(device));
 
   const CompressTiling tiling{block_dim, total_length, matmul_size};
   uint8_t* tiling_device = alloc_copy_tiling(tiling);
@@ -160,6 +162,7 @@ std::tuple<at::Tensor, at::Tensor> run_compress_ind(
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();
   const auto dtype = x.options().dtype();
+  const auto indices_dtype = indices_in.options().dtype();
 
   const uint32_t matmul_size = static_cast<uint32_t>(S);
   const uint32_t total_length = x.numel();
@@ -176,8 +179,12 @@ std::tuple<at::Tensor, at::Tensor> run_compress_ind(
     block_dim = 1;
   }
 
-  const at::Tensor z = at::empty_like(x);
-  const at::Tensor indices_out = at::empty_like(indices_in);
+  const int64_t num_ones = torch::sum(mask).item<int64_t>();
+  const at::Tensor z =
+      at::empty({num_ones}, at::TensorOptions().dtype(dtype).device(device));
+
+  const at::Tensor indices_out = at::empty(
+      {num_ones}, at::TensorOptions().dtype(indices_dtype).device(device));
 
   const CompressTiling tiling{block_dim, total_length, matmul_size};
   uint8_t* tiling_device = alloc_copy_tiling(tiling);
