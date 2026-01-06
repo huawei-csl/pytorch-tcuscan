@@ -15,9 +15,12 @@
 #include "aclrtlaunch_compress_fp32.h"
 #include "aclrtlaunch_compress_ind_fp16.h"
 #include "aclrtlaunch_compress_ind_fp32.h"
+#include "aclrtlaunch_compress_with_sums_fp16.h"
+#include "aclrtlaunch_compress_with_sums_fp32.h"
 #include "commons.h"
 #include "tiling/platform/platform_ascendc.h"
 #include "torch_npu/csrc/core/npu/NPUStream.h"
+#include "torch_reduce.h"
 #include "workspace.h"
 
 namespace tcuscan {
@@ -40,9 +43,9 @@ at::Tensor run_compress(const at::Tensor& x, const at::Tensor& mask, int S) {
   const uint32_t matmul_size = static_cast<uint32_t>(S);
   const uint32_t total_length = x.numel();
 
-  const uint32_t tile_elems = matmul_size * matmul_size;
+  const uint32_t tile_len = matmul_size * matmul_size;
 
-  const uint32_t num_tiles = host_utils::CeilDiv(total_length, tile_elems);
+  const uint32_t num_tiles = host_utils::CeilDiv(total_length, tile_len);
 
   uint32_t block_dim = ascendc_platform->GetCoreNumAic();
   while (num_tiles % block_dim != 0) {
@@ -52,7 +55,10 @@ at::Tensor run_compress(const at::Tensor& x, const at::Tensor& mask, int S) {
     block_dim = 1;
   }
 
-  const int64_t num_ones = torch::sum(mask).item<int64_t>();
+  const at::Tensor num_ones_per_block =
+      run_reduce_tiles(mask, tile_len / 2, 2 * block_dim);
+  const int32_t num_ones = num_ones_per_block.sum().item<int32_t>();
+
   const at::Tensor z =
       at::empty({num_ones}, at::TensorOptions().dtype(dtype).device(device));
 
@@ -64,15 +70,17 @@ at::Tensor run_compress(const at::Tensor& x, const at::Tensor& mask, int S) {
       alloc_workspace(user_workspace_size, device);
 
   if (dtype == torch::kHalf or dtype == torch::kInt16) {
-    ACLRT_LAUNCH_KERNEL(compress_fp16)
+    ACLRT_LAUNCH_KERNEL(compress_with_sums_fp16)
     (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
      const_cast<void*>(mask.storage().data()),
+     const_cast<void*>(num_ones_per_block.storage().data()),
      const_cast<void*>(z.storage().data()),
      const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else {
-    ACLRT_LAUNCH_KERNEL(compress_fp32)
+    ACLRT_LAUNCH_KERNEL(compress_with_sums_fp32)
     (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
      const_cast<void*>(mask.storage().data()),
+     const_cast<void*>(num_ones_per_block.storage().data()),
      const_cast<void*>(z.storage().data()),
      const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   }
@@ -103,9 +111,9 @@ at::Tensor run_compress_pos(const at::Tensor& x, const at::Tensor& mask,
   const uint32_t matmul_size = static_cast<uint32_t>(S);
   const uint32_t total_length = x.numel();
 
-  const uint32_t tile_elems = matmul_size * matmul_size;
+  const uint32_t tile_len = matmul_size * matmul_size;
 
-  const uint32_t num_tiles = total_length / tile_elems;
+  const uint32_t num_tiles = total_length / tile_len;
 
   uint32_t block_dim = ascendc_platform->GetCoreNumAic();
   while (num_tiles % block_dim != 0) {
@@ -167,9 +175,9 @@ std::tuple<at::Tensor, at::Tensor> run_compress_ind(
   const uint32_t matmul_size = static_cast<uint32_t>(S);
   const uint32_t total_length = x.numel();
 
-  const uint32_t tile_elems = matmul_size * matmul_size;
+  const uint32_t tile_len = matmul_size * matmul_size;
 
-  const uint32_t num_tiles = host_utils::CeilDiv(total_length, tile_elems);
+  const uint32_t num_tiles = host_utils::CeilDiv(total_length, tile_len);
 
   uint32_t block_dim = ascendc_platform->GetCoreNumAic();
   while (num_tiles % block_dim != 0) {
@@ -179,7 +187,11 @@ std::tuple<at::Tensor, at::Tensor> run_compress_ind(
     block_dim = 1;
   }
 
-  const int64_t num_ones = torch::sum(mask).item<int64_t>();
+  // TODO(anastasios): reduce_tiles below is performed inside the `compress_ind`
+  // kernels as well.
+  const int32_t num_ones =
+      run_reduce_tiles(mask, tile_len / 2, 2 * block_dim).sum().item<int32_t>();
+
   const at::Tensor z =
       at::empty({num_ones}, at::TensorOptions().dtype(dtype).device(device));
 

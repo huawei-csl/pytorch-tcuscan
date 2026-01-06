@@ -267,6 +267,33 @@ __aicore__ inline void run_compress(GM_ADDR in, GM_ADDR mask, GM_ADDR out,
 }
 
 /**
+ * @brief Run `compress` kernel with input the number of ones in mask per block.
+ * Support `fp16/half` and `float32` input dtypes.
+ *
+ * @tparam T Data type of the input vector.
+ *
+ * @param [in] in Pointer to input vector.
+ * @param [in] mask Pointer to boolean flag/mask vector of dtype int8..
+ * @param [in] num_ones_per_block Pointer to sum of ones in mask per block.
+ * @param [in] out Pointer to output vector.
+ * @param [in] vec_len Length of the input vector.
+ * @param [in] block_len Block length.
+ */
+template <typename T>
+__aicore__ inline void run_compress_with_num_ones(GM_ADDR in, GM_ADDR mask,
+                                                  GM_ADDR num_ones_per_block,
+                                                  GM_ADDR out, uint32_t vec_len,
+                                                  uint32_t block_len) {
+  exec_mode::EnableCubeCores();
+
+  if ASCEND_IS_AIV {
+    KernelCompress<T> op(vec_len, block_len);
+    op.Init(in, mask, num_ones_per_block, out);
+    op.Process();
+  }
+}
+
+/**
  * @brief Run the `compress_ind` kernel. Compression/compaction that returns the
  * corresponding input indices. Support `fp16/half` and `float32` input data
  * types. Indices must be `int32_t` or `uint32_t`.

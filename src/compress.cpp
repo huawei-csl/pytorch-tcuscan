@@ -103,3 +103,53 @@ extern "C" __global__ __aicore__ void compress_ind_fp32(
   tcuscan::run_compress_ind<float>(vec_in, indices_in, mask, vec_out,
                                    indices_out, workspace, vec_len, tile_len);
 }
+
+/**
+ * @brief Compress kernel with number of block mask sums (dtype fp16).
+ *
+ * @param [in] x Input data vector
+ * @param [in] mask Input mask vector
+ * @param [in] num_ones_per_block Input number of ones of mask per block.
+ * @param [in] z Output vector
+ * @param [in] workspace Pointer to workspace.
+ * @param [in] tiling_gm Pointer to tiling structure.
+ */
+extern "C" __global__ __aicore__ void compress_with_sums_fp16(
+    GM_ADDR x, GM_ADDR mask, GM_ADDR num_ones_per_block, GM_ADDR z,
+    GM_ADDR workspace, GM_ADDR tiling_gm) {
+  (void)workspace;
+  tcuscan::CompressTiling tiling;
+  GetTilingData(&tiling, tiling_gm);
+
+  const uint32_t vec_len = tiling.vec_len;
+  const uint32_t tile_len = tiling.tile_len;
+  const uint32_t block_len = tile_len * tile_len / 2;
+
+  tcuscan::run_compress_with_num_ones<half>(x, mask, num_ones_per_block, z,
+                                            vec_len, block_len);
+}
+
+/**
+ * @brief Compress kernel with number of block mask sums (dtype fp32).
+ *
+ * @param [in] x Input data vector
+ * @param [in] mask Input mask vector
+ * @param [in] num_ones_per_block Input number of ones of mask per block.
+ * @param [in] z Output vector
+ * @param [in] workspace Pointer to workspace.
+ * @param [in] tiling_gm Pointer to tiling structure.
+ */
+extern "C" __global__ __aicore__ void compress_with_sums_fp32(
+    GM_ADDR x, GM_ADDR mask, GM_ADDR num_ones_per_block, GM_ADDR z,
+    GM_ADDR workspace, GM_ADDR tiling_gm) {
+  (void)workspace;
+  tcuscan::CompressTiling tiling;
+  GetTilingData(&tiling, tiling_gm);
+
+  const uint32_t vec_len = tiling.vec_len;
+  const uint32_t tile_len = tiling.tile_len;
+  const uint32_t block_len = tile_len * tile_len / 2;
+
+  tcuscan::run_compress_with_num_ones<float>(x, mask, num_ones_per_block, z,
+                                             vec_len, block_len);
+}
