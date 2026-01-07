@@ -19,6 +19,7 @@
 #include "aclrtlaunch_compress_with_sums_fp32.h"
 #include "commons.h"
 #include "tiling/platform/platform_ascendc.h"
+#include "torch_compare.h"
 #include "torch_npu/csrc/core/npu/NPUStream.h"
 #include "torch_reduce.h"
 #include "workspace.h"
@@ -227,6 +228,32 @@ std::tuple<at::Tensor, at::Tensor> run_compress_ind(
   aclrtSynchronizeStream(acl_stream);
 
   return std::make_tuple(z, indices_out);
+}
+
+/**
+ * @brief Filter a tensor using `{ x_i >= pivot}`.
+ *
+ * @param [in] x Input data 1D vector.
+ * @param [in] pivot Input pivot to filter by greter than.
+ * @param [in] S Tiling parameter. Typical values: 32, 64, 128.
+ * @return The subvector of `x`: `x[x >= pivot]`.
+ */
+at::Tensor run_filter_greater_equal(const at::Tensor& x, float pivot, int S) {
+  const at::Tensor mask = run_greater_equal(x, pivot, S * S);
+  return run_compress(x, mask, S);
+}
+
+/**
+ * @brief Filter a tensor using `{ x_i <= pivot}`.
+ *
+ * @param [in] x Input data 1D vector.
+ * @param [in] pivot Input pivot to filter by.
+ * @param [in] S Tiling parameter. Typical values: 32, 64, 128.
+ * @return The subvector of `x`: `x[x <= pivot]`.
+ */
+at::Tensor run_filter_less_equal(const at::Tensor& x, float pivot, int S) {
+  const at::Tensor mask = (x <= pivot).to(torch::kInt8);
+  return run_compress(x, mask, S);
 }
 
 }  // namespace tcuscan

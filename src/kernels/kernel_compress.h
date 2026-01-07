@@ -99,6 +99,10 @@ class KernelCompress {
         kernel_utils::scalar::GetWorkDistribution(vec_len_, tile_len_,
                                                   vec_core_num_);
 
+    if (num_tiles_to_process == 0) {
+      return;
+    }
+
     uint32_t offset_within_block = 0;
     uint32_t output_offset = CalculatePartsOffsets();
 
@@ -108,6 +112,10 @@ class KernelCompress {
 
       const uint32_t num_elems_to_process =
           scalar::NextTileLen(tile_len_, global_offset, vec_len_);
+
+      if (num_elems_to_process == 0) {
+        return;
+      }
 
       LoadAndConvertMask(global_offset, num_elems_to_process);
       copy::CopyGmToVec(vec_in_q_, global_input_[global_offset],

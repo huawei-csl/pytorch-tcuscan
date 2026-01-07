@@ -10,9 +10,9 @@
 #include <pybind11/pybind11.h>
 #include <torch/extension.h>
 
+#include "torch/torch_compare.h"
 #include "torch/torch_compress.h"
 #include "torch/torch_copy.h"
-#include "torch/torch_count_if.h"
 #include "torch/torch_diff.h"
 #include "torch/torch_gather.h"
 #include "torch/torch_gen_lower.h"
@@ -43,6 +43,10 @@ PYBIND11_MODULE(tcuscan_ops, m) {
         "Multi-core Scan (no L2 cache optimization)");
   m.def("run_csr_gather", &tcuscan::run_csr_gather, "CSR gather");
   m.def("run_compress", &tcuscan::run_compress, "Compaction/compress");
+  m.def("run_filter_greater_eq", &tcuscan::run_filter_greater_equal,
+        "Filter by great-equal pivot.");
+  m.def("run_filter_less_eq", &tcuscan::run_filter_less_equal,
+        "Filter by less-equal pivot.");
   m.def("run_compress_ind", &tcuscan::run_compress_ind,
         "Compaction with indices");
   m.def("run_compress_pos", &tcuscan::run_compress_pos,

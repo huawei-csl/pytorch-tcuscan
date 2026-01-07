@@ -1453,7 +1453,7 @@ __aicore__ inline uint32_t GetBatchOffset(uint32_t batch_size,
  * @param [in] addr Address in GM.
  * @param [in] offset Offset.
  * @param [in] vec_len Size of the global buffer.
- * @return Result of division.
+ * @return Value from global memory.
  */
 template <typename T>
 __aicore__ inline T GetGMValue(GM_ADDR addr, uint32_t offset,
@@ -1469,6 +1469,30 @@ __aicore__ inline T GetGMValue(GM_ADDR addr, uint32_t offset,
   data_cache::InvalidateLine(gt);
 
   return gt.GetValue(offset);
+}
+
+/**
+ * @brief Sets a scalar value to global memory.
+ *
+ * @tparam T Data type.
+ *
+ * @param [in] addr Address in GM.
+ * @param [in] offset Offset.
+ * @param [in] value Value to set.
+ * @param [in] vec_len Size of the global buffer.
+ */
+template <typename T>
+__aicore__ inline void SetGMValue(GM_ADDR addr, uint32_t offset, T value,
+                                  uint32_t vec_len) {
+  ASCENDC_ASSERT(offset < vec_len, {
+    KERNEL_LOG(KERNEL_ERROR,
+               "SetGMValue is trying to access data out of bounds.");
+  });
+
+  GlobalTensor<T> gt;
+  gt.SetGlobalBuffer((__gm__ T*)addr, vec_len);
+  gt.SetValue(offset, value);
+  data_cache::InvalidateLine(gt);
 }
 
 /**
@@ -2008,6 +2032,63 @@ __aicore__ inline void LessThan(const LocalTensor<OutputT>& out_lt,
                                size);
   AscendC::Cast<OutputT, half>(out_lt, x_half_lt, RoundMode::CAST_NONE, size);
 }
+
+/**
+ * @brief Performs a greater-equal comparison between an input local tensor and
+ * a pivot scalar, i.e., {x_i >= pivot}. Writes the 0/1 binary element-wise
+ * outcome of the comparison in `out_lt`.
+ *
+ * @tparam T Input data type. Supports half, int16_t and uint16_t.
+ * @tparam OutputT Output data type where binary outcome of comparison is
+ * stored. Supports int8_t and uint8_t.
+ *
+ * @param [in] out_lt Output where the binary outcome of the comparison is
+ * written.
+ * @param [in] input_lt Input tensor.
+ * @param [in] pivot Pivot value for less-than comparison.
+ * @param [in] work_lt Temporary workspace to use for internal calculations.
+ * @param [in] size Number of elements to process.
+ */
+template <typename T, typename OutputT>
+__aicore__ inline void GreaterEqual(const LocalTensor<OutputT>& out_lt,
+                                    const LocalTensor<T>& input_lt, T pivot,
+                                    const LocalTensor<T>& work_lt,
+                                    uint32_t size) {
+  static_assert(
+      std::is_same_v<T, half> or std::is_same_v<T, int16_t> or
+          std::is_same_v<T, uint16_t>,
+      "GreaterThan supports only half, int16_t and uint16_t data types.");
+  static_assert(
+      std::is_same_v<OutputT, int8_t> or std::is_same_v<OutputT, uint8_t>,
+      "GreaterThan supports only int8_t or uint8_t output data types.");
+
+  // These buffers point to the same UB location but have different
+  // types. Manual synchronization is needed!
+  const LocalTensor<uint16_t> x_uint16_lt =
+      work_lt.template ReinterpretCast<uint16_t>();
+  const LocalTensor<int16_t> x_int16_lt =
+      work_lt.template ReinterpretCast<int16_t>();
+  const LocalTensor<half> x_half_lt = work_lt.template ReinterpretCast<half>();
+
+  // Step 1. Perform work_lt = (x_i - pivot)
+  const float minus_pivot = -static_cast<float>(pivot);
+  AscendC::DataCopy<T>(work_lt, input_lt, size);
+  AscendC::Adds<T>(work_lt, work_lt, static_cast<T>(minus_pivot), size);
+
+  AscendC::PipeBarrier<PIPE_V>();
+
+  // x_uint16_lt will be '1' iff (x_i - pivot) > 0, otherwise is zero.
+  AscendC::Not(x_uint16_lt, x_uint16_lt, size);
+  AscendC::ShiftRight(x_uint16_lt, x_uint16_lt, (uint16_t)15, size);
+
+  AscendC::PipeBarrier<PIPE_V>();
+
+  // Cast 0/1 values to OutputT local tensor.
+  AscendC::Cast<half, int16_t>(x_half_lt, x_int16_lt, RoundMode::CAST_NONE,
+                               size);
+  AscendC::Cast<OutputT, half>(out_lt, x_half_lt, RoundMode::CAST_NONE, size);
+}
+
 }  // namespace compare
 
 namespace fp16 {

@@ -384,6 +384,13 @@ test_count_if:
     - make setup_ci
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_count_if
 
+test_filter_greater_equal:
+  <<: *test_config
+  script:
+    - make setup_ci
+    - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_filter_greater_equal
+
+
 # Uncomment to run all tests in a single run
 unit_test:
   tags:
