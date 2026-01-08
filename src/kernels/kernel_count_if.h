@@ -22,10 +22,13 @@ template <typename T = half>
 class KernelCountIf {
   /// @brief Accumulation data type for the counts.
   using AccT = int32_t;
+  using PackedMaskT = uint8_t;
+  using GatherMaskT =
+      typename std::conditional<sizeof(T) == 2, uint16_t, uint32_t>::type;
+  constexpr static uint16_t IN_ELEMS_PER_MASK_ELEM = sizeof(PackedMaskT) * 8;
+
   /// @brief Minimum size of queue size (UB restriction)
   constexpr static int32_t MIN_VEC_SIZE = UB_ALIGNMENT / sizeof(AccT);
-
-  constexpr static int32_t RED2_SIZE = 8;
 
  public:
   /**
@@ -65,9 +68,8 @@ class KernelCountIf {
     pipe_.InitBuffer(out_q_, 1, out_queue_len * sizeof(int32_t));
 
     pipe_.InitBuffer(vec_in_buf_, tile_len_ * sizeof(T));
-    pipe_.InitBuffer(work_buf_, tile_len_ * sizeof(AccT));
-    pipe_.InitBuffer(comparisons_buf_, tile_len_ * sizeof(AccT));
-    pipe_.InitBuffer(red2_buf_, RED2_SIZE * sizeof(AccT));
+    pipe_.InitBuffer(work_buf_, tile_len_ * sizeof(T));
+    pipe_.InitBuffer(packed_mask_buf_, tile_len_ * sizeof(PackedMaskT) / 8);
   }
 
   /**
@@ -96,37 +98,20 @@ class KernelCountIf {
   __aicore__ inline void LessThan(T pivot) {
     LocalTensor<T> tile_lt = vec_in_buf_.Get<T>();
     LocalTensor<T> work_lt = work_buf_.Get<T>();
-    LocalTensor<uint8_t> binary_lt = comparisons_buf_.Get<uint8_t>();
 
-    compare::LessThan<T, uint8_t>(binary_lt, tile_lt, pivot, work_lt);
+    const LocalTensor<uint8_t> packed_mask_8b = packed_mask_buf_.Get<uint8_t>();
+    CompareScalar(packed_mask_8b, tile_lt, pivot, CMPMODE::LE, tile_len_);
 
-    Duplicate(work_lt, static_cast<T>(0), work_lt.GetSize());
-    AscendC::PipeBarrier<PIPE_V>();
+    const LocalTensor<GatherMaskT> mask_lt =
+        packed_mask_buf_.Get<GatherMaskT>();
 
-    LocalTensor<half> count_fp16_lt = work_lt.template ReinterpretCast<half>();
-    AscendC::Cast(count_fp16_lt, binary_lt, RoundMode::CAST_NONE, tile_len_);
+    uint64_t num_gathered_elems = 0;
+    GatherMask(work_lt, tile_lt, mask_lt, true, tile_len_, {1, 1, 8, 8},
+               num_gathered_elems);
 
-    LocalTensor<int32_t> count_i32_lt =
-        work_lt.template ReinterpretCast<int32_t>();
-    AscendC::Cast(count_i32_lt, count_fp16_lt, RoundMode::CAST_RINT, tile_len_);
-
-    const AccT num_elems_less_than = ReduceToScalar(count_i32_lt, tile_len_);
     const auto id = GetBlockIdx();
-    copy::CopyScalarToGm(global_out_[id], out_q_, num_elems_less_than);
-  }
-
-  /**
-   * @brief Returns the sum-reduction of the input vector.
-   *
-   * @param [in] binary_lt Input tensor
-   * @param [in] length Input length
-   * @return Sum-reduction of first `length` elements of input
-   **/
-  __aicore__ inline AccT ReduceToScalar(const LocalTensor<AccT>& binary_lt,
-                                        uint32_t length) {
-    const LocalTensor<AccT> red2_lt = red2_buf_.Get<AccT>();
-    reduce::ReduceVecAdd<true /*AllocAcc*/, AccT>(red2_lt, binary_lt, length);
-    return reduce::ReduceScalarAdd<AccT>(red2_lt, red2_lt.GetSize());
+    copy::CopyScalarToGm(global_out_[id], out_q_,
+                         static_cast<int32_t>(num_gathered_elems));
   }
 
  private:
@@ -137,8 +122,7 @@ class KernelCountIf {
 
   TBuf<QuePosition::VECCALC> vec_in_buf_;
   TBuf<QuePosition::VECCALC> work_buf_;
-  TBuf<QuePosition::VECCALC> red2_buf_;
-  TBuf<QuePosition::VECCALC> comparisons_buf_;
+  TBuf<QuePosition::VECCALC> packed_mask_buf_;
 
   GlobalTensor<T> global_in_;
   GlobalTensor<int32_t> global_out_;

@@ -1052,7 +1052,7 @@ def reduce_tiles_benchmark(
 
 
 def count_if_benchmark(
-    device: Device, size: int, dtype: torch.dtype, s: int, num_cores: int
+    device: Device, size: int, dtype: torch.dtype, s: int
 ) -> Tuple[float, int]:
     if dtype == torch.float16:
         x = torch.rand(size, device=device.str, dtype=dtype)
@@ -1062,7 +1062,8 @@ def count_if_benchmark(
     def run_count_if_fn() -> None:
         _ = tcuscan_ops.run_count_if(x, 0.1, s * s)
 
-    return _run_benchmark(device, run_count_if_fn), num_cores
+    output_len = len(x) // (s * s)
+    return _run_benchmark(device, run_count_if_fn), output_len
 
 
 def benchmark(
@@ -1672,7 +1673,7 @@ if __name__ == "__main__":  # noqa
             device,
             f"count_if_{s}",
             dtype,
-            partial(count_if_benchmark, dtype=tdtype, s=s, num_cores=2 * num_cores),
+            partial(count_if_benchmark, dtype=tdtype, s=s),
             sizes,
             density,
         )
