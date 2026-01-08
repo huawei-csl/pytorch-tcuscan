@@ -390,6 +390,11 @@ test_filter_greater_equal:
     - make setup_ci
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_filter_greater_equal
 
+test_where:
+  <<: *test_config
+  script:
+    - make setup_ci
+    - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_where
 
 # Uncomment to run all tests in a single run
 unit_test:

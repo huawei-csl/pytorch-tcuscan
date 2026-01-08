@@ -5,10 +5,11 @@
  * @brief Multi-core compress approach.
  */
 
-#include "kernels/constants.h"
 #include "kernels/kernel_compress.h"
+#include "kernels/kernel_where.h"
 #include "kernels/tcuscan_utils.h"
 #include "tiling/tiling_compress.h"
+#include "tiling/tiling_where.h"
 
 using namespace AscendC;
 
@@ -152,4 +153,29 @@ extern "C" __global__ __aicore__ void compress_with_sums_fp32(
 
   tcuscan::run_compress_with_num_ones<float>(x, mask, num_ones_per_block, z,
                                              vec_len, block_len);
+}
+
+/**
+ * @brief Run the `where` kernel with dtype fp16.
+ *
+ * @param [in] mask_in Pointer to the input vector.
+ * @param [in] num_ones_per_block Input number of ones of mask per block.
+ * @param [in] vec_out Pointer to the output vector.
+ * @param [in] workspace Pointer to workspace.
+ * @param [in] tiling_gm Pointer to the tiling structure.
+ */
+
+extern "C" __global__ __aicore__ void where_fp16(GM_ADDR mask_in,
+                                                 GM_ADDR num_ones_per_block,
+                                                 GM_ADDR vec_out,
+                                                 GM_ADDR workspace,
+                                                 GM_ADDR tiling_gm) {
+  (void)workspace;
+  tcuscan::WhereTiling tiling;
+  GetTilingData(&tiling, tiling_gm);
+
+  const uint32_t vec_len = tiling.vec_len;
+  const uint32_t tile_len = tiling.tile_len;
+
+  tcuscan::run_where(mask_in, num_ones_per_block, vec_out, vec_len, tile_len);
 }
