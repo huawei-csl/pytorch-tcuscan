@@ -1060,10 +1060,9 @@ def count_if_benchmark(
         raise RuntimeError(f"`count_if` supports fp16. Got {dtype}.")
 
     def run_count_if_fn() -> None:
-        _ = tcuscan_ops.run_count_if(x, 0.1, s * s)
+        _ = tcuscan_ops.run_count_if(x, 0.1, s * s, 3)  # 3: is CMPMODE::LE
 
-    output_len = len(x) // (s * s)
-    return _run_benchmark(device, run_count_if_fn), output_len
+    return _run_benchmark(device, run_count_if_fn), 1
 
 
 def benchmark(

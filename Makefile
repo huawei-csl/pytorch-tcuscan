@@ -284,4 +284,8 @@ profile_cube_reduce:
 profile_topk_pivot:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench topk_pivot --dtype fp16 --s 64 --num_cores 40
 
+profile_count_if:
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench count_if --dtype fp16 --s 128 --num_cores 40
+
+
 include Makefile.spaa.mk Makefile.spmv.mk Makefile.tri_inv.mk

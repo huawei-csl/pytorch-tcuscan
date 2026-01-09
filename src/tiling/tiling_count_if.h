@@ -19,11 +19,13 @@ struct CountIfTiling {
   /// @brief Number of blocks.
   uint32_t num_blocks;
   /// @brief Total number of input elements.
-  uint32_t num_elems;
+  uint32_t vec_len;
   /// @brief Tiling length.
   uint32_t tile_len;
   /// @brief Input pivot.
   float pivot;
+  /// @brief Comparison mode as in \c AscendC::CompareScalar.
+  uint8_t compare_mode;
 };
 #pragma pack(pop)
 

@@ -1,5 +1,6 @@
 import os
 import random
+from enum import IntEnum
 
 import numpy as np
 import pytest
@@ -20,11 +21,20 @@ torch.npu.set_device(NPU_DEVICE)
 _SIZES = [1024 * 8, 1024 * 16, 2048 * 32, 1024 * 128]
 
 
+class CMPMODE(IntEnum):
+    LT = 0
+    GT = 1
+    EQ = 2
+    LE = 3
+    GE = 4
+    NE = 5
+
+
 def _test_tcuscan_count_if(length: int, dtype: torch.dtype, tile_len: int):
     x = torch.randn(length, dtype=dtype, device=NPU_DEVICE)
 
     pivot = 0.1
-    actual = tcuscan_ops.run_count_if(x, pivot, tile_len)
+    actual = tcuscan_ops.run_count_if(x, pivot, tile_len, CMPMODE.LE)
     expected = torch.count_nonzero(x <= pivot).to(torch.int32).flatten()
 
     assert torch.equal(actual, expected), f"Expected {expected}. Got {actual}"

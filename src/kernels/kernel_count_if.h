@@ -35,11 +35,14 @@ class KernelCountIf {
    *
    * @param [in] vec_len Dimension of the input vectors.
    * @param [in] tile_len Tile length.
+   * @param [in] compare_mode Comparison enum of \c AscendC::CompareScalar.
    */
-  __aicore__ inline KernelCountIf(uint32_t vec_len, uint32_t tile_len)
+  __aicore__ inline KernelCountIf(uint32_t vec_len, uint32_t tile_len,
+                                  AscendC::CMPMODE compare_mode)
       : vec_core_num_(GetBlockNum() * GetTaskRation()),
         vec_len_(vec_len),
         tile_len_(tile_len),
+        compare_mode_(compare_mode),
         num_tiles_(scalar::CeilDiv(vec_len_, tile_len_)) {
     ASCENDC_ASSERT(vec_len_ < tile_len_ * vec_core_num_, {
       KERNEL_LOG(KERNEL_ERROR,
@@ -94,12 +97,12 @@ class KernelCountIf {
    * pivot} where \f$ x_i \f$ are the input elements.
    *
    */
-  __aicore__ inline void LessThan(T pivot) {
+  __aicore__ inline void Process(T pivot) {
     LocalTensor<T> tile_lt = vec_in_buf_.Get<T>();
     LocalTensor<T> work_lt = work_buf_.Get<T>();
 
     const LocalTensor<uint8_t> packed_mask_8b = packed_mask_buf_.Get<uint8_t>();
-    CompareScalar(packed_mask_8b, tile_lt, pivot, CMPMODE::LE, tile_len_);
+    CompareScalar(packed_mask_8b, tile_lt, pivot, compare_mode_, tile_len_);
 
     const LocalTensor<GatherMaskT> mask_lt =
         packed_mask_buf_.Get<GatherMaskT>();
@@ -134,6 +137,7 @@ class KernelCountIf {
   const uint32_t vec_core_num_;
   const uint32_t vec_len_;
   const uint32_t tile_len_;
+  const AscendC::CMPMODE compare_mode_;
   const uint32_t num_tiles_;
 };
 
@@ -149,26 +153,17 @@ class KernelCountIf {
  * @param [in] vec_len Dimension of the input vector.
  * @param [in] tile_len Tile length.
  * @param [in] pivot Initial pivot.
+ * @param [in] compare_mode Comparison enum of \c AscendC::CompareScalar.
  */
-template <bool ForceMixMode = true, typename T>
+template <typename T>
 __aicore__ inline void run_count_if(GM_ADDR vec_in, GM_ADDR vec_out,
                                     uint32_t vec_len, uint32_t tile_len,
-                                    T pivot) {
-  if constexpr (ForceMixMode) {
-    exec_mode::EnableCubeCores();
-  }
+                                    T pivot, AscendC::CMPMODE compare_mode) {
   if ASCEND_IS_AIV {
-    KernelCountIf<T> op(vec_len, tile_len);
+    KernelCountIf<T> op(vec_len, tile_len, compare_mode);
     op.Init(vec_in, vec_out);
     op.LoadInputTileInUB();
-    op.LessThan(pivot);
-
-    // TODO: binary search on UB
-    // constexpr uint32_t recursion_steps = 4;
-    // for (uint32_t idx = 0; idx < recursion_steps; idx++) {
-    //   op.LessThan(((float)0.5 + (float)pivot));
-    //  SyncAll<true /* isAIVOnly */>();
-    //}
+    op.Process(pivot);
   }
 }
 

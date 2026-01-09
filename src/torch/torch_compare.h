@@ -26,9 +26,12 @@ namespace tcuscan {
  * @param [in] x Input data vector.
  * @param [in] pivot Input pivot
  * @param [in] tile_len Tile length that is assigned on each AIV core.
+ * @param [in] compare_mode Comparison enum of \c AscendC::CompareScalar.
+ * Default `less equal`
  * @return Returns a tensor containing the sum of `{ x_i <= pivot}`.
  */
-at::Tensor run_count_if(const at::Tensor& x, float pivot, uint32_t tile_len) {
+at::Tensor run_count_if(const at::Tensor& x, float pivot, uint32_t tile_len,
+                        uint8_t compare_mode) {
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();
   const auto dtype = x.options().dtype();
@@ -39,7 +42,7 @@ at::Tensor run_count_if(const at::Tensor& x, float pivot, uint32_t tile_len) {
   const at::Tensor z =
       at::zeros({1}, at::TensorOptions().dtype(torch::kInt32).device(device));
 
-  const CountIfTiling tiling{block_dim, vec_len, tile_len, pivot};
+  const CountIfTiling tiling{block_dim, vec_len, tile_len, pivot, compare_mode};
   uint8_t* tiling_device = alloc_copy_tiling(tiling);
 
   const at::Tensor workspace_tensor = alloc_workspace(0, device);
