@@ -11,7 +11,6 @@
 #include "tcuscan_utils.h"
 
 using namespace AscendC;
-using namespace kernel_utils;
 
 namespace tcuscan {
 
@@ -61,10 +60,9 @@ class KernelPadBatch {
    * @param [in] dst Pointer to the destination buffer in global memory.
    */
   __aicore__ inline void Init(GM_ADDR src, GM_ADDR dst) {
-    global_src_.SetGlobalBuffer((__gm__ T *)src, batch_len_ * num_batches_);
+    global_src_.SetGlobalBuffer((__gm__ T*)src, batch_len_ * num_batches_);
     global_dst_.SetGlobalBuffer(
-        (__gm__ T *)dst,
-        scalar::AlignUp(batch_len_, align_len_) * num_batches_);
+        (__gm__ T*)dst, scalar::AlignUp(batch_len_, align_len_) * num_batches_);
     pipe_.InitBuffer(vec_in_q_, BUFFER_NUM, tile_size_ * sizeof(T));
     pipe_.InitBuffer(vec_out_q_, BUFFER_NUM, tile_size_ * sizeof(T));
     pipe_.InitBuffer(vec_out_pad_q_, 1,

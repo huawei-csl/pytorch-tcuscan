@@ -10,7 +10,6 @@
 #include "tcuscan_utils.h"
 
 using namespace AscendC;
-using namespace kernel_utils;
 
 namespace tcuscan {
 
@@ -61,10 +60,9 @@ class KernelMcGather {
    */
   __aicore__ inline void Init(GM_ADDR values_in, GM_ADDR idx_in,
                               GM_ADDR z_out) {
-    global_values_.SetGlobalBuffer((__gm__ DataType *)values_in,
-                                   values_in_len_);
-    global_idx_.SetGlobalBuffer((__gm__ uint32_t *)idx_in, idx_in_len_);
-    global_z_.SetGlobalBuffer((__gm__ DataType *)z_out, idx_in_len_);
+    global_values_.SetGlobalBuffer((__gm__ DataType*)values_in, values_in_len_);
+    global_idx_.SetGlobalBuffer((__gm__ uint32_t*)idx_in, idx_in_len_);
+    global_z_.SetGlobalBuffer((__gm__ DataType*)z_out, idx_in_len_);
 
     pipe.InitBuffer(values_q_gather_, BUFFER_NUM,
                     ValueTileSize * sizeof(DataType));
@@ -90,8 +88,8 @@ class KernelMcGather {
         GetBlockIdx() * tile_len_ * max_num_tiles_per_block_idx_;
 
     const uint32_t num_idx_tiles_to_process =
-        kernel_utils::scalar::GetWorkDistribution(idx_in_len_, tile_len_,
-                                                  vec_core_num_);
+        tcuscan::scalar::GetWorkDistribution(idx_in_len_, tile_len_,
+                                             vec_core_num_);
     for (uint32_t tile_idx = 0; tile_idx < num_idx_tiles_to_process;
          tile_idx++) {
       const bool is_full_tile = gm_offset + tile_len_ <= idx_in_len_;
@@ -131,7 +129,7 @@ class KernelMcGather {
    * @param this_tile_len current tile length of `idx_in` (always the
    * same as tile_len_, except possibly for the last tile)
    */
-  __aicore__ inline void HandleSingleTile(LocalTensor<uint32_t> &idx_lt,
+  __aicore__ inline void HandleSingleTile(LocalTensor<uint32_t>& idx_lt,
                                           uint32_t output_gm_offset,
                                           uint32_t start, uint32_t end,
                                           uint32_t this_tile_len) {
@@ -251,7 +249,7 @@ class KernelMcGather {
    */
   __aicore__ inline LocalTensor<uint32_t> FilterTileInterval(
       LocalTensor<uint32_t> idx_lt, uint32_t threshold_up,
-      uint32_t threshold_down, uint64_t &gathered_len, uint32_t this_tile_len) {
+      uint32_t threshold_down, uint64_t& gathered_len, uint32_t this_tile_len) {
     LocalTensor<uint32_t> threshold_up_lt = threshold_up_buf_.Get<uint32_t>();
     LocalTensor<uint32_t> threshold_down_lt =
         threshold_down_buf_.Get<uint32_t>();
@@ -309,7 +307,7 @@ class KernelMcGather {
    * @param offset The offset value to subtract from each index.
    * @param num_elem_to_process The number of elements to process.
    */
-  __aicore__ inline void GatherWithOffset(LocalTensor<DataType> &out_tensor,
+  __aicore__ inline void GatherWithOffset(LocalTensor<DataType>& out_tensor,
                                           LocalTensor<DataType> in_values,
                                           LocalTensor<uint32_t> idx_lt,
                                           int32_t offset,

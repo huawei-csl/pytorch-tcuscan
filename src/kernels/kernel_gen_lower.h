@@ -10,7 +10,6 @@
 #include "tcuscan_utils.h"
 
 using namespace AscendC;
-using namespace kernel_utils;
 
 namespace tcuscan {
 
@@ -47,7 +46,7 @@ class KernelGenerateLower {
    * @param [in] vec_out Pointer to the output vector in global memory.
    */
   __aicore__ inline void Init(GM_ADDR vec_out) {
-    global_out_.SetGlobalBuffer((__gm__ T *)vec_out, total_matrix_elements_);
+    global_out_.SetGlobalBuffer((__gm__ T*)vec_out, total_matrix_elements_);
 
     pipe.InitBuffer(vec_buf_,
                     num_matrix_elements_per_block_ * sizeof(DuplicateT));

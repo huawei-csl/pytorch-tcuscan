@@ -10,7 +10,6 @@
 #include "tcuscan_utils.h"
 
 using namespace AscendC;
-using namespace kernel_utils;
 
 namespace tcuscan {
 
@@ -38,8 +37,8 @@ class KernelPad {
         pad_len_(align_len_ - buf_len_ % align_len_),
         num_tiles_(scalar::CeilDiv(buf_len, align_len_)),
         max_num_tiles_per_block_(scalar::CeilDiv(num_tiles_, block_num_)) {
-    num_tiles_to_copy_ = kernel_utils::scalar::GetWorkDistribution(
-        buf_len_, align_len_, block_num_);
+    num_tiles_to_copy_ =
+        tcuscan::scalar::GetWorkDistribution(buf_len_, align_len_, block_num_);
   }
 
   /**
@@ -49,8 +48,8 @@ class KernelPad {
    * @param [in] dst Pointer to the destination buffer in global memory.
    */
   __aicore__ inline void Init(GM_ADDR src, GM_ADDR dst) {
-    global_src_.SetGlobalBuffer((__gm__ DataType *)src, buf_len_);
-    global_dst_.SetGlobalBuffer((__gm__ DataType *)dst,
+    global_src_.SetGlobalBuffer((__gm__ DataType*)src, buf_len_);
+    global_dst_.SetGlobalBuffer((__gm__ DataType*)dst,
                                 scalar::AlignUp(buf_len_, align_len_));
     pipe.InitBuffer(vec_in_q_, buf_num_, align_len_ * sizeof(DataType));
     pipe.InitBuffer(vec_out_q_, buf_num_, align_len_ * sizeof(DataType));

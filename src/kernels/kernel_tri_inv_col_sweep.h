@@ -11,7 +11,6 @@
 #include "tcuscan_utils.h"
 
 using namespace AscendC;
-using namespace kernel_utils;
 
 namespace tcuscan {
 
@@ -50,8 +49,8 @@ class KernelTriInvColumnSweep {
    * @param [in] vec_out Pointer to the output vector in global memory.
    */
   __aicore__ inline void Init(GM_ADDR vec_in, GM_ADDR vec_out) {
-    global_in_.SetGlobalBuffer((__gm__ T *)vec_in, vec_len_);
-    global_out_.SetGlobalBuffer((__gm__ T *)vec_out, vec_len_);
+    global_in_.SetGlobalBuffer((__gm__ T*)vec_in, vec_len_);
+    global_out_.SetGlobalBuffer((__gm__ T*)vec_out, vec_len_);
 
     pipe_.InitBuffer(in_q_, BUFFER_NUM, tile_len_ * sizeof(T));
     pipe_.InitBuffer(out_q_, BUFFER_NUM, tile_len_ * sizeof(T));

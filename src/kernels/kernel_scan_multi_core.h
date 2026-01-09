@@ -14,7 +14,7 @@
 #include "tcuscan_utils.h"
 
 using namespace AscendC;
-using namespace kernel_utils;
+using namespace tcuscan;
 
 namespace mc_scan {
 

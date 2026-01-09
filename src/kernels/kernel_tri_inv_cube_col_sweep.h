@@ -10,7 +10,6 @@
 #include "tcuscan_utils.h"
 
 using namespace AscendC;
-using namespace kernel_utils;
 
 namespace tcuscan {
 
@@ -28,7 +27,7 @@ namespace tcuscan {
  */
 template <typename InputT = half>
 class KernelTriInvCubeColSweep {
-  using OutputT = kernel_utils::cube_unit::CubeOutType_t<InputT>;
+  using OutputT = tcuscan::cube_unit::CubeOutType_t<InputT>;
 
  public:
   /**
@@ -152,12 +151,9 @@ class KernelTriInvCubeColSweep {
   const uint32_t tile_len_;
   const uint32_t global_offset_;
 
-  constexpr static uint32_t M_CUBE_BLOCK_SIZE =
-      kernel_utils::GetFractalMN<InputT>();
-  constexpr static uint32_t N_CUBE_BLOCK_SIZE =
-      kernel_utils::GetFractalMN<InputT>();
-  constexpr static uint32_t K_CUBE_BLOCK_SIZE =
-      kernel_utils::GetFractalK<InputT>();
+  constexpr static uint32_t M_CUBE_BLOCK_SIZE = tcuscan::GetFractalMN<InputT>();
+  constexpr static uint32_t N_CUBE_BLOCK_SIZE = tcuscan::GetFractalMN<InputT>();
+  constexpr static uint32_t K_CUBE_BLOCK_SIZE = tcuscan::GetFractalK<InputT>();
 
   const uint32_t M_ = matrix_size_;
   const uint32_t K_ = matrix_size_;

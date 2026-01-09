@@ -11,7 +11,6 @@
 #include "tcuscan_utils.h"
 
 using namespace AscendC;
-using namespace kernel_utils;
 
 namespace tcuscan {
 
@@ -104,7 +103,7 @@ class KernelVecColSweepMatGen {
       // writes the "column-sweep" column of matrix `M`.
       if (GetSubBlockIdx() == 0) {
         const LocalTensor<T> vec_out_lt = out_q_.AllocTensor<T>();
-        kernel_utils::FillIdentity(vec_out_lt, matrix_size_);
+        tcuscan::FillIdentity(vec_out_lt, matrix_size_);
 
         AscendC::PipeBarrier<PIPE_ALL>();
         // Write the (col_index)-th column of matrix M.
@@ -130,7 +129,7 @@ class KernelVecColSweepMatGen {
     LocalTensor<T> vec_in_lt = in_q_.DeQue<T>();
     LocalTensor<T> work_lt = work_buf_.Get<T>();
     Muls(work_lt, vec_in_lt, static_cast<T>(-1), vec_in_lt.GetSize());
-    kernel_utils::FillDiagonal(work_lt, matrix_size_, static_cast<T>(1));
+    tcuscan::FillDiagonal(work_lt, matrix_size_, static_cast<T>(1));
     in_q_.FreeTensor<T>(vec_in_lt);
   }
 
@@ -140,7 +139,7 @@ class KernelVecColSweepMatGen {
    */
   __aicore__ inline void EnQueueIdentityMatrix() {
     const LocalTensor<T> vec_out_lt = out_q_.AllocTensor<T>();
-    kernel_utils::FillIdentity(vec_out_lt, matrix_size_);
+    tcuscan::FillIdentity(vec_out_lt, matrix_size_);
     out_q_.EnQue<T>(vec_out_lt);
   }
 

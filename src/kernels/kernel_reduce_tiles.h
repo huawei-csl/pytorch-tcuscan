@@ -11,7 +11,6 @@
 #include "tcuscan_utils.h"
 
 using namespace AscendC;
-using namespace kernel_utils;
 
 namespace tcuscan {
 
@@ -59,8 +58,8 @@ class KernelReduceTiles {
    * @param [in] output Pointer to output vector in global memory.
    */
   __aicore__ inline void Init(GM_ADDR input, GM_ADDR output) {
-    global_input_.SetGlobalBuffer((__gm__ InputT *)input, vec_len_);
-    global_output_.SetGlobalBuffer((__gm__ AccT *)output, vec_core_num_);
+    global_input_.SetGlobalBuffer((__gm__ InputT*)input, vec_len_);
+    global_output_.SetGlobalBuffer((__gm__ AccT*)output, vec_core_num_);
 
     pipe_.InitBuffer(vec_tile_input_q_, BufferNum, tile_len_ * sizeof(InputT));
     if constexpr (REQ_INTERMEDIATE_CAST) {
@@ -79,9 +78,8 @@ class KernelReduceTiles {
    */
   __aicore__ inline void Process() {
     const LocalTensor<AccT> input_lt = vec_tile_q_.Get<AccT>();
-    const uint32_t num_tiles_to_process =
-        kernel_utils::scalar::GetWorkDistribution(vec_len_, tile_len_,
-                                                  vec_core_num_);
+    const uint32_t num_tiles_to_process = tcuscan::scalar::GetWorkDistribution(
+        vec_len_, tile_len_, vec_core_num_);
 
     uint32_t global_offset =
         GetBlockIdx() * tile_len_ * max_num_tiles_per_block_;
@@ -137,7 +135,7 @@ class KernelReduceTiles {
   }
 
  private:
-  __aicore__ inline void LoadToAccT(const LocalTensor<AccT> &dst_lt,
+  __aicore__ inline void LoadToAccT(const LocalTensor<AccT>& dst_lt,
                                     uint32_t global_offset,
                                     uint32_t num_elems_to_process) {
     if (num_elems_to_process == 0) {

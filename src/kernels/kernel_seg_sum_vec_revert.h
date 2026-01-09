@@ -11,7 +11,6 @@
 #include "tcuscan_utils.h"
 
 using namespace AscendC;
-using namespace kernel_utils;
 
 namespace tcuscan {
 
@@ -65,10 +64,10 @@ class KernelSegSumVecRevert {
    */
   __aicore__ inline void Init(GM_ADDR vec_in, GM_ADDR segm_ind_in,
                               GM_ADDR vec_out) {
-    global_in_.SetGlobalBuffer((__gm__ T *)vec_in, vec_len_);
-    global_segm_in_.SetGlobalBuffer((__gm__ uint32_t *)segm_ind_in,
+    global_in_.SetGlobalBuffer((__gm__ T*)vec_in, vec_len_);
+    global_segm_in_.SetGlobalBuffer((__gm__ uint32_t*)segm_ind_in,
                                     num_segments_);
-    global_out_.SetGlobalBuffer((__gm__ T *)vec_out, num_segments_);
+    global_out_.SetGlobalBuffer((__gm__ T*)vec_out, num_segments_);
 
     pipe_.InitBuffer(in_q_, BUFFER_NUM, matrix_tile_len_ * sizeof(T));
     pipe_.InitBuffer(segm_q_, BUFFER_NUM, tile_len_ * sizeof(uint32_t));
@@ -98,8 +97,8 @@ class KernelSegSumVecRevert {
    * @param index Tile index to write on.
    * @param value Value to write.
    */
-  __aicore__ inline void SafeOutWrite(LocalTensor<T> &vec_out_lt,
-                                      uint32_t &index, const T value) {
+  __aicore__ inline void SafeOutWrite(LocalTensor<T>& vec_out_lt,
+                                      uint32_t& index, const T value) {
     vec_out_lt.SetValue(index, value);
     index++;
     // Write tile to GM and "re-allocate" the output tile.
@@ -124,7 +123,7 @@ class KernelSegSumVecRevert {
    * @return Returns the next segment end.
    */
   __aicore__ inline uint32_t NextSegmEndIndex(
-      LocalTensor<uint32_t> &segm_ind_lt, uint32_t &index) {
+      LocalTensor<uint32_t>& segm_ind_lt, uint32_t& index) {
     index++;
 
     if (segments_offset_ + index >= num_segments_) {

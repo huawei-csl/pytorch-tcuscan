@@ -10,7 +10,6 @@
 #include "tcuscan_utils.h"
 
 using namespace AscendC;
-using namespace kernel_utils;
 
 namespace tcuscan {
 
@@ -44,8 +43,8 @@ class KernelCopy {
    * @param [in] dst Pointer to the destination buffer in global memory.
    */
   __aicore__ inline void Init(GM_ADDR src, GM_ADDR dst) {
-    global_src_.SetGlobalBuffer((__gm__ T *)src, vec_len_);
-    global_dst_.SetGlobalBuffer((__gm__ T *)dst, vec_len_);
+    global_src_.SetGlobalBuffer((__gm__ T*)src, vec_len_);
+    global_dst_.SetGlobalBuffer((__gm__ T*)dst, vec_len_);
     pipe.InitBuffer(vec_in_q_, NumBuffers, tile_size_ * sizeof(T));
     pipe.InitBuffer(vec_out_q_, NumBuffers, tile_size_ * sizeof(T));
   }

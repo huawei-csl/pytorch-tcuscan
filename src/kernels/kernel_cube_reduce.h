@@ -12,7 +12,6 @@
 #include "tcuscan_utils.h"
 
 using namespace AscendC;
-using namespace kernel_utils;
 
 namespace tcuscan {
 
@@ -36,7 +35,7 @@ namespace tcuscan {
  */
 template <typename InputT, bool SyncAfter = false>
 class KernelCubeReduce {
-  using OutputT = kernel_utils::cube_unit::CubeOutType_t<InputT>;
+  using OutputT = tcuscan::cube_unit::CubeOutType_t<InputT>;
 
  public:
   /// @brief Redundant cube unit reduction dimension.
@@ -57,7 +56,7 @@ class KernelCubeReduce {
         num_mat_iters_(scalar::FloorDiv(vec_len, tile_len_)),
         max_num_mat_iters_per_block_(
             scalar::CeilDiv(num_mat_iters_, block_num_)) {
-    static_assert(kernel_utils::cube_unit::IsCubeSupported<InputT>,
+    static_assert(tcuscan::cube_unit::IsCubeSupported<InputT>,
                   "Unsupported input Cube dtype. Please use half or int8_t.");
     ASCENDC_ASSERT((vec_len % tile_len_ == 0), {
       KERNEL_LOG(KERNEL_ERROR,
@@ -95,8 +94,7 @@ class KernelCubeReduce {
         id * tile_len_ * max_num_mat_iters_per_block_;
 
     const uint32_t num_tiles_to_process =
-        kernel_utils::scalar::GetWorkDistribution(vec_len_, tile_len_,
-                                                  block_num_);
+        tcuscan::scalar::GetWorkDistribution(vec_len_, tile_len_, block_num_);
 
     if (num_tiles_to_process == 0) {
       return;
@@ -183,10 +181,8 @@ class KernelCubeReduce {
   const uint32_t max_num_mat_iters_per_block_;
 
   // Fractal sizes: 16x32 for int8 and 16x16 for fp16
-  constexpr static uint32_t M_CUBE_BLOCK_SIZE =
-      kernel_utils::GetFractalMN<InputT>();
-  constexpr static uint32_t K_CUBE_BLOCK_SIZE =
-      kernel_utils::GetFractalK<InputT>();
+  constexpr static uint32_t M_CUBE_BLOCK_SIZE = tcuscan::GetFractalMN<InputT>();
+  constexpr static uint32_t K_CUBE_BLOCK_SIZE = tcuscan::GetFractalK<InputT>();
 
   const uint32_t m_blocks_ = matmul_size_ / M_CUBE_BLOCK_SIZE;
   const uint32_t n_blocks_ = MAT_DIM_16 / M_CUBE_BLOCK_SIZE;
@@ -332,7 +328,7 @@ template <typename T>
 __aicore__ inline void run_cube_reduce(GM_ADDR vec_in, GM_ADDR vec_out,
                                        GM_ADDR workspace, uint32_t vec_len,
                                        uint16_t matmul_size) {
-  using OutputT = kernel_utils::cube_unit::CubeOutType_t<T>;
+  using OutputT = tcuscan::cube_unit::CubeOutType_t<T>;
 
   const uint32_t align_size = matmul_size * matmul_size;
   const uint32_t padded_vec_len = scalar::AlignUp(vec_len, align_size);

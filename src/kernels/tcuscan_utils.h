@@ -13,7 +13,7 @@
 
 using namespace AscendC;
 
-namespace kernel_utils {
+namespace tcuscan {
 
 /// @brief Number of bytes for a required alignment in UB.
 constexpr uint16_t UB_ALIGNMENT = 32;
@@ -564,7 +564,7 @@ __aicore__ inline void CopyGmToL1(const LocalTensor<DataType>& local,
                                   uint16_t fractals_h, uint16_t fractals_w) {
   exec_mode::AssertIsAIC();
   exec_mode::AssertLocalTensorIsInL1(local);
-  kernel_utils::copy::CopyND2NZ<DataType, FractalHeight, FractalWidth>(
+  tcuscan::copy::CopyND2NZ<DataType, FractalHeight, FractalWidth>(
       local, global, fractals_h, fractals_w);
 }
 
@@ -589,8 +589,7 @@ __aicore__ inline void CopyGmToL1A(TQue<QuePosition::A1, QNumBuffers>& q,
                                    uint16_t fractals_h, uint16_t fractals_w) {
   exec_mode::AssertIsAIC();
   const LocalTensor<DataType> lt = q.template AllocTensor<DataType>();
-  kernel_utils::copy::CopyGmToL1<GetFractalMN<DataType>(),
-                                 GetFractalK<DataType>()>(
+  tcuscan::copy::CopyGmToL1<GetFractalMN<DataType>(), GetFractalK<DataType>()>(
       lt, global, fractals_h, fractals_w);
   q.EnQue(lt);
 }
@@ -616,8 +615,7 @@ __aicore__ inline void CopyGmToL1B(TQue<QuePosition::B1, QNumBuffers>& q,
                                    uint16_t fractals_h, uint16_t fractals_w) {
   exec_mode::AssertIsAIC();
   const LocalTensor<DataType> lt = q.template AllocTensor<DataType>();
-  kernel_utils::copy::CopyGmToL1<GetFractalK<DataType>(),
-                                 GetFractalMN<DataType>()>(
+  tcuscan::copy::CopyGmToL1<GetFractalK<DataType>(), GetFractalMN<DataType>()>(
       lt, global, fractals_h, fractals_w);
   q.EnQue(lt);
 }
@@ -650,7 +648,7 @@ __aicore__ inline void CopyTransposedGmToL0B(
   // But data in GM is transposed (column-major layout) so the resulting
   // layout is ZN (instead of NZ). And ZN is a layout `Mmad` expects for the B
   // operand.
-  kernel_utils::copy::CopyGmToL1B(b1_q, global, fractals_h, fractals_w);
+  tcuscan::copy::CopyGmToL1B(b1_q, global, fractals_h, fractals_w);
 
   // Plain copy from L1 to L0B, because the layout is already correct.
   LocalTensor<DataType> src = b1_q.template DeQue<DataType>();
@@ -987,7 +985,7 @@ __aicore__ inline void CopyVecToGm(
   vecout_q.EnQue(vecout_lt);
 
   // VECOUT -> global
-  kernel_utils::copy::CopyVecToGm<DataType>(global, vecout_q, num_elems);
+  tcuscan::copy::CopyVecToGm<DataType>(global, vecout_q, num_elems);
 }
 
 /**
@@ -1017,7 +1015,7 @@ __aicore__ inline void CopyVecToGm(
     TQue<QuePosition::VECIN, SrcNumBuffers>& q, uint32_t num_elems = 0) {
   exec_mode::AssertIsAIV();
   LocalTensor<DataType> lt = q.template DeQue<DataType>();
-  kernel_utils::copy::CopyVecToGm<DataType>(global, vecout_q, lt, num_elems);
+  tcuscan::copy::CopyVecToGm<DataType>(global, vecout_q, lt, num_elems);
   q.FreeTensor(lt);
 }
 
@@ -1621,7 +1619,7 @@ __aicore__ inline void ReduceVecAdd(const LocalTensor<DataType>& acc,
   exec_mode::AssertIsAIV();
   const uint32_t acc_size = acc.GetSize();
 
-  const uint32_t num_iters = kernel_utils::scalar::FloorDiv(src_len, acc_size);
+  const uint32_t num_iters = tcuscan::scalar::FloorDiv(src_len, acc_size);
   const uint32_t tail_len = src_len - num_iters * acc_size;
 
   if constexpr (AllocateAcc) {
@@ -1886,8 +1884,8 @@ __aicore__ inline void MultiplyAWithC(TQue<QuePosition::A2, 1>& q_a,
 
   // Load C matrix from L0C into L0B.
   copy::CopyC01ToB1<InputT, OutputT /* Source */, 1, 1>(b1_q, c_q, M, N);
-  const uint32_t k_blocks_ = M / kernel_utils::GetFractalK<InputT>();
-  const uint32_t n_blocks_ = N / kernel_utils::GetFractalMN<InputT>();
+  const uint32_t k_blocks_ = M / tcuscan::GetFractalK<InputT>();
+  const uint32_t n_blocks_ = N / tcuscan::GetFractalMN<InputT>();
   copy::CopyL1ToL0B<InputT, true /* free_src */>(b2_q, b1_q, k_blocks_,
                                                  n_blocks_);
   LocalTensor<InputT> b2_lt = b2_q.DeQue<InputT>();
@@ -2119,4 +2117,4 @@ const float FP16_INC = FP16_ONE_P_ULP * FP16_EPSILON * FP16_HALF;
 __aicore__ inline float next_after(float val) { return val * FP16_INC + val; }
 }  // namespace fp16
 
-}  // namespace kernel_utils
+}  // namespace tcuscan

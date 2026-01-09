@@ -10,7 +10,6 @@
 #include "tcuscan_utils.h"
 
 using namespace AscendC;
-using namespace kernel_utils;
 
 namespace tcuscan {
 
@@ -54,9 +53,9 @@ class KernelAdd {
    */
   __aicore__ inline void Init(GM_ADDR x, GM_ADDR y, GM_ADDR z) {
     const uint32_t block_length = tile_len_ * max_num_tiles_per_block_;
-    global_x_.SetGlobalBuffer((__gm__ half *)x + global_offset_, block_length);
-    global_y_.SetGlobalBuffer((__gm__ half *)y + global_offset_, block_length);
-    global_z_.SetGlobalBuffer((__gm__ half *)z + global_offset_, block_length);
+    global_x_.SetGlobalBuffer((__gm__ half*)x + global_offset_, block_length);
+    global_y_.SetGlobalBuffer((__gm__ half*)y + global_offset_, block_length);
+    global_z_.SetGlobalBuffer((__gm__ half*)z + global_offset_, block_length);
 
     pipe.InitBuffer(x_q_, BUFFER_NUM, tile_len_ * sizeof(half));
     pipe.InitBuffer(y_q_, BUFFER_NUM, tile_len_ * sizeof(half));

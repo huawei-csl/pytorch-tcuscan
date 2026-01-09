@@ -18,7 +18,7 @@ __aicore__ inline void _run_scan_multi_cube(GM_ADDR input_vec, GM_ADDR lower,
                                             GM_ADDR output_vec,
                                             GM_ADDR workspace,
                                             GM_ADDR tilingGm) {
-  using OutputT = kernel_utils::cube_unit::CubeOutType_t<InputT>;
+  using OutputT = tcuscan::cube_unit::CubeOutType_t<InputT>;
 
   ScanMultiCubeTiling tiling;
   GetTilingData(&tiling, tilingGm);

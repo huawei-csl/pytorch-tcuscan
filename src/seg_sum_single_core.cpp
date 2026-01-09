@@ -13,7 +13,7 @@
 #include "tiling/tiling_seg_sum_single_core.h"
 
 using namespace AscendC;
-using namespace kernel_utils;
+using namespace tcuscan;
 
 namespace tcuscan {
 
@@ -37,7 +37,7 @@ __aicore__ inline void run_seg_sum_single_core(
     GM_ADDR vec_in, GM_ADDR upper, GM_ADDR segm_ind_in, GM_ADDR vec_out,
     GM_ADDR workspace, uint32_t vec_len, uint32_t num_segments,
     uint32_t tile_len) {
-  using OutputT = kernel_utils::cube_unit::CubeOutType_t<T>;
+  using OutputT = tcuscan::cube_unit::CubeOutType_t<T>;
 
   const uint32_t align_size = tile_len * tile_len;
   const uint32_t padded_vec_len = scalar::AlignUp(vec_len, align_size);

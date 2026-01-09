@@ -10,7 +10,7 @@
 #include "tcuscan_utils.h"
 
 using namespace AscendC;
-using namespace kernel_utils;
+
 namespace tcuscan {
 
 /**
@@ -76,12 +76,12 @@ class KernelCompleteRows {
    */
   __aicore__ inline void Init(GM_ADDR input_rows, GM_ADDR sums,
                               GM_ADDR output) {
-    global_input_rows_.SetGlobalBuffer((__gm__ T *)input_rows, vec_len_);
-    global_sums_.SetGlobalBuffer((__gm__ T *)sums, sums_len_);
+    global_input_rows_.SetGlobalBuffer((__gm__ T*)input_rows, vec_len_);
+    global_sums_.SetGlobalBuffer((__gm__ T*)sums, sums_len_);
     // The very first element of the output where a zero value must go
     // in case of exclusive scan.
-    global_output_first_elem_.SetGlobalBuffer((__gm__ T *)output, 1);
-    global_output_.SetGlobalBuffer((__gm__ T *)output + global_shift_,
+    global_output_first_elem_.SetGlobalBuffer((__gm__ T*)output, 1);
+    global_output_.SetGlobalBuffer((__gm__ T*)output + global_shift_,
                                    output_real_elems_);
 
     pipe.InitBuffer(vec_tile_q_, BufferNum, tile_size_ * sizeof(T));

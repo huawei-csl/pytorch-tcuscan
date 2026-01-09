@@ -21,7 +21,7 @@
 extern "C" __global__ __aicore__ void triu_inv_rec_unroll_fp16(
     GM_ADDR vec_in, GM_ADDR vec_out, GM_ADDR workspace, GM_ADDR tiling) {
   TriuInvRecUnrollTiling tiling_data;
-  kernel_utils::GetTilingData(&tiling_data, tiling);
+  tcuscan::GetTilingData(&tiling_data, tiling);
 
   run_triu_inv_rec_unroll<half>(vec_in, vec_out, tiling_data.matrix_size,
                                 tiling_data.num_blocks, workspace);

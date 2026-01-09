@@ -11,7 +11,6 @@
 #include "tcuscan_utils.h"
 
 using namespace AscendC;
-using namespace kernel_utils;
 
 namespace tcuscan {
 
@@ -57,8 +56,8 @@ class KernelCompleteRows {
    * @param [in] output Pointer to output vector in global memory.
    */
   __aicore__ inline void Init(GM_ADDR input, GM_ADDR output) {
-    global_input_.SetGlobalBuffer((__gm__ T *)input, vec_len_);
-    global_output_.SetGlobalBuffer((__gm__ T *)output, vec_len_);
+    global_input_.SetGlobalBuffer((__gm__ T*)input, vec_len_);
+    global_output_.SetGlobalBuffer((__gm__ T*)output, vec_len_);
 
     pipe.InitBuffer(vecin_q_, 1, tile_size_ * sizeof(T));
     pipe.InitBuffer(vecout_q_, 1, tile_size_ * sizeof(T));
@@ -70,7 +69,7 @@ class KernelCompleteRows {
    * @param [in] running_sum Starting value added to all entries of the
    * output vector.
    */
-  __aicore__ inline void Process(T &running_sum = 0) {
+  __aicore__ inline void Process(T& running_sum = 0) {
     for (uint32_t idx = 0; idx < num_tiles_; idx++) {
       if constexpr (SyncBefore) {
         sync::SyncGroup<sync::GroupSyncDirection::FULL>();
@@ -147,7 +146,7 @@ namespace sc_scan {
  */
 template <typename T>
 __aicore__ inline uint32_t get_workspace_size(uint32_t matmul_size) {
-  using OutputT = kernel_utils::cube_unit::CubeOutType_t<T>;
+  using OutputT = tcuscan::cube_unit::CubeOutType_t<T>;
   const uint32_t total_size = matmul_size * matmul_size * sizeof(OutputT);
   return total_size;
 }
@@ -158,8 +157,8 @@ template <typename InputT>
 __aicore__ inline void _run_scan_sc(
     GM_ADDR input_vec, GM_ADDR upper_triangular, GM_ADDR output_vec,
     uint32_t matmul_size, uint32_t vec_aic_len, uint32_t vec_aiv_len,
-    kernel_utils::cube_unit::CubeOutType_t<InputT> &starting_sum) {
-  using OutputT = kernel_utils::cube_unit::CubeOutType_t<InputT>;
+    tcuscan::cube_unit::CubeOutType_t<InputT>& starting_sum) {
+  using OutputT = tcuscan::cube_unit::CubeOutType_t<InputT>;
 
   if ASCEND_IS_AIC {
     KernelRowScan<InputT, /* SyncAfter */ true> op_cube(
@@ -195,8 +194,8 @@ template <typename InputT>
 __aicore__ inline void run_scan_single_core(
     GM_ADDR input_vec, GM_ADDR upper_triangular, GM_ADDR output_vec,
     uint32_t vec_len, uint32_t matmul_size, GM_ADDR workspace,
-    typename kernel_utils::cube_unit::CubeOutType_t<InputT> starting_sum = 0) {
-  using OutputT = kernel_utils::cube_unit::CubeOutType_t<InputT>;
+    typename tcuscan::cube_unit::CubeOutType_t<InputT> starting_sum = 0) {
+  using OutputT = tcuscan::cube_unit::CubeOutType_t<InputT>;
 
   const uint32_t alignment = matmul_size * matmul_size;
   const uint32_t aligned_vec_len = scalar::AlignDown(vec_len, alignment);

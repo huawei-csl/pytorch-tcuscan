@@ -18,7 +18,7 @@ __aicore__ inline void _run_scan_multi_core_no_l2_split(GM_ADDR input_vec,
                                                         GM_ADDR output_vec,
                                                         GM_ADDR workspace,
                                                         GM_ADDR tilingGm) {
-  using OutputT = kernel_utils::cube_unit::CubeOutType_t<InputT>;
+  using OutputT = tcuscan::cube_unit::CubeOutType_t<InputT>;
 
   MultiCoreScanTiling tiling;
   GetTilingData(&tiling, tilingGm);
@@ -41,7 +41,7 @@ __aicore__ inline void _run_scan_multi_core(GM_ADDR input_vec,
                                             GM_ADDR output_vec,
                                             GM_ADDR workspace,
                                             GM_ADDR tilingGm) {
-  using OutputT = kernel_utils::cube_unit::CubeOutType_t<InputT>;
+  using OutputT = tcuscan::cube_unit::CubeOutType_t<InputT>;
 
   MultiCoreScanTiling tiling;
   GetTilingData(&tiling, tilingGm);

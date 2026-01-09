@@ -11,7 +11,6 @@
 #include "tcuscan_utils.h"
 
 using namespace AscendC;
-using namespace kernel_utils;
 
 namespace tcuscan {
 
@@ -56,11 +55,11 @@ class KernelSegScanMcRevert {
    */
   __aicore__ inline void Init(GM_ADDR vec_in, GM_ADDR vec_f_in,
                               GM_ADDR vec_diff_in, GM_ADDR vec_out) {
-    global_in_.SetGlobalBuffer((__gm__ DataTypeT *)vec_in, vec_len_);
-    global_f_in_.SetGlobalBuffer((__gm__ DataTypeT *)vec_f_in, vec_len_);
-    global_diff_in_.SetGlobalBuffer((__gm__ InputFlagT *)vec_diff_in,
+    global_in_.SetGlobalBuffer((__gm__ DataTypeT*)vec_in, vec_len_);
+    global_f_in_.SetGlobalBuffer((__gm__ DataTypeT*)vec_f_in, vec_len_);
+    global_diff_in_.SetGlobalBuffer((__gm__ InputFlagT*)vec_diff_in,
                                     num_segments_);
-    global_out_.SetGlobalBuffer((__gm__ DataTypeT *)vec_out, vec_len_);
+    global_out_.SetGlobalBuffer((__gm__ DataTypeT*)vec_out, vec_len_);
 
     pipe.InitBuffer(in_q_, BUFFER_NUM, tile_len_ * sizeof(DataTypeT));
     pipe.InitBuffer(in_f_q_, BUFFER_NUM, tile_len_ * sizeof(InputFlagT));
@@ -80,9 +79,8 @@ class KernelSegScanMcRevert {
   __aicore__ inline void Process() {
     uint32_t global_offset =
         GetBlockIdx() * tile_len_ * max_num_tiles_per_block_;
-    const uint32_t num_tiles_to_process =
-        kernel_utils::scalar::GetWorkDistribution(vec_len_, tile_len_,
-                                                  vec_core_num_);
+    const uint32_t num_tiles_to_process = tcuscan::scalar::GetWorkDistribution(
+        vec_len_, tile_len_, vec_core_num_);
     for (uint32_t tile_idx = 0; tile_idx < num_tiles_to_process; tile_idx++) {
       const bool full_tile = global_offset + tile_len_ <= vec_len_;
       const uint32_t num_elems_to_process_ =
@@ -112,8 +110,8 @@ class KernelSegScanMcRevert {
    * @param scalar Scalar to compare vector against.
    */
 
-  __aicore__ inline void CustomCompareScalarEQ(LocalTensor<float> &dst,
-                                               LocalTensor<int32_t> &src,
+  __aicore__ inline void CustomCompareScalarEQ(LocalTensor<float>& dst,
+                                               LocalTensor<int32_t>& src,
                                                int32_t scalar) {
     LocalTensor<int16_t> int16_lt = int16_buf_.Get<int16_t>();
     LocalTensor<uint16_t> uint16_lt =
@@ -138,7 +136,7 @@ class KernelSegScanMcRevert {
    * @param segment_id The segment id
    * @param delta Correction value
    */
-  __aicore__ inline void MaskedSub(LocalTensor<DataTypeT> &output,
+  __aicore__ inline void MaskedSub(LocalTensor<DataTypeT>& output,
                                    LocalTensor<int32_t> mask,
                                    int32_t segment_id, DataTypeT delta) {
     if (delta == 0) {

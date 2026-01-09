@@ -34,7 +34,7 @@ extern "C" __global__ __aicore__ void matmul_cce(GM_ADDR x, GM_ADDR y,
                                                  GM_ADDR tiling_gm) {
   (void)workspace;
   tcuscan::MatMulCCETiling t;
-  GetTilingData(&t, tiling_gm);
+  tcuscan::GetTilingData(&t, tiling_gm);
 
   const int M = t.M;
   const int N = t.K;

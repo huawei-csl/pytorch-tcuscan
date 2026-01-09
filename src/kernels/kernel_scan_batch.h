@@ -13,7 +13,6 @@
 #include "tcuscan_utils.h"
 
 using namespace AscendC;
-using namespace kernel_utils;
 
 namespace tcuscan {
 
@@ -39,7 +38,7 @@ namespace tcuscan {
  */
 template <typename InputT>
 class KernelRowScanBatch {
-  using OutputT = kernel_utils::cube_unit::CubeOutType_t<InputT>;
+  using OutputT = tcuscan::cube_unit::CubeOutType_t<InputT>;
 
  public:
   /**
@@ -69,12 +68,12 @@ class KernelRowScanBatch {
    */
   __aicore__ inline void Init(GM_ADDR a, GM_ADDR b, GM_ADDR c) {
     global_A_.SetGlobalBuffer(
-        (__gm__ InputT *)a +
+        (__gm__ InputT*)a +
             (GetBlockIdx() * a_cube_tile_size_ * num_tiles_per_vec_ * num_vec_),
         a_cube_tile_size_ * num_tiles_per_vec_ * num_vec_);
-    global_B_.SetGlobalBuffer((__gm__ InputT *)b);
+    global_B_.SetGlobalBuffer((__gm__ InputT*)b);
     global_C_.SetGlobalBuffer(
-        (__gm__ OutputT *)c +
+        (__gm__ OutputT*)c +
             (GetBlockIdx() * c_cube_tile_size_ * num_tiles_per_vec_ * num_vec_),
         c_cube_tile_size_ * num_tiles_per_vec_ * num_vec_);
 
@@ -138,14 +137,11 @@ class KernelRowScanBatch {
   const uint16_t K_ = matmul_k_size_;
   const uint16_t N_ = matmul_k_size_;
 
-  constexpr static uint32_t M_CUBE_BLOCK_SIZE =
-      kernel_utils::GetFractalMN<InputT>();
-  constexpr static uint32_t N_CUBE_BLOCK_SIZE =
-      kernel_utils::GetFractalMN<InputT>();
+  constexpr static uint32_t M_CUBE_BLOCK_SIZE = tcuscan::GetFractalMN<InputT>();
+  constexpr static uint32_t N_CUBE_BLOCK_SIZE = tcuscan::GetFractalMN<InputT>();
   // Fractal size is 16x32 for 8-bit input data types instead of the standard
   // 16x16 one
-  constexpr static uint32_t K_CUBE_BLOCK_SIZE =
-      kernel_utils::GetFractalK<InputT>();
+  constexpr static uint32_t K_CUBE_BLOCK_SIZE = tcuscan::GetFractalK<InputT>();
 
   const uint32_t n_blocks_ = N_ / N_CUBE_BLOCK_SIZE;
   const uint32_t k_blocks_ = K_ / K_CUBE_BLOCK_SIZE;
@@ -205,11 +201,11 @@ class KernelCompleteRowsBatched {
    */
   __aicore__ inline void Init(GM_ADDR input, GM_ADDR output) {
     global_input_.SetGlobalBuffer(
-        (__gm__ InputT *)input + (GetBlockIdx() * tile_size_ * num_tiles_ *
-                                  vec_cube_ratio_ / GetTaskRation()),
+        (__gm__ InputT*)input + (GetBlockIdx() * tile_size_ * num_tiles_ *
+                                 vec_cube_ratio_ / GetTaskRation()),
         tile_size_ * num_tiles_);
     global_output_.SetGlobalBuffer(
-        (__gm__ InputT *)output +
+        (__gm__ InputT*)output +
             (GetBlockIdx() * vec_len_ * vec_cube_ratio_ / GetTaskRation()),
         vec_len_);
 
@@ -325,7 +321,7 @@ __aicore__ inline void run_scan_batch_kernel(
     GM_ADDR input_vec, GM_ADDR upper_triangular, GM_ADDR output_vec,
     uint32_t vec_len, uint32_t batch_size, uint16_t matmul_size,
     uint32_t vec_cube_ratio, GM_ADDR workspace) {
-  using OutputT = kernel_utils::cube_unit::CubeOutType_t<InputT>;
+  using OutputT = tcuscan::cube_unit::CubeOutType_t<InputT>;
 
   const uint32_t block_n = GetBlockNum();
   const uint32_t num_vectors_to_process = scalar::GetBatchDistribution(

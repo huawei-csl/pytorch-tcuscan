@@ -14,7 +14,7 @@
 #include "tcuscan_utils.h"
 
 using namespace AscendC;
-using namespace kernel_utils;
+using namespace tcuscan;
 
 namespace multi_cube {
 
@@ -30,7 +30,7 @@ namespace multi_cube {
 template <typename InputT, bool IsInclusive = true>
 __aicore__ inline uint32_t get_workspace_size(uint32_t input_elems,
                                               uint32_t matmul_size) {
-  using OutputT = kernel_utils::cube_unit::CubeOutType_t<InputT>;
+  using OutputT = tcuscan::cube_unit::CubeOutType_t<InputT>;
 
   const uint32_t align_size = matmul_size * matmul_size;
   const uint32_t padded_input_len = scalar::AlignUp(input_elems, align_size);

@@ -10,7 +10,6 @@
 #include "tcuscan_utils.h"
 
 using namespace AscendC;
-using namespace kernel_utils;
 
 namespace tcuscan {
 
@@ -48,9 +47,9 @@ class KernelSingleRadix {
    * @param [in] output Pointer to the output matrix in global memory.
    */
   __aicore__ inline void Init(GM_ADDR input, GM_ADDR output) {
-    global_in_.SetGlobalBuffer((__gm__ T *)input, vec_len_);
+    global_in_.SetGlobalBuffer((__gm__ T*)input, vec_len_);
 
-    global_out_.SetGlobalBuffer((__gm__ uint8_t *)output, vec_len_);
+    global_out_.SetGlobalBuffer((__gm__ uint8_t*)output, vec_len_);
 
     pipe.InitBuffer(in_q_, BUFFER_NUM, tile_size_ * sizeof(T));
     pipe.InitBuffer(out_q_, BUFFER_NUM, tile_size_ * sizeof(uint8_t));
@@ -65,8 +64,7 @@ class KernelSingleRadix {
     uint32_t global_offset =
         GetBlockIdx() * tile_size_ * max_num_tiles_per_block_;
     const uint32_t num_tiles_to_process =
-        kernel_utils::scalar::GetWorkDistribution(vec_len_, tile_size_,
-                                                  block_num_);
+        tcuscan::scalar::GetWorkDistribution(vec_len_, tile_size_, block_num_);
 
     if (num_tiles_to_process == 0) {
       return;
@@ -92,7 +90,7 @@ class KernelSingleRadix {
 
  private:
   __aicore__ inline void RadixTile(uint16_t bit_level,
-                                   const LocalTensor<T> &compare_lt) {
+                                   const LocalTensor<T>& compare_lt) {
     LocalTensor<T> x_lt = in_q_.DeQue<T>();
     const uint32_t size = x_lt.GetSize();
     // These buffers point to the same UB location but have different types.

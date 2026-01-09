@@ -10,7 +10,6 @@
 #include "tcuscan_utils.h"
 
 using namespace AscendC;
-using namespace kernel_utils;
 
 namespace tcuscan {
 
@@ -77,9 +76,8 @@ class KernelWhere {
    * @brief Run the kernel.
    */
   __aicore__ inline void Process() {
-    const uint32_t num_tiles_to_process =
-        kernel_utils::scalar::GetWorkDistribution(vec_len_, tile_len_,
-                                                  vec_core_num_);
+    const uint32_t num_tiles_to_process = tcuscan::scalar::GetWorkDistribution(
+        vec_len_, tile_len_, vec_core_num_);
 
     if (num_tiles_to_process == 0) {
       return;
@@ -212,7 +210,7 @@ class KernelWhere {
   const uint32_t num_elems_before_block_;
 
   constexpr static uint16_t SMALLEST_MASK =
-      kernel_utils::UB_ALIGNMENT / sizeof(PackedMaskT);
+      tcuscan::UB_ALIGNMENT / sizeof(PackedMaskT);
   constexpr static uint16_t IN_ELEMS_PER_MASK_ELEM = sizeof(PackedMaskT) * 8;
 };
 

@@ -14,7 +14,6 @@
 #include "tcuscan_utils.h"
 
 using namespace AscendC;
-using namespace kernel_utils;
 
 namespace tcuscan {
 
@@ -59,10 +58,10 @@ class KernelSegScanRevertSpec {
    */
   __aicore__ inline void Init(GM_ADDR vec_in, GM_ADDR flag_in,
                               GM_ADDR vec_out) {
-    global_input_.SetGlobalBuffer((__gm__ DataTypeT *)vec_in, vec_len_);
-    global_scanned_flag_.SetGlobalBuffer((__gm__ FlagOutputT *)flag_in,
+    global_input_.SetGlobalBuffer((__gm__ DataTypeT*)vec_in, vec_len_);
+    global_scanned_flag_.SetGlobalBuffer((__gm__ FlagOutputT*)flag_in,
                                          vec_len_);
-    global_output_.SetGlobalBuffer((__gm__ DataTypeT *)vec_out, vec_len_);
+    global_output_.SetGlobalBuffer((__gm__ DataTypeT*)vec_out, vec_len_);
 
     pipe.InitBuffer(vecin_input_q_, BUFFER_NUM,
                     matrix_tile_len_ * sizeof(DataTypeT));
@@ -114,7 +113,7 @@ class KernelSegScanRevertSpec {
    * @param running_sum Running sum accumulation value of previous tile.
    */
   __aicore__ inline void VecIterUpdateRunningSum(uint32_t tile_idx,
-                                                 DataTypeT &running_sum) {
+                                                 DataTypeT& running_sum) {
     const bool is_full_tile = (tile_idx + 1) * matrix_tile_len_ <= vec_len_;
     const uint32_t num_elems_to_process =
         is_full_tile ? matrix_tile_len_
@@ -137,7 +136,7 @@ class KernelSegScanRevertSpec {
    * @param tile_idx Tile index.
    * @param running_sum Running sum accumulation value of previous tile.
    */
-  __aicore__ inline void VecIter(uint32_t tile_idx, DataTypeT &running_sum) {
+  __aicore__ inline void VecIter(uint32_t tile_idx, DataTypeT& running_sum) {
     const bool is_full_tile = (tile_idx + 1) * matrix_tile_len_ <= vec_len_;
     const uint32_t num_elems_to_process =
         is_full_tile ? matrix_tile_len_
@@ -165,7 +164,7 @@ class KernelSegScanRevertSpec {
    * @param num_elems Number of element to process.
    */
   __aicore__ inline void RevertSpecOnSegmentsWithinMatrixTile(
-      DataTypeT &running_sum, uint32_t num_elems) {
+      DataTypeT& running_sum, uint32_t num_elems) {
     LocalTensor<DataTypeT> input_vec_lt = vecin_input_q_.DeQue<DataTypeT>();
     LocalTensor<FlagOutputT> flag_vec_lt =
         vecin_scanned_flag_q_.DeQue<FlagOutputT>();
@@ -218,7 +217,7 @@ class KernelSegScanRevertSpec {
    * @param running_sum Accumulation value of previous matrix tile.
    * @param num_elems Number of element to process.
    */
-  __aicore__ inline void UpdatePreviousRunningSum(DataTypeT &running_sum,
+  __aicore__ inline void UpdatePreviousRunningSum(DataTypeT& running_sum,
                                                   uint32_t num_elems) {
     LocalTensor<DataTypeT> input_vec_lt = vecin_input_q_.DeQue<DataTypeT>();
     LocalTensor<FlagOutputT> flag_vec_lt =
@@ -269,8 +268,8 @@ class KernelSegScanRevertSpec {
    * @param segment_id The id of the input segment.
    * @return Delta correction value
    */
-  __aicore__ inline float GetDelta(const LocalTensor<DataTypeT> &input,
-                                   const LocalTensor<FlagOutputT> &flag,
+  __aicore__ inline float GetDelta(const LocalTensor<DataTypeT>& input,
+                                   const LocalTensor<FlagOutputT>& flag,
                                    int16_t segment_id) {
     const int16_t segment_start_index =
         GetStartIndexOfSegment(flag, segment_id);
@@ -289,7 +288,7 @@ class KernelSegScanRevertSpec {
    * @return Start index of the segment with segment_id.
    */
   __aicore__ inline int16_t GetStartIndexOfSegment(
-      const LocalTensor<FlagOutputT> &flag, int16_t segment_id) {
+      const LocalTensor<FlagOutputT>& flag, int16_t segment_id) {
     const half threshold = static_cast<half>(static_cast<float>(segment_id) -
                                              static_cast<float>(0.1));
 
@@ -339,8 +338,8 @@ class KernelSegScanRevertSpec {
    * @param src Tile of input vector.
    * @param scalar Scalar to compare vector against.
    */
-  __aicore__ inline void CustomCompareScalarEQ(LocalTensor<half> &dst,
-                                               LocalTensor<int16_t> &src,
+  __aicore__ inline void CustomCompareScalarEQ(LocalTensor<half>& dst,
+                                               LocalTensor<int16_t>& src,
                                                int16_t scalar) {
     LocalTensor<half> tmp_half_lt = tmp1_half_buf_.Get<half>();
     LocalTensor<uint16_t> tmp_uint16_lt =
@@ -371,7 +370,7 @@ class KernelSegScanRevertSpec {
    * @param segment_id The segment id
    * @param delta Speculation correction value.
    */
-  __aicore__ inline void FixSpecInPlace(LocalTensor<float> &output,
+  __aicore__ inline void FixSpecInPlace(LocalTensor<float>& output,
                                         LocalTensor<FlagOutputT> flag,
                                         int16_t segment_id, float delta) {
     if (delta == 0) {

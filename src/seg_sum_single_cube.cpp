@@ -37,7 +37,7 @@ __aicore__ inline void run_seg_sum_single_cube(
     GM_ADDR vec_in, GM_ADDR upper, GM_ADDR lower, GM_ADDR segm_ind_in,
     GM_ADDR vec_out, GM_ADDR workspace, uint32_t vec_len, uint32_t num_segments,
     uint32_t tile_len) {
-  using OutputT = kernel_utils::cube_unit::CubeOutType_t<T>;
+  using OutputT = tcuscan::cube_unit::CubeOutType_t<T>;
 
   const uint32_t align_size = tile_len * tile_len;
   const uint32_t padded_vec_len = scalar::AlignUp(vec_len, align_size);
@@ -48,7 +48,7 @@ __aicore__ inline void run_seg_sum_single_cube(
 
   run_pad_kernel<T, false>(vec_in, padded_input, vec_len, align_size);
 
-  kernel_utils::sync::SyncGroup<sync::GroupSyncDirection::FULL>();
+  tcuscan::sync::SyncGroup<sync::GroupSyncDirection::FULL>();
 
   if ASCEND_IS_AIC {
     KernelBlockScan<T, true> op_cube(padded_vec_len, tile_len);

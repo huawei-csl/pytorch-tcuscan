@@ -10,7 +10,6 @@
 #include "tcuscan_utils.h"
 
 using namespace AscendC;
-using namespace kernel_utils;
 
 namespace tcuscan {
 
@@ -58,13 +57,12 @@ class KernelCSRGather {
   __aicore__ inline void Init(GM_ADDR values_in, GM_ADDR cols_in,
                               GM_ADDR rows_in, GM_ADDR x_in, GM_ADDR z_out) {
     // CSR Matrix (values, columns, row_ptr)
-    global_values_.SetGlobalBuffer((__gm__ DataType *)values_in,
-                                   values_in_len_);
-    global_cols_.SetGlobalBuffer((__gm__ uint32_t *)cols_in, values_in_len_);
-    global_rows_.SetGlobalBuffer((__gm__ uint32_t *)rows_in, rows_in_len_);
+    global_values_.SetGlobalBuffer((__gm__ DataType*)values_in, values_in_len_);
+    global_cols_.SetGlobalBuffer((__gm__ uint32_t*)cols_in, values_in_len_);
+    global_rows_.SetGlobalBuffer((__gm__ uint32_t*)rows_in, rows_in_len_);
 
-    global_x_.SetGlobalBuffer((__gm__ DataType *)x_in, x_in_len_);
-    global_z_.SetGlobalBuffer((__gm__ DataType *)z_out, values_in_len_);
+    global_x_.SetGlobalBuffer((__gm__ DataType*)x_in, x_in_len_);
+    global_z_.SetGlobalBuffer((__gm__ DataType*)z_out, values_in_len_);
 
     pipe.InitBuffer(values_q_, BUFFER_NUM, tile_len_ * sizeof(DataType));
     pipe.InitBuffer(cols_q_, BUFFER_NUM, tile_len_ * sizeof(uint32_t));
@@ -80,9 +78,8 @@ class KernelCSRGather {
    */
   __aicore__ inline void Process() {
     uint32_t gm_offset = GetBlockIdx() * tile_len_ * max_num_tiles_per_block_;
-    const uint32_t num_tiles_to_process =
-        kernel_utils::scalar::GetWorkDistribution(values_in_len_, tile_len_,
-                                                  vec_core_num_);
+    const uint32_t num_tiles_to_process = tcuscan::scalar::GetWorkDistribution(
+        values_in_len_, tile_len_, vec_core_num_);
 
     if (num_tiles_to_process == 0) {
       return;

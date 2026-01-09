@@ -12,7 +12,6 @@
 namespace tcuscan {
 
 using namespace AscendC;
-using namespace kernel_utils;
 
 /**
  * @brief Generates an arithmetic sequence in global memory.
@@ -68,7 +67,7 @@ class KernelArithmeticProgression {
    * @param [in] buffer Pointer to the buffer in global memory.
    */
   __aicore__ inline void Init(GM_ADDR buffer) {
-    global_buffer_.SetGlobalBuffer((__gm__ T *)buffer, buf_len_);
+    global_buffer_.SetGlobalBuffer((__gm__ T*)buffer, buf_len_);
     pipe.InitBuffer(vec_buf_, tile_size_ * sizeof(T));
     pipe.InitBuffer(vec_out_q_, 2, tile_size_ * sizeof(T));
   }
@@ -96,18 +95,18 @@ class KernelArithmeticProgression {
   }
 
  private:
-  __aicore__ inline void GenerateInitialTile(const LocalTensor<T> &tile_lt,
+  __aicore__ inline void GenerateInitialTile(const LocalTensor<T>& tile_lt,
                                              uint32_t global_offset) {
     const T start_val = FirstVal + global_offset * DiffVal;
     ArithProgression(tile_lt, start_val, DiffVal, tile_size_);
   }
 
-  __aicore__ inline void GenerateNextTile(const LocalTensor<T> &tile_lt) {
+  __aicore__ inline void GenerateNextTile(const LocalTensor<T>& tile_lt) {
     const int32_t diff_between_block_tiles = single_iter_elems_;
     Adds(tile_lt, tile_lt, diff_between_block_tiles, tile_size_);
   }
 
-  __aicore__ inline void StoreTile(const LocalTensor<T> &tile_lt,
+  __aicore__ inline void StoreTile(const LocalTensor<T>& tile_lt,
                                    uint32_t global_offset) {
     const LocalTensor<T> dst_lt = vec_out_q_.AllocTensor<T>();
     DataCopy(dst_lt, tile_lt, tile_size_);

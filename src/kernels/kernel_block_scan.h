@@ -10,7 +10,6 @@
 #include "tcuscan_utils.h"
 
 using namespace AscendC;
-using namespace kernel_utils;
 
 namespace tcuscan {
 
@@ -46,7 +45,7 @@ namespace tcuscan {
  */
 template <typename T = half, bool SyncAfter = false>
 class KernelBlockScan {
-  using OutputT = kernel_utils::cube_unit::CubeOutType_t<T>;
+  using OutputT = tcuscan::cube_unit::CubeOutType_t<T>;
 
  public:
   /**
@@ -88,13 +87,13 @@ class KernelBlockScan {
   __aicore__ inline void Init(GM_ADDR input, GM_ADDR upper, GM_ADDR lower,
                               GM_ADDR output) {
     global_input_.SetGlobalBuffer(
-        (__gm__ T *)input +
+        (__gm__ T*)input +
             (GetBlockIdx() * a_cube_tile_size_ * max_num_tiles_per_block_),
         a_cube_tile_size_ * max_num_tiles_per_block_);
-    global_upper_.SetGlobalBuffer((__gm__ T *)upper, b_cube_tile_size_);
-    global_lower_.SetGlobalBuffer((__gm__ T *)lower);
+    global_upper_.SetGlobalBuffer((__gm__ T*)upper, b_cube_tile_size_);
+    global_lower_.SetGlobalBuffer((__gm__ T*)lower);
     global_output_.SetGlobalBuffer(
-        (__gm__ OutputT *)output +
+        (__gm__ OutputT*)output +
             (GetBlockIdx() * c_cube_tile_size_ * max_num_tiles_per_block_),
         c_cube_tile_size_ * max_num_tiles_per_block_);
 
@@ -117,16 +116,15 @@ class KernelBlockScan {
    * @brief Run the kernel.
    */
   __aicore__ inline void Process() {
-    const uint32_t num_tiles_to_process =
-        kernel_utils::scalar::GetWorkDistribution(
-            vec_len_, matmul_size_ * matmul_size_, GetBlockNum());
+    const uint32_t num_tiles_to_process = tcuscan::scalar::GetWorkDistribution(
+        vec_len_, matmul_size_ * matmul_size_, GetBlockNum());
 
     if (num_tiles_to_process == 0) {
       return;
     }
 
     // A1: L
-    kernel_utils::copy::CopyGmToL1A(a1_q_, global_lower_, m_blocks_, k_blocks_);
+    tcuscan::copy::CopyGmToL1A(a1_q_, global_lower_, m_blocks_, k_blocks_);
 
     // A2: L
     copy::CopyL1ToL0A<T, true>(a2_2_q_, a1_q_, m_blocks_, k_blocks_);
@@ -137,8 +135,7 @@ class KernelBlockScan {
         all_ones_1_lt_, 1, static_cast<uint16_t>(b_cube_tile_size_));
 
     // A2: L; B1: U; B2: [1]
-    kernel_utils::copy::CopyGmToL1B(b1_1_q_, global_upper_, k_blocks_,
-                                    n_blocks_);
+    tcuscan::copy::CopyGmToL1B(b1_1_q_, global_upper_, k_blocks_, n_blocks_);
 
     copy::CopyL1ToL0B<T>(b2_1_q_, all_ones_1_lt_, k_blocks_, n_blocks_);
 
@@ -222,9 +219,9 @@ class KernelBlockScan {
   const uint32_t N_ = matmul_size_;
   const uint32_t M_ = matmul_size_;
 
-  const uint32_t n_blocks_ = N_ / kernel_utils::GetFractalMN<T>();
-  const uint32_t k_blocks_ = K_ / kernel_utils::GetFractalK<T>();
-  const uint32_t m_blocks_ = M_ / kernel_utils::GetFractalMN<T>();
+  const uint32_t n_blocks_ = N_ / tcuscan::GetFractalMN<T>();
+  const uint32_t k_blocks_ = K_ / tcuscan::GetFractalK<T>();
+  const uint32_t m_blocks_ = M_ / tcuscan::GetFractalMN<T>();
 
   const uint32_t a_cube_tile_size_ = M_ * K_;
   const uint32_t b_cube_tile_size_ = K_ * N_;

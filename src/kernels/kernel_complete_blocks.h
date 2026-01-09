@@ -11,7 +11,6 @@
 #include "tcuscan_utils.h"
 
 using namespace AscendC;
-using namespace kernel_utils;
 
 namespace tcuscan {
 
@@ -84,15 +83,15 @@ class KernelCompleteBlocks {
    */
   __aicore__ inline void Init(GM_ADDR input_rows, GM_ADDR sums,
                               GM_ADDR output) {
-    global_input_rows_.SetGlobalBuffer((__gm__ T *)input_rows, vec_len_);
-    global_sums_.SetGlobalBuffer((__gm__ T *)sums, sums_len_);
+    global_input_rows_.SetGlobalBuffer((__gm__ T*)input_rows, vec_len_);
+    global_sums_.SetGlobalBuffer((__gm__ T*)sums, sums_len_);
 
     if constexpr (!IsInclusive) {
       // The very first element of the output where a zero value must go
       // in case of exclusive scan.
-      global_output_first_elem_.SetGlobalBuffer((__gm__ T *)output, 1);
+      global_output_first_elem_.SetGlobalBuffer((__gm__ T*)output, 1);
     }
-    global_output_.SetGlobalBuffer((__gm__ T *)output + global_shift_,
+    global_output_.SetGlobalBuffer((__gm__ T*)output + global_shift_,
                                    output_real_elems_);
 
     pipe.InitBuffer(vec_tile_in_q_, BufferNum, tile_len_ * sizeof(T));
@@ -162,7 +161,7 @@ class KernelCompleteBlocks {
     }
   }
 
-  __aicore__ inline void VectorAdds(T &block_level_running_sum,
+  __aicore__ inline void VectorAdds(T& block_level_running_sum,
                                     uint32_t num_elems_to_process,
                                     bool is_last_tile_in_block) {
     LocalTensor<T> vec_lt = vec_tile_in_q_.template DeQue<T>();

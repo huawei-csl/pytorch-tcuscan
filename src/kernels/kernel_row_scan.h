@@ -13,7 +13,6 @@
 #include "tcuscan_utils.h"
 
 using namespace AscendC;
-using namespace kernel_utils;
 
 namespace tcuscan {
 
@@ -47,7 +46,7 @@ namespace tcuscan {
  */
 template <typename InputT, bool SyncAfter = false>
 class KernelRowScan {
-  using OutputT = kernel_utils::cube_unit::CubeOutType_t<InputT>;
+  using OutputT = tcuscan::cube_unit::CubeOutType_t<InputT>;
 
  public:
   /**
@@ -67,7 +66,7 @@ class KernelRowScan {
         num_tiles_(scalar::FloorDiv(vec_len, tile_size_)),
         max_num_tiles_per_block_(scalar::CeilDiv(num_tiles_, block_num_)) {
     static_assert(
-        kernel_utils::cube_unit::IsCubeSupported<InputT>,
+        tcuscan::cube_unit::IsCubeSupported<InputT>,
         "Unsupported input Cube dtype. Please use half, float, or int8_t.");
   }
 
@@ -80,9 +79,9 @@ class KernelRowScan {
    * @param [in] output Pointer to output vector in global memory.
    */
   __aicore__ inline void Init(GM_ADDR input, GM_ADDR b, GM_ADDR output) {
-    global_A_.SetGlobalBuffer((__gm__ InputT *)input, vec_len_);
-    global_B_.SetGlobalBuffer((__gm__ InputT *)b);
-    global_C_.SetGlobalBuffer((__gm__ OutputT *)output, vec_len_);
+    global_A_.SetGlobalBuffer((__gm__ InputT*)input, vec_len_);
+    global_B_.SetGlobalBuffer((__gm__ InputT*)b);
+    global_C_.SetGlobalBuffer((__gm__ OutputT*)output, vec_len_);
 
     pipe.InitBuffer(a1_q_, 1, a_cube_tile_size_ * sizeof(InputT));
     pipe.InitBuffer(a2_q_, 1, a_cube_tile_size_ * sizeof(InputT));
@@ -98,8 +97,7 @@ class KernelRowScan {
   __aicore__ inline void Process() {
     // Load the B matrix only once from global memory
     const uint32_t num_tiles_to_process =
-        kernel_utils::scalar::GetWorkDistribution(vec_len_, tile_size_,
-                                                  block_num_);
+        tcuscan::scalar::GetWorkDistribution(vec_len_, tile_size_, block_num_);
 
     if (num_tiles_to_process == 0) {
       return;
@@ -160,14 +158,11 @@ class KernelRowScan {
   const uint32_t num_tiles_;
   const uint32_t max_num_tiles_per_block_;
 
-  constexpr static uint32_t M_CUBE_BLOCK_SIZE =
-      kernel_utils::GetFractalMN<InputT>();
-  constexpr static uint32_t N_CUBE_BLOCK_SIZE =
-      kernel_utils::GetFractalMN<InputT>();
+  constexpr static uint32_t M_CUBE_BLOCK_SIZE = tcuscan::GetFractalMN<InputT>();
+  constexpr static uint32_t N_CUBE_BLOCK_SIZE = tcuscan::GetFractalMN<InputT>();
   // Fractal size is 16x32 for 8-bit input data types instead of the standard
   // 16x16 one
-  constexpr static uint32_t K_CUBE_BLOCK_SIZE =
-      kernel_utils::GetFractalK<InputT>();
+  constexpr static uint32_t K_CUBE_BLOCK_SIZE = tcuscan::GetFractalK<InputT>();
   const uint32_t K_ = matmul_k_size_;
   const uint32_t N_ = matmul_k_size_;
 
@@ -201,7 +196,7 @@ __aicore__ inline void run_row_scan_kernel(GM_ADDR input_vec,
                                            uint32_t batch_size,
                                            uint16_t matmul_size,
                                            GM_ADDR workspace) {
-  using OutputT = kernel_utils::cube_unit::CubeOutType_t<InputT>;
+  using OutputT = tcuscan::cube_unit::CubeOutType_t<InputT>;
 
   if (vec_len == matmul_size && batch_size % matmul_size == 0) {
     if ASCEND_IS_AIC {

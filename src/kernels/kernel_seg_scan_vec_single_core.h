@@ -10,7 +10,6 @@
 #include "tcuscan_utils.h"
 
 using namespace AscendC;
-using namespace kernel_utils;
 
 namespace tcuscan {
 
@@ -25,7 +24,7 @@ namespace tcuscan {
 template <typename InputT, typename FlagInT>
 class KernelSegScanVecSingleCore {
   constexpr static uint32_t BUFFER_NUM = 1;
-  using OutputT = kernel_utils::cube_unit::CubeOutType_t<InputT>;
+  using OutputT = tcuscan::cube_unit::CubeOutType_t<InputT>;
 
  public:
   /**
@@ -49,9 +48,9 @@ class KernelSegScanVecSingleCore {
    */
   __aicore__ inline void Init(GM_ADDR vec_in, GM_ADDR flag_in,
                               GM_ADDR vec_out) {
-    global_input_.SetGlobalBuffer((__gm__ InputT *)vec_in, vec_len_);
-    global_flag_.SetGlobalBuffer((__gm__ FlagInT *)flag_in, vec_len_);
-    global_output_.SetGlobalBuffer((__gm__ OutputT *)vec_out, vec_len_);
+    global_input_.SetGlobalBuffer((__gm__ InputT*)vec_in, vec_len_);
+    global_flag_.SetGlobalBuffer((__gm__ FlagInT*)flag_in, vec_len_);
+    global_output_.SetGlobalBuffer((__gm__ OutputT*)vec_out, vec_len_);
 
     pipe.InitBuffer(vecin_input_q_, BUFFER_NUM, tile_len_ * sizeof(InputT));
     pipe.InitBuffer(vecin_flag_q_, BUFFER_NUM, tile_len_ * sizeof(FlagInT));
@@ -89,7 +88,7 @@ class KernelSegScanVecSingleCore {
    * @param tile_idx Tile index.
    * @param running_sum Running sum accumulation value of previous tile.
    */
-  __aicore__ inline void VecIter(uint32_t tile_idx, OutputT &running_sum) {
+  __aicore__ inline void VecIter(uint32_t tile_idx, OutputT& running_sum) {
     const bool is_last_tile = (tile_idx + 1) * tile_len_ < vec_len_;
     const uint32_t num_elems_to_process =
         is_last_tile ? tile_len_ : vec_len_ - tile_idx * tile_len_;
@@ -128,7 +127,7 @@ class KernelSegScanVecSingleCore {
    * @param running_sum Accumulation value of last element of previous tile.
    * @param num_elems Number of element to process.
    */
-  __aicore__ inline void SegmentedScanOnTile(OutputT &running_sum,
+  __aicore__ inline void SegmentedScanOnTile(OutputT& running_sum,
                                              uint32_t num_elems) {
     LocalTensor<InputT> input_vec_lt = vecin_input_q_.DeQue<InputT>();
     LocalTensor<FlagInT> flag_vec_lt = vecin_flag_q_.DeQue<FlagInT>();
@@ -185,8 +184,8 @@ class KernelSegScanVecSingleCore {
    * @param segment_id The id of the input segment.
    * @return Delta correction value
    */
-  __aicore__ inline float GetDelta(const LocalTensor<OutputT> &input,
-                                   const LocalTensor<int32_t> &flag,
+  __aicore__ inline float GetDelta(const LocalTensor<OutputT>& input,
+                                   const LocalTensor<int32_t>& flag,
                                    int16_t segment_id) {
     const int16_t segment_start_index =
         GetStartIndexOfSegment(flag, segment_id);
@@ -205,7 +204,7 @@ class KernelSegScanVecSingleCore {
    * @return Start index of the segment with segment_id.
    */
   __aicore__ inline int16_t GetStartIndexOfSegment(
-      const LocalTensor<int32_t> &flag, int16_t segment_id) {
+      const LocalTensor<int32_t>& flag, int16_t segment_id) {
     const half threshold = static_cast<half>(static_cast<float>(segment_id) -
                                              static_cast<float>(0.1));
 
@@ -255,8 +254,8 @@ class KernelSegScanVecSingleCore {
    * @param src Tile of input vector.
    * @param scalar Scalar to compare vector against.
    */
-  __aicore__ inline void CustomCompareScalarEQ(LocalTensor<half> &dst,
-                                               LocalTensor<int16_t> &src,
+  __aicore__ inline void CustomCompareScalarEQ(LocalTensor<half>& dst,
+                                               LocalTensor<int16_t>& src,
                                                int16_t scalar) {
     LocalTensor<half> tmp_half_lt = tmp1_half_buf_.Get<half>();
     LocalTensor<uint16_t> tmp_uint16_lt =
@@ -287,8 +286,8 @@ class KernelSegScanVecSingleCore {
    * @param segment_id The segment id
    * @param delta Speculation correction value.
    */
-  __aicore__ inline void FixSpecInPlace(LocalTensor<float> &output,
-                                        LocalTensor<int32_t> &flag,
+  __aicore__ inline void FixSpecInPlace(LocalTensor<float>& output,
+                                        LocalTensor<int32_t>& flag,
                                         int16_t segment_id, float delta) {
     if (delta == 0) {
       return;

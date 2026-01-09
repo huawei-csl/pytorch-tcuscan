@@ -10,7 +10,6 @@
 #include "tcuscan_utils.h"
 
 using namespace AscendC;
-using namespace kernel_utils;
 
 namespace tcuscan {
 
@@ -50,9 +49,9 @@ class KernelDiff {
    * @param [in] vec_out Pointer to the output vector in global memory.
    */
   __aicore__ inline void Init(GM_ADDR vec_in, GM_ADDR vec_out) {
-    global_in_.SetGlobalBuffer((__gm__ DataTypeT *)vec_in, vec_len_);
-    global_out_.SetGlobalBuffer((__gm__ DataTypeT *)vec_out + 1, vec_len_ - 1);
-    global_out_first_elem_.SetGlobalBuffer((__gm__ DataTypeT *)vec_out, 1);
+    global_in_.SetGlobalBuffer((__gm__ DataTypeT*)vec_in, vec_len_);
+    global_out_.SetGlobalBuffer((__gm__ DataTypeT*)vec_out + 1, vec_len_ - 1);
+    global_out_first_elem_.SetGlobalBuffer((__gm__ DataTypeT*)vec_out, 1);
 
     pipe.InitBuffer(in_q_, BUFFER_NUM, (tile_len_ + 1) * sizeof(DataTypeT));
     pipe.InitBuffer(out_q_, BUFFER_NUM, tile_len_ * sizeof(DataTypeT));
@@ -66,9 +65,8 @@ class KernelDiff {
   __aicore__ inline void Process() {
     uint32_t global_offset =
         GetBlockIdx() * tile_len_ * max_num_tiles_per_block_;
-    const uint32_t num_tiles_to_process =
-        kernel_utils::scalar::GetWorkDistribution(vec_len_, tile_len_,
-                                                  vec_core_num_);
+    const uint32_t num_tiles_to_process = tcuscan::scalar::GetWorkDistribution(
+        vec_len_, tile_len_, vec_core_num_);
 
     for (uint32_t tile_idx = 0; tile_idx < num_tiles_to_process; tile_idx++) {
       const bool full_tile = global_offset + tile_len_ < vec_len_;

@@ -12,7 +12,6 @@
 #include "tcuscan_utils.h"
 
 using namespace AscendC;
-using namespace kernel_utils;
 
 namespace tcuscan {
 
@@ -145,8 +144,7 @@ class KernelSplit {
             typename std::enable_if<!_WithIndices, int>::type = 0>
   __aicore__ inline void Process() {
     const uint32_t num_tiles_to_process =
-        kernel_utils::scalar::GetWorkDistribution(vec_len_, tile_len_,
-                                                  block_num_);
+        tcuscan::scalar::GetWorkDistribution(vec_len_, tile_len_, block_num_);
 
     uint32_t offset_within_block = 0;
     uint32_t zeros_offset, ones_offset;
@@ -187,8 +185,7 @@ class KernelSplit {
             typename std::enable_if<_WithIndices, int>::type = 0>
   __aicore__ inline void Process() {
     const uint32_t num_tiles_to_process =
-        kernel_utils::scalar::GetWorkDistribution(vec_len_, tile_len_,
-                                                  block_num_);
+        tcuscan::scalar::GetWorkDistribution(vec_len_, tile_len_, block_num_);
 
     uint32_t offset_within_block = 0;
     uint32_t zeros_offset, ones_offset;
@@ -356,7 +353,7 @@ class KernelSplit {
   const uint32_t num_elems_before_block_;
 
   constexpr static uint16_t SMALLEST_MASK =
-      kernel_utils::UB_ALIGNMENT / sizeof(PackedMaskT);
+      tcuscan::UB_ALIGNMENT / sizeof(PackedMaskT);
   constexpr static uint16_t IN_ELEMS_PER_MASK_ELEM = sizeof(PackedMaskT) * 8;
 };
 

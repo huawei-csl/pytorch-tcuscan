@@ -10,7 +10,6 @@
 #include "tcuscan_utils.h"
 
 using namespace AscendC;
-using namespace kernel_utils;
 
 namespace tcuscan {
 
@@ -63,9 +62,8 @@ class KernelGreaterEqual {
   __aicore__ inline void Process(InputT pivot) {
     uint32_t global_offset =
         GetBlockIdx() * tile_size_ * max_num_tiles_per_block_;
-    const uint32_t num_tiles_to_process =
-        kernel_utils::scalar::GetWorkDistribution(vec_len_, tile_size_,
-                                                  vec_core_num_);
+    const uint32_t num_tiles_to_process = tcuscan::scalar::GetWorkDistribution(
+        vec_len_, tile_size_, vec_core_num_);
 
     for (uint32_t tile_idx = 0; tile_idx < num_tiles_to_process; tile_idx++) {
       const bool full_tile = global_offset + tile_size_ <= vec_len_;

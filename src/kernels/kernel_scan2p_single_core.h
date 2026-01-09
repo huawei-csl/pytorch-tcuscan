@@ -10,7 +10,6 @@
 #include "tcuscan_utils.h"
 
 using namespace AscendC;
-using namespace kernel_utils;
 
 namespace tcuscan {
 
@@ -23,8 +22,8 @@ namespace tcuscan {
  */
 template <typename T1 = half, typename T2 = int8_t, bool SyncAfter = false>
 class KernelScan2PSingleCore {
-  using OutputT1 = kernel_utils::cube_unit::CubeOutType_t<T1>;
-  using OutputT2 = kernel_utils::cube_unit::CubeOutType_t<T2>;
+  using OutputT1 = tcuscan::cube_unit::CubeOutType_t<T1>;
+  using OutputT2 = tcuscan::cube_unit::CubeOutType_t<T2>;
 
  public:
   /**
@@ -42,20 +41,20 @@ class KernelScan2PSingleCore {
         K_(matmul_k_size),
         N_(matmul_k_size),
         num_matrix_tiles_(vec_len_ / (M_ * K_)) {
-    static_assert(kernel_utils::cube_unit::IsCubeSupported<T1>,
+    static_assert(tcuscan::cube_unit::IsCubeSupported<T1>,
                   "Unsupported input Cube dtype in first parameter. Please "
                   "use half.");
-    static_assert(kernel_utils::cube_unit::IsCubeSupported<T2>,
+    static_assert(tcuscan::cube_unit::IsCubeSupported<T2>,
                   "Unsupported input Cube dtype in second parameter. "
                   "Please use int8_t.");
 
 #ifdef ASCEND_CPU_DEBUG
-    ASCENDC_ASSERT(matmul_k_size % kernel_utils::GetFractlK<T1> == 0, {
+    ASCENDC_ASSERT(matmul_k_size % tcuscan::GetFractlK<T1> == 0, {
       KERNEL_LOG(KERNEL_ERROR,
                  "Matrix multiplication inner K dimension must be "
                  "divisible by fractal dimension.");
     });
-    ASCENDC_ASSERT(matmul_k_size % kernel_utils::GetFractlK<T2> == 0, {
+    ASCENDC_ASSERT(matmul_k_size % tcuscan::GetFractlK<T2> == 0, {
       KERNEL_LOG(KERNEL_ERROR,
                  "Matrix multiplication inner K dimension must be "
                  "divisible by fractal dimension.");
@@ -78,12 +77,12 @@ class KernelScan2PSingleCore {
   __aicore__ inline void Init(GM_ADDR vec_in, GM_ADDR vec_f_in, GM_ADDR b_half,
                               GM_ADDR b_int8, GM_ADDR vec_out,
                               GM_ADDR vec_f_out) {
-    global_in_.SetGlobalBuffer((__gm__ T1 *)vec_in, vec_len_);
-    global_f_in_.SetGlobalBuffer((__gm__ T2 *)vec_f_in, vec_len_);
-    global_b_half_.SetGlobalBuffer((__gm__ half *)b_half, M_ * K_);
-    global_b_int8_.SetGlobalBuffer((__gm__ int8_t *)b_int8, K_ * N_);
-    global_out_.SetGlobalBuffer((__gm__ OutputT1 *)vec_out, vec_len_);
-    global_f_out_.SetGlobalBuffer((__gm__ OutputT2 *)vec_f_out, vec_len_);
+    global_in_.SetGlobalBuffer((__gm__ T1*)vec_in, vec_len_);
+    global_f_in_.SetGlobalBuffer((__gm__ T2*)vec_f_in, vec_len_);
+    global_b_half_.SetGlobalBuffer((__gm__ half*)b_half, M_ * K_);
+    global_b_int8_.SetGlobalBuffer((__gm__ int8_t*)b_int8, K_ * N_);
+    global_out_.SetGlobalBuffer((__gm__ OutputT1*)vec_out, vec_len_);
+    global_f_out_.SetGlobalBuffer((__gm__ OutputT2*)vec_f_out, vec_len_);
 
     // 16-bits: largest cube input hence 'uint16_t'
     pipe.InitBuffer(a1_q_, 1, a_cube_tile_size_ * sizeof(uint16_t));
@@ -158,12 +157,12 @@ class KernelScan2PSingleCore {
   const uint16_t N_;
   const uint32_t num_matrix_tiles_;
 
-  const uint16_t m_half_blocks_ = M_ / kernel_utils::GetFractalMN<half>();
-  const uint16_t m_int8_blocks_ = M_ / kernel_utils::GetFractalMN<int8_t>();
-  const uint16_t k_half_blocks_ = K_ / kernel_utils::GetFractalK<half>();
-  const uint16_t k_int8_blocks_ = K_ / kernel_utils::GetFractalK<int8_t>();
-  const uint16_t n_half_blocks_ = N_ / kernel_utils::GetFractalMN<half>();
-  const uint16_t n_int8_blocks_ = N_ / kernel_utils::GetFractalMN<int8_t>();
+  const uint16_t m_half_blocks_ = M_ / tcuscan::GetFractalMN<half>();
+  const uint16_t m_int8_blocks_ = M_ / tcuscan::GetFractalMN<int8_t>();
+  const uint16_t k_half_blocks_ = K_ / tcuscan::GetFractalK<half>();
+  const uint16_t k_int8_blocks_ = K_ / tcuscan::GetFractalK<int8_t>();
+  const uint16_t n_half_blocks_ = N_ / tcuscan::GetFractalMN<half>();
+  const uint16_t n_int8_blocks_ = N_ / tcuscan::GetFractalMN<int8_t>();
 
   const uint32_t a_cube_tile_size_ = M_ * K_;
   const uint32_t b_cube_tile_size_ = K_ * N_;

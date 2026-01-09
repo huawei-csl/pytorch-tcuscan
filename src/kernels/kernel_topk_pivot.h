@@ -11,7 +11,6 @@
 #include "tiling/tiling_topk.h"
 
 using namespace AscendC;
-using namespace kernel_utils;
 
 namespace tcuscan {
 

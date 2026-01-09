@@ -33,7 +33,7 @@ class KernelPrepareIdentityAndMinusU {
       : matrix_size_(matrix_size),
         block_dim_(block_dim),
         global_offset_(
-            kernel_utils::scalar::FloorDiv(GetBlockIdx(), GetTaskRation()) *
+            tcuscan::scalar::FloorDiv(GetBlockIdx(), GetTaskRation()) *
             matrix_size_ * matrix_size_) {}
 
   /**
@@ -70,7 +70,7 @@ class KernelPrepareIdentityAndMinusU {
  private:
   __aicore__ inline void VecIter(uint32_t j) {
     const uint32_t offset = global_offset_ + j * matrix_size_;
-    kernel_utils::copy::CopyGmToVec(vecin_U_q_, global_U_in_[offset]);
+    tcuscan::copy::CopyGmToVec(vecin_U_q_, global_U_in_[offset]);
     LocalTensor<InputT> vec_U_lt = vecin_U_q_.DeQue<InputT>();
     LocalTensor<InputT> vec_ej_lt =
         work_buf_.Get<InputT>();  // j-th column of identity
@@ -79,12 +79,12 @@ class KernelPrepareIdentityAndMinusU {
     vec_ej_lt.SetValue(j, 1);
     AscendC::Muls(vec_U_neg_lt, vec_U_lt, (InputT)-1, matrix_size_);
     AscendC::Add(vec_U_lt, vec_ej_lt, vec_U_neg_lt, matrix_size_);
-    kernel_utils::copy::CopyVecToGm<InputT>(global_I_out_[offset], vecout_I_q_,
-                                            vec_ej_lt);
-    kernel_utils::copy::CopyVecToGm<InputT>(global_U_neg_out_[offset],
-                                            vecout_U_neg_q_, vec_U_neg_lt);
-    kernel_utils::copy::CopyVecToGm<InputT>(global_X_out_[offset], vecout_X_q_,
-                                            vec_U_lt);
+    tcuscan::copy::CopyVecToGm<InputT>(global_I_out_[offset], vecout_I_q_,
+                                       vec_ej_lt);
+    tcuscan::copy::CopyVecToGm<InputT>(global_U_neg_out_[offset],
+                                       vecout_U_neg_q_, vec_U_neg_lt);
+    tcuscan::copy::CopyVecToGm<InputT>(global_X_out_[offset], vecout_X_q_,
+                                       vec_U_lt);
     vecin_U_q_.FreeTensor<InputT>(vec_U_lt);
   }
 
@@ -117,7 +117,7 @@ class KernelPrepareIdentityAndMinusU {
  */
 template <typename InputT>
 class KernelInvTriuRecUnroll {
-  using OutputT = kernel_utils::cube_unit::CubeOutType_t<InputT>;
+  using OutputT = tcuscan::cube_unit::CubeOutType_t<InputT>;
 
  public:
   /**
@@ -128,7 +128,7 @@ class KernelInvTriuRecUnroll {
   __aicore__ inline KernelInvTriuRecUnroll(uint32_t matrix_size)
       : matrix_size_(matrix_size),
         tile_len_(matrix_size_ * matrix_size_),
-        fractal_size_(kernel_utils::GetFractalMN<InputT>()),
+        fractal_size_(tcuscan::GetFractalMN<InputT>()),
         n_fractals_(matrix_size_ / fractal_size_),
         global_offset_(GetBlockIdx() * tile_len_) {}
 
@@ -182,8 +182,8 @@ class KernelInvTriuRecUnroll {
   template <TPosition Pos>
   __aicore__ inline void CopyDiagonalFractalsFromGmToL1(
       LocalTensor<InputT> local_tensor, GlobalTensor<InputT> global_tensor) {
-    kernel_utils::cube_unit::InitConstL1<InputT, Pos>(local_tensor, (InputT)0,
-                                                      tile_len_);
+    tcuscan::cube_unit::InitConstL1<InputT, Pos>(local_tensor, (InputT)0,
+                                                 tile_len_);
     Nd2NzParams params;
     params.ndNum = matrix_size_ / fractal_size_;  // number of diagonal fractals
     params.nValue = fractal_size_;  // number of rows of each diagonal fractal
@@ -224,8 +224,8 @@ class KernelInvTriuRecUnroll {
     B1_I_q_.EnQue(b1_i_lt);
 
     LocalTensor<InputT> b1_u_neg_lt = B1_U_neg_q_.AllocTensor<InputT>();
-    kernel_utils::copy::CopyND2NZ(b1_u_neg_lt, global_U_neg_in_[global_offset_],
-                                  n_fractals_, n_fractals_);
+    tcuscan::copy::CopyND2NZ(b1_u_neg_lt, global_U_neg_in_[global_offset_],
+                             n_fractals_, n_fractals_);
     B1_U_neg_q_.EnQue<InputT>(b1_u_neg_lt);
   }
   /**
@@ -237,30 +237,30 @@ class KernelInvTriuRecUnroll {
    *     X, Y = (X + X @ Y, Y @ Y) return X
    */
   __aicore__ inline void ProcessInvTrick() {
-    kernel_utils::exec_mode::AssertIsAIC();
+    tcuscan::exec_mode::AssertIsAIC();
     for (uint32_t j = 1; j < fractal_size_ / 4; j *= 2) {
       SquareY();                             // Y <- Y @ Y
       UpdateX(false /* store_co1_to_b1 */);  // X <- X + X @ Y
     }
     SquareY();                            // Y <- Y @ Y
     UpdateX(true /* store_co1_to_b1 */);  // X <- X + X @ Y
-    kernel_utils::queue::FreeFromQ<InputT>(A1_Y_q_);
+    tcuscan::queue::FreeFromQ<InputT>(A1_Y_q_);
   }
   /**
    * @brief As the name says, it computes Y @ Y
    */
   __aicore__ inline void SquareY() {
-    kernel_utils::copy::CopyL1ToL0A<InputT, /* FreeSrc */ true>(
+    tcuscan::copy::CopyL1ToL0A<InputT, /* FreeSrc */ true>(
         A2_q_, A1_Y_q_, n_fractals_, n_fractals_);
-    kernel_utils::copy::CopyL1ToL0B<InputT, /* FreeSrc */ true>(
+    tcuscan::copy::CopyL1ToL0B<InputT, /* FreeSrc */ true>(
         B2_q_, B1_Y_q_, n_fractals_, n_fractals_);
-    kernel_utils::cube_unit::Multiply<InputT, false /* accumulate_c */, true /*
+    tcuscan::cube_unit::Multiply<InputT, false /* accumulate_c */, true /*
     free_a */, true /* free_b */>(A2_q_, B2_q_, CO1_q_, matrix_size_,
                                   matrix_size_, matrix_size_);
-    kernel_utils::copy::CopyC01ToB1<InputT, OutputT, 1, 1, false /* FreeSrc */>(
+    tcuscan::copy::CopyC01ToB1<InputT, OutputT, 1, 1, false /* FreeSrc */>(
         B1_Y_q_, CO1_q_, matrix_size_, matrix_size_);
 
-    kernel_utils::copy::CopyC01ToA1<InputT, OutputT, 1, 1, true /* FreeSrc */>(
+    tcuscan::copy::CopyC01ToA1<InputT, OutputT, 1, 1, true /* FreeSrc */>(
         A1_Y_q_, CO1_q_, matrix_size_, matrix_size_);
   }
   /**
@@ -270,32 +270,32 @@ class KernelInvTriuRecUnroll {
    * to B1, or only in A1
    */
   __aicore__ inline void UpdateX(bool store_co1_to_b1) {
-    kernel_utils::copy::CopyL1ToL0A<InputT, true>(A2_q_, A1_X_q_, n_fractals_,
-                                                  n_fractals_);
-    kernel_utils::copy::CopyL1ToL0B<InputT, false>(B2_q_, B1_I_q_, n_fractals_,
-                                                   n_fractals_);
+    tcuscan::copy::CopyL1ToL0A<InputT, true>(A2_q_, A1_X_q_, n_fractals_,
+                                             n_fractals_);
+    tcuscan::copy::CopyL1ToL0B<InputT, false>(B2_q_, B1_I_q_, n_fractals_,
+                                              n_fractals_);
 
-    kernel_utils::cube_unit::Multiply<InputT, false /* accumulate_c */,
+    tcuscan::cube_unit::Multiply<InputT, false /* accumulate_c */,
                                           false /* free_a */, true /* free_b
                                           */>(
             A2_q_, B2_q_, CO1_q_, matrix_size_, matrix_size_, matrix_size_);
 
-    kernel_utils::copy::CopyL1ToL0B<InputT, false>(B2_q_, B1_Y_q_, n_fractals_,
-                                                   n_fractals_);
-    kernel_utils::cube_unit::Multiply<InputT, true /* accumulate_c */,
+    tcuscan::copy::CopyL1ToL0B<InputT, false>(B2_q_, B1_Y_q_, n_fractals_,
+                                              n_fractals_);
+    tcuscan::cube_unit::Multiply<InputT, true /* accumulate_c */,
                                           true /* free_a */, true /* free_b
                                           */>(
             A2_q_, B2_q_, CO1_q_, matrix_size_, matrix_size_, matrix_size_);
     if (store_co1_to_b1) {
-      kernel_utils::copy::CopyC01ToA1<InputT, OutputT, 1, 1,
-                                      /* FreeSrc */ false>(
+      tcuscan::copy::CopyC01ToA1<InputT, OutputT, 1, 1,
+                                 /* FreeSrc */ false>(
           A1_X_q_, CO1_q_, matrix_size_, matrix_size_);
-      kernel_utils::copy::CopyC01ToB1<InputT, OutputT, 1, 1,
-                                      /* FreeSrc */ true>(
+      tcuscan::copy::CopyC01ToB1<InputT, OutputT, 1, 1,
+                                 /* FreeSrc */ true>(
           B1_X_q_, CO1_q_, matrix_size_, matrix_size_);
     } else {
-      kernel_utils::copy::CopyC01ToA1<InputT, OutputT, 1, 1,
-                                      /* FreeSrc */ true>(
+      tcuscan::copy::CopyC01ToA1<InputT, OutputT, 1, 1,
+                                 /* FreeSrc */ true>(
           A1_X_q_, CO1_q_, matrix_size_, matrix_size_);
     }
   }
@@ -387,12 +387,12 @@ class KernelInvTriuRecUnroll {
    * stores it in CO1 using a matrix multiplication.
    */
   __aicore__ inline void LoadIdentityInCO1() {
-    kernel_utils::copy::CopyL1ToL0A<InputT, false>(A2_q_, A1_I_q_, n_fractals_,
-                                                   n_fractals_);
-    kernel_utils::copy::CopyL1ToL0B<InputT, false>(B2_q_, B1_I_q_, n_fractals_,
-                                                   n_fractals_);
-    kernel_utils::cube_unit::Multiply<InputT, false /* accumulate_c */,
-                                      true /* free_a */, true /* free_b */>(
+    tcuscan::copy::CopyL1ToL0A<InputT, false>(A2_q_, A1_I_q_, n_fractals_,
+                                              n_fractals_);
+    tcuscan::copy::CopyL1ToL0B<InputT, false>(B2_q_, B1_I_q_, n_fractals_,
+                                              n_fractals_);
+    tcuscan::cube_unit::Multiply<InputT, false /* accumulate_c */,
+                                 true /* free_a */, true /* free_b */>(
         A2_q_, B2_q_, CO1_q_, matrix_size_, matrix_size_, matrix_size_);
   }
 
@@ -400,12 +400,12 @@ class KernelInvTriuRecUnroll {
    * @brief Step 3) A1_Y <- LX @ U_neg + I
    */
   __aicore__ inline void ComputeStep3() {
-    kernel_utils::copy::CopyL1ToL0B<InputT, /* FreeSrc */ false>(
+    tcuscan::copy::CopyL1ToL0B<InputT, /* FreeSrc */ false>(
         B2_q_, B1_U_neg_q_, n_fractals_, n_fractals_);
-    kernel_utils::cube_unit::Multiply<InputT, true /* accumulate_c */,
-                                      false /* free_a */, true /* free_b */>(
+    tcuscan::cube_unit::Multiply<InputT, true /* accumulate_c */,
+                                 false /* free_a */, true /* free_b */>(
         A2_q_, B2_q_, CO1_q_, matrix_size_, matrix_size_, matrix_size_);
-    kernel_utils::copy::CopyC01ToA1<InputT, OutputT, 1, 1, /* FreeSrc */ true>(
+    tcuscan::copy::CopyC01ToA1<InputT, OutputT, 1, 1, /* FreeSrc */ true>(
         A1_Y_q_, CO1_q_, matrix_size_, matrix_size_);
   }
 
@@ -414,10 +414,10 @@ class KernelInvTriuRecUnroll {
    * X
    */
   __aicore__ inline void LoadLXInCO1() {
-    kernel_utils::copy::CopyL1ToL0B<InputT, /* FreeSrc */ false>(
+    tcuscan::copy::CopyL1ToL0B<InputT, /* FreeSrc */ false>(
         B2_q_, B1_I_q_, n_fractals_, n_fractals_);
-    kernel_utils::cube_unit::Multiply<InputT, false /* accumulate_c */,
-                                      true /* free_a */, true /* free_b */>(
+    tcuscan::cube_unit::Multiply<InputT, false /* accumulate_c */,
+                                 true /* free_a */, true /* free_b */>(
         A2_q_, B2_q_, CO1_q_, matrix_size_, matrix_size_,
         matrix_size_);  // CO1 contains LX
   }
@@ -429,20 +429,18 @@ class KernelInvTriuRecUnroll {
    */
   __aicore__ inline void ComputeStep6(uint32_t block_size) {
     bool is_last_iter = (block_size == matrix_size_ / 2);
-    kernel_utils::copy::CopyL1ToL0A<InputT, /* FreeSrc */ true>(
+    tcuscan::copy::CopyL1ToL0A<InputT, /* FreeSrc */ true>(
         A2_q_, A1_Y_q_, n_fractals_, n_fractals_);
-    kernel_utils::cube_unit::Multiply<InputT, true /* accumulate_c */,
-                                      true /* free_a */, true /* free_b */>(
+    tcuscan::cube_unit::Multiply<InputT, true /* accumulate_c */,
+                                 true /* free_a */, true /* free_b */>(
         A2_q_, B2_q_, CO1_q_, matrix_size_, matrix_size_, matrix_size_);
-    kernel_utils::copy::CopyC01ToA1<InputT, OutputT, 1, 1, false /* FreeSrc */>(
+    tcuscan::copy::CopyC01ToA1<InputT, OutputT, 1, 1, false /* FreeSrc */>(
         A1_X_q_, CO1_q_, matrix_size_, matrix_size_);
     if (!is_last_iter) {
-      kernel_utils::copy::CopyC01ToB1<InputT, OutputT, 1, 1,
-                                      true /* FreeSrc */>(
+      tcuscan::copy::CopyC01ToB1<InputT, OutputT, 1, 1, true /* FreeSrc */>(
           B1_X_q_, CO1_q_, matrix_size_, matrix_size_);
     } else {
-      kernel_utils::copy::CopyC01ToB1<InputT, OutputT, 1, 1,
-                                      false /* FreeSrc */>(
+      tcuscan::copy::CopyC01ToB1<InputT, OutputT, 1, 1, false /* FreeSrc */>(
           B1_X_q_, CO1_q_, matrix_size_, matrix_size_);
     }
   }
@@ -485,19 +483,19 @@ class KernelInvTriuRecUnroll {
    * @brief Copy output to GM.
    */
   __aicore__ inline void CopyOut() {
-    kernel_utils::copy::CopyCL0ToGlobal(global_Z_out_[global_offset_], CO1_q_,
-                                        matrix_size_, matrix_size_);
+    tcuscan::copy::CopyCL0ToGlobal(global_Z_out_[global_offset_], CO1_q_,
+                                   matrix_size_, matrix_size_);
   }
   /**
    * @brief Free queues
    */
   __aicore__ inline void FreeQueues() {
-    kernel_utils::queue::FreeFromQ<InputT>(A1_X_q_);
-    kernel_utils::queue::FreeFromQ<InputT>(A1_I_q_);
-    kernel_utils::queue::FreeFromQ<InputT>(B1_I_q_);
-    kernel_utils::queue::FreeFromQ<InputT>(B1_Y_q_);
-    kernel_utils::queue::FreeFromQ<InputT>(B1_X_q_);
-    kernel_utils::queue::FreeFromQ<InputT>(B1_U_neg_q_);
+    tcuscan::queue::FreeFromQ<InputT>(A1_X_q_);
+    tcuscan::queue::FreeFromQ<InputT>(A1_I_q_);
+    tcuscan::queue::FreeFromQ<InputT>(B1_I_q_);
+    tcuscan::queue::FreeFromQ<InputT>(B1_Y_q_);
+    tcuscan::queue::FreeFromQ<InputT>(B1_X_q_);
+    tcuscan::queue::FreeFromQ<InputT>(B1_U_neg_q_);
   }
 
  private:
@@ -553,7 +551,7 @@ __aicore__ inline void run_triu_inv_rec_unroll(GM_ADDR U, GM_ADDR out_tensor,
     op.Init(U, U_neg, X, I);
     op.Process();
   }
-  kernel_utils::sync::SyncGroup<kernel_utils::sync::GroupSyncDirection::FULL>();
+  tcuscan::sync::SyncGroup<tcuscan::sync::GroupSyncDirection::FULL>();
   if ASCEND_IS_AIC {
     KernelInvTriuRecUnroll<InputT> op(matrix_size);
     op.Init(U, U_neg, X, I, out_tensor);
