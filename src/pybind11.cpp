@@ -16,6 +16,7 @@
 #include "torch/torch_diff.h"
 #include "torch/torch_gather.h"
 #include "torch/torch_gen_lower.h"
+#include "torch/torch_histogram.h"
 #include "torch/torch_linalg.h"
 #include "torch/torch_matmul_cce.h"
 #include "torch/torch_pad.h"
@@ -112,4 +113,6 @@ PYBIND11_MODULE(tcuscan_ops, m) {
   m.def("run_triu_inv_rec_unroll", &tcuscan::run_triu_inv_rec_unroll,
         "Upper triangular inverse");
   m.def("run_count_if", &tcuscan::run_count_if, "Count if");
+  m.def("run_histogram", &tcuscan::run_histogram,
+        "Histogram with number of bins.");
 }

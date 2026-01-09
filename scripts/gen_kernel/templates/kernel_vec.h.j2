@@ -7,11 +7,11 @@
 #pragma once
 
 #include "ascendc_kernel_operator.h"
-#include "kernel_utils.h"
+#include "tcuscan_utils.h"
 
 using namespace AscendC;
-using namespace kernel_utils;
 
+namespace tcuscan {
 /**
  * @brief {{ kernel_desc_long }}
  *
@@ -59,7 +59,7 @@ class {{ kernel_class_name }} {
         uint32_t global_offset =
             GetBlockIdx() * tile_len_ * max_num_tiles_per_block_;
         const uint32_t num_tiles_to_process =
-            kernel_utils::scalar::GetWorkDistribution(vec_len_, tile_len_,
+            scalar::GetWorkDistribution(vec_len_, tile_len_,
                                                       vec_core_num_);
 
         for (uint32_t tile_idx = 0; tile_idx < num_tiles_to_process;
@@ -127,4 +127,6 @@ __aicore__ inline void run_{{ kernel_cpp_name }}(GM_ADDR vec_in, GM_ADDR vec_out
         op.Init(vec_in, vec_out);
         op.Process();
     }
+}
+
 }
