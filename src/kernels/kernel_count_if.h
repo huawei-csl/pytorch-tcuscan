@@ -62,7 +62,7 @@ class KernelCountIf {
         vec_core_num_ < MIN_VEC_SIZE ? MIN_VEC_SIZE : vec_core_num_;
 
     global_in_.SetGlobalBuffer((__gm__ T*)vec_in, vec_len_);
-    global_out_.SetGlobalBuffer((__gm__ int32_t*)vec_out, vec_core_num_);
+    global_out_.SetGlobalBuffer((__gm__ int32_t*)vec_out, 1);
 
     pipe_.InitBuffer(in_q_, 1, tile_len_ * sizeof(T));
     pipe_.InitBuffer(out_q_, 1, out_queue_len * sizeof(int32_t));
@@ -109,12 +109,17 @@ class KernelCountIf {
     GatherMask(work_lt, tile_lt, mask_lt, true, tile_len_, {1, 1, 8, 8},
                num_gathered_elems);
 
-    const auto id = GetBlockIdx();
-    copy::CopyScalarToGm(global_out_[id], out_q_,
-                         static_cast<int32_t>(num_gathered_elems));
+    AtomicAddWrite(static_cast<int32_t>(num_gathered_elems));
   }
 
  private:
+  __aicore__ inline void AtomicAddWrite(int32_t value) {
+    AscendC::PipeBarrier<PIPE_MTE3>();
+    AscendC::SetAtomicAdd<int32_t>();
+    copy::CopyScalarToGm(global_out_, out_q_, value);
+    AscendC::SetAtomicNone();
+  }
+
   TPipe pipe_;
 
   TQue<QuePosition::VECIN, 1> in_q_;
@@ -157,7 +162,7 @@ __aicore__ inline void run_count_if(GM_ADDR vec_in, GM_ADDR vec_out,
     KernelCountIf<T> op(vec_len, tile_len);
     op.Init(vec_in, vec_out);
     op.LoadInputTileInUB();
-    op.LessThan(static_cast<float>(pivot));
+    op.LessThan(pivot);
 
     // TODO: binary search on UB
     // constexpr uint32_t recursion_steps = 4;

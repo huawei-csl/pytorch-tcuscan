@@ -26,7 +26,7 @@ namespace tcuscan {
  * @param [in] x Input data vector.
  * @param [in] pivot Input pivot
  * @param [in] tile_len Tile length that is assigned on each AIV core.
- * @return Copy of input vector `x`.
+ * @return Returns a tensor containing the sum of `{ x_i <= pivot}`.
  */
 at::Tensor run_count_if(const at::Tensor& x, float pivot, uint32_t tile_len) {
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
@@ -36,8 +36,8 @@ at::Tensor run_count_if(const at::Tensor& x, float pivot, uint32_t tile_len) {
   const uint32_t vec_len = x.numel();
   const uint32_t block_dim = host_utils::CeilDiv(vec_len, tile_len);
 
-  const at::Tensor z = at::empty(
-      {block_dim}, at::TensorOptions().dtype(torch::kInt32).device(device));
+  const at::Tensor z =
+      at::zeros({1}, at::TensorOptions().dtype(torch::kInt32).device(device));
 
   const CountIfTiling tiling{block_dim, vec_len, tile_len, pivot};
   uint8_t* tiling_device = alloc_copy_tiling(tiling);

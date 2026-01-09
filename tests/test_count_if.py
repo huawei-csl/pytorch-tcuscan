@@ -21,13 +21,11 @@ _SIZES = [1024 * 8, 1024 * 16, 2048 * 32, 1024 * 128]
 
 
 def _test_tcuscan_count_if(length: int, dtype: torch.dtype, tile_len: int):
-    x = torch.randn(length, device="cpu", dtype=dtype)
-    x_npu = x.npu()
+    x = torch.randn(length, dtype=dtype, device=NPU_DEVICE)
 
     pivot = 0.1
-    output = tcuscan_ops.run_count_if(x_npu, pivot, tile_len)
-    actual = torch.sum(output).cpu()
-    expected = torch.count_nonzero(x <= pivot)
+    actual = tcuscan_ops.run_count_if(x, pivot, tile_len)
+    expected = torch.count_nonzero(x <= pivot).to(torch.int32).flatten()
 
     assert torch.equal(actual, expected), f"Expected {expected}. Got {actual}"
 
