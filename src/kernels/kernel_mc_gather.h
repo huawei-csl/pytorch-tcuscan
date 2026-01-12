@@ -354,9 +354,7 @@ class KernelMcGather {
 /**
  * @brief Run the `mc_gather` kernel.
  *
- * @tparam ForceMixMode Indicates if kernel should schedule dummy cube
- * operations to make sure it runs in mix mode. Can be safely set to `false`
- * when running inside another mix mode kernel.
+ * @tparam T Input data type.
  *
  * @param [in] values_in Pointer to input vector.
  * @param [in] idx_in Pointer to column indices input vector.
@@ -366,15 +364,12 @@ class KernelMcGather {
  * @param [in] tile_len Length of the tile processed in a single iteration.
  */
 
-template <bool ForceMixMode = true>
+template <typename T>
 __aicore__ inline void run_mc_gather(GM_ADDR values_in, GM_ADDR idx_in,
                                      GM_ADDR z_out, uint32_t idx_in_len,
                                      uint32_t val_in_len, uint32_t tile_len) {
-  if constexpr (ForceMixMode) {
-    exec_mode::EnableCubeCores();
-  }
   if ASCEND_IS_AIV {
-    KernelMcGather<float> op(idx_in_len, val_in_len, tile_len);
+    KernelMcGather<T> op(idx_in_len, val_in_len, tile_len);
     op.Init(values_in, idx_in, z_out);
     op.Process();
   }
