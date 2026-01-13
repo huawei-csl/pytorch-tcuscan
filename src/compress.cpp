@@ -6,6 +6,7 @@
  */
 
 #include "kernels/kernel_compress.h"
+#include "kernels/kernel_compress_ind.h"
 #include "kernels/kernel_where.h"
 #include "kernels/tcuscan_utils.h"
 #include "tiling/tiling_compress.h"
@@ -63,22 +64,25 @@ extern "C" __global__ __aicore__ void compress_fp32(GM_ADDR x, GM_ADDR mask,
  * @param vec_in Input data vector
  * @param indices_in Input indices vector
  * @param mask Input mask vector
+ * @param [in] num_ones_per_block Point to number of mask ones per block.
  * @param vec_out Output data vector
  * @param indices_out Output indices vector
  * @param workspace Pointer to workspace.
  * @param tiling_gm Pointer to tiling structure.
  */
 extern "C" __global__ __aicore__ void compress_ind_fp16(
-    GM_ADDR vec_in, GM_ADDR indices_in, GM_ADDR mask, GM_ADDR vec_out,
-    GM_ADDR indices_out, GM_ADDR workspace, GM_ADDR tiling_gm) {
+    GM_ADDR vec_in, GM_ADDR indices_in, GM_ADDR mask,
+    GM_ADDR num_ones_per_block, GM_ADDR vec_out, GM_ADDR indices_out,
+    GM_ADDR workspace, GM_ADDR tiling_gm) {
+  (void)workspace;
   tcuscan::CompressTiling tiling;
   GetTilingData(&tiling, tiling_gm);
 
   const uint32_t vec_len = tiling.vec_len;
   const uint32_t tile_len = tiling.tile_len;
 
-  tcuscan::run_compress_ind<half>(vec_in, indices_in, mask, vec_out,
-                                  indices_out, workspace, vec_len, tile_len);
+  tcuscan::run_compress_ind<half>(vec_in, indices_in, mask, num_ones_per_block,
+                                  vec_out, indices_out, vec_len, tile_len);
 }
 
 /**
@@ -87,22 +91,79 @@ extern "C" __global__ __aicore__ void compress_ind_fp16(
  * @param [in] vec_in Input data vector
  * @param [in] indices_in Input indices vector
  * @param [in] mask Input mask vector
+ * @param [in] num_ones_per_block Point to number of mask ones per block.
  * @param [in] vec_out Output data vector
  * @param [in] indices_out Output indices vector
  * @param [in] workspace Pointer to workspace.
  * @param [in] tiling_gm Pointer to tiling structure.
  */
 extern "C" __global__ __aicore__ void compress_ind_fp32(
-    GM_ADDR vec_in, GM_ADDR indices_in, GM_ADDR mask, GM_ADDR vec_out,
-    GM_ADDR indices_out, GM_ADDR workspace, GM_ADDR tiling_gm) {
+    GM_ADDR vec_in, GM_ADDR indices_in, GM_ADDR mask,
+    GM_ADDR num_ones_per_block, GM_ADDR vec_out, GM_ADDR indices_out,
+    GM_ADDR workspace, GM_ADDR tiling_gm) {
+  (void)workspace;
   tcuscan::CompressTiling tiling;
   GetTilingData(&tiling, tiling_gm);
 
   const uint32_t vec_len = tiling.vec_len;
   const uint32_t tile_len = tiling.tile_len;
 
-  tcuscan::run_compress_ind<float>(vec_in, indices_in, mask, vec_out,
-                                   indices_out, workspace, vec_len, tile_len);
+  tcuscan::run_compress_ind<float>(vec_in, indices_in, mask, num_ones_per_block,
+                                   vec_out, indices_out, vec_len, tile_len);
+}
+
+/**
+ * @brief Compress with indices kernel (no input enumerate indices) for dtype
+ * fp16.
+ *
+ * @param [in] vec_in Input data vector
+ * @param [in] mask Input mask vector
+ * @param [in] num_ones_per_block Point to number of mask ones per block.
+ * @param [in] vec_out Output data vector
+ * @param [in] indices_out Output indices vector
+ * @param [in] workspace Pointer to workspace.
+ * @param [in] tiling_gm Pointer to tiling structure.
+ */
+extern "C" __global__ __aicore__ void compress_ind_no_arange_fp16(
+    GM_ADDR vec_in, GM_ADDR mask, GM_ADDR num_ones_per_block, GM_ADDR vec_out,
+    GM_ADDR indices_out, GM_ADDR workspace, GM_ADDR tiling_gm) {
+  (void)workspace;
+  tcuscan::CompressTiling tiling;
+  GetTilingData(&tiling, tiling_gm);
+
+  const uint32_t vec_len = tiling.vec_len;
+  const uint32_t tile_len = tiling.tile_len;
+
+  tcuscan::run_compress_ind_no_arange<half>(vec_in, mask, num_ones_per_block,
+                                            vec_out, indices_out, vec_len,
+                                            tile_len);
+}
+
+/**
+ * @brief Compress with indices kernel (no input enumerate indices) for dtype
+ * fp32.
+ *
+ * @param [in] vec_in Input data vector
+ * @param [in] mask Input mask vector
+ * @param [in] num_ones_per_block Point to number of mask ones per block.
+ * @param [in] vec_out Output data vector
+ * @param [in] indices_out Output indices vector
+ * @param [in] workspace Pointer to workspace.
+ * @param [in] tiling_gm Pointer to tiling structure.
+ */
+extern "C" __global__ __aicore__ void compress_ind_no_arange_fp32(
+    GM_ADDR vec_in, GM_ADDR mask, GM_ADDR num_ones_per_block, GM_ADDR vec_out,
+    GM_ADDR indices_out, GM_ADDR workspace, GM_ADDR tiling_gm) {
+  (void)workspace;
+  tcuscan::CompressTiling tiling;
+  GetTilingData(&tiling, tiling_gm);
+
+  const uint32_t vec_len = tiling.vec_len;
+  const uint32_t tile_len = tiling.tile_len;
+
+  tcuscan::run_compress_ind_no_arange<float>(vec_in, mask, num_ones_per_block,
+                                             vec_out, indices_out, vec_len,
+                                             tile_len);
 }
 
 /**

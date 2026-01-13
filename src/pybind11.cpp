@@ -50,7 +50,9 @@ PYBIND11_MODULE(tcuscan_ops, m) {
         "Filter by less-equal pivot.");
   m.def("run_where", &tcuscan::run_where, "torch.where operator.");
   m.def("run_compress_ind", &tcuscan::run_compress_ind,
-        "Compaction with indices");
+        "Compaction that returns indices");
+  m.def("run_compress_ind_no_arange", &tcuscan::run_compress_ind_no_arange,
+        "Compaction that returns indices (no input indices)");
   m.def("run_compress_pos", &tcuscan::run_compress_pos,
         "Compaction/compress with pre-computed output positions");
   m.def("run_seg_sum", &tcuscan::run_seg_sum, "Segmented Sum");
