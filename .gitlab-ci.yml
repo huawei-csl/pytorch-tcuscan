@@ -402,6 +402,12 @@ test_compress_ind_no_arange:
     - make setup_ci
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_compress_ind_no_arange
 
+#test_histogram:
+#  <<: *test_config
+#  script:
+#    - make setup_ci
+#    - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_histogram
+
 
 # Uncomment to run all tests in a single run
 unit_test:

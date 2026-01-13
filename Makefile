@@ -288,4 +288,11 @@ profile_count_if:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench count_if --dtype fp16 --s 128 --num_cores 40
 
 
+profile_histogram:
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench tcuscan_hist --dtype fp16 --k 8 --num_cores 20
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench tcuscan_hist --dtype fp16 --k 16 --num_cores 20
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench tcuscan_hist --dtype fp16 --k 32 --num_cores 20
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench tcuscan_hist --dtype fp16 --k 64 --num_cores 20
+
+
 include Makefile.spaa.mk Makefile.spmv.mk Makefile.tri_inv.mk

@@ -935,6 +935,20 @@ def hist_benchmark(device: Device, size: int, dtype: torch.dtype) -> Tuple[float
     return _run_benchmark(device, run_hist), size
 
 
+def tcuscan_hist_benchmark(
+    device: Device, size: int, dtype: torch.dtype, num_bins: int
+) -> Tuple[float, int]:
+    if dtype in {torch.float16}:
+        x = torch.rand(size, device=device.str, dtype=dtype)
+    else:
+        raise ValueError("histogram benchmark only supports float16 for now")
+
+    def run_hist() -> None:
+        _ = tcuscan_ops.run_histogram(x, num_bins)
+
+    return _run_benchmark(device, run_hist), num_bins
+
+
 def searchsorted_benchmark(
     device: Device, size: int, dtype: torch.dtype
 ) -> Tuple[float, int]:
@@ -1146,6 +1160,7 @@ if __name__ == "__main__":  # noqa
             "complete_rows",
             "scan_multi_cube",
             "hist",
+            "tcuscan_hist",
             "searchsorted",
             "scan_batch",
             "scan_batch_tcuscan",
@@ -1237,13 +1252,23 @@ if __name__ == "__main__":  # noqa
             sizes,
             density,
         )
-    elif bench == "hist" and dtype in ["fp32"]:
+    elif bench == "hist":
         tdtype = STR_TO_DTYPE[dtype]
         benchmark(
             device,
-            "hist",
+            "hist_cann",
             dtype,
             partial(hist_benchmark, dtype=tdtype),
+            sizes,
+            density,
+        )
+    elif bench == "tcuscan_hist" and dtype in ["fp16"]:
+        tdtype = STR_TO_DTYPE[dtype]
+        benchmark(
+            device,
+            f"hist_{k}",
+            dtype,
+            partial(tcuscan_hist_benchmark, dtype=tdtype, num_bins=k),
             sizes,
             density,
         )
