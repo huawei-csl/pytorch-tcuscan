@@ -20,7 +20,7 @@ namespace tcuscan {
  */
 template <typename T>
 class KernelHistogram {
-  constexpr static uint32_t BUFFER_NUM = 1;
+  constexpr static uint32_t BUFFER_NUM = 2;
 
   using PackedMaskT = uint8_t;
   using GatherMaskT =
@@ -59,7 +59,7 @@ class KernelHistogram {
     global_out_.SetGlobalBuffer((__gm__ int32_t*)vec_out, num_bins_);
 
     pipe_.InitBuffer(in_q_, BUFFER_NUM, tile_len_ * sizeof(T));
-    pipe_.InitBuffer(out_q_, 1, num_bins_ * sizeof(int32_t));
+    pipe_.InitBuffer(out_q_, BUFFER_NUM, num_bins_ * sizeof(int32_t));
 
     pipe_.InitBuffer(out_buf_, num_bins_ * sizeof(int32_t));
     pipe_.InitBuffer(work_buf_, tile_len_ * sizeof(T));

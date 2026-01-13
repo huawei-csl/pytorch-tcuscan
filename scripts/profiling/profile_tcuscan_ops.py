@@ -923,16 +923,22 @@ def gen_lower_benchmark(
     return _run_benchmark(device, run_gen_lower), size * size
 
 
-def hist_benchmark(device: Device, size: int, dtype: torch.dtype) -> Tuple[float, int]:
+def hist_benchmark(
+    device: Device, size: int, dtype: torch.dtype, num_bins: int
+) -> Tuple[float, int]:
     if dtype in {torch.float32}:
         x = torch.rand(size, device=device.str, dtype=dtype)
     else:
         raise ValueError("histogram benchmark only supports float32 for now")
 
-    def run_hist() -> None:
-        _ = torch.histogram(x, bins=20)
+    x_min, x_max = torch.aminmax(x)
+    step = (x_max - x_min) / num_bins
+    bins = torch.arange(x_min, x_max, step)
 
-    return _run_benchmark(device, run_hist), size
+    def run_hist() -> None:
+        _ = torch.histogram(x, bins=bins)
+
+    return _run_benchmark(device, run_hist), len(bins)
 
 
 def tcuscan_hist_benchmark(
@@ -1256,9 +1262,9 @@ if __name__ == "__main__":  # noqa
         tdtype = STR_TO_DTYPE[dtype]
         benchmark(
             device,
-            "hist_cann",
+            f"hist_cann_{k}",
             dtype,
-            partial(hist_benchmark, dtype=tdtype),
+            partial(hist_benchmark, dtype=tdtype, num_bins=k),
             sizes,
             density,
         )

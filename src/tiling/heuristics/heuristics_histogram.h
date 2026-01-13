@@ -29,6 +29,8 @@ HistogramTiling CalculateTiling(uint32_t vec_len, uint32_t num_aiv_cores,
   // Experimentally selected thresholds
   if (vec_len >= 128 * 128 * num_aiv_cores) {
     tiling.tile_len = 128 * 128;
+  } else if (vec_len >= 112 * 112 * num_aiv_cores) {
+    tiling.tile_len = 112 * 112;
   } else if (vec_len >= 96 * 96 * num_aiv_cores) {
     tiling.tile_len = 96 * 96;
   } else if (vec_len >= 64 * 64 * num_aiv_cores) {
