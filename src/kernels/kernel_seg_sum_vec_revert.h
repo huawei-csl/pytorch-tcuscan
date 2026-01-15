@@ -39,16 +39,20 @@ class KernelSegSumVecRevert {
    * @param [in] vec_len Input vector length.
    * @param [in] num_segments Number of segments.
    * @param [in] tile_len Tile length.
+   * @param [in] vec_start_offset Start offset of input data vector. Segment
+   * values will be offset accordindly. Default value is `0`.
    */
   __aicore__ inline KernelSegSumVecRevert(uint32_t vec_len,
                                           uint32_t num_segments,
-                                          uint32_t tile_len)
+                                          uint32_t tile_len,
+                                          uint32_t vec_start_offset = 0)
       : num_blocks_(GetBlockNum() * GetTaskRation()),
         vec_len_(vec_len),
         num_segments_(num_segments),
         tile_len_(tile_len),
         matrix_tile_len_(tile_len * tile_len),
-        num_tiles_(scalar::CeilDiv(vec_len_, matrix_tile_len_)) {
+        num_tiles_(scalar::CeilDiv(vec_len_, matrix_tile_len_)),
+        vec_start_offset_(vec_start_offset) {
     constexpr bool IS_DT_SUPPORTED =
         std::is_same_v<T, float> || std::is_same_v<T, int32_t>;
     static_assert(IS_DT_SUPPORTED, "Unsupported data type.");
@@ -64,10 +68,11 @@ class KernelSegSumVecRevert {
    */
   __aicore__ inline void Init(GM_ADDR vec_in, GM_ADDR segm_ind_in,
                               GM_ADDR vec_out) {
-    global_in_.SetGlobalBuffer((__gm__ T*)vec_in, vec_len_);
+    global_in_.SetGlobalBuffer(
+        (__gm__ T*)vec_in + vec_start_offset_ * sizeof(T), vec_len_);
     global_segm_in_.SetGlobalBuffer((__gm__ uint32_t*)segm_ind_in,
                                     num_segments_);
-    global_out_.SetGlobalBuffer((__gm__ T*)vec_out, num_segments_);
+    global_out_.SetGlobalBuffer((__gm__ T*)vec_out, num_segments_ + 1);
 
     pipe_.InitBuffer(in_q_, BUFFER_NUM, matrix_tile_len_ * sizeof(T));
     pipe_.InitBuffer(segm_q_, BUFFER_NUM, tile_len_ * sizeof(uint32_t));
@@ -118,8 +123,8 @@ class KernelSegSumVecRevert {
    *
    * Method follows the iterator pattern. At termination, returns `vec_len_`.
    *
-   * @param segm_ind_lt Tile containing the segment-ending indices.
-   * @param index Current "local" index within the @p segm_ind_lt tile.
+   * @param [in] segm_ind_lt Tile containing the segment-ending indices.
+   * @param [in] index Current "local" index within the @p segm_ind_lt tile.
    * @return Returns the next segment end.
    */
   __aicore__ inline uint32_t NextSegmEndIndex(
@@ -140,10 +145,11 @@ class KernelSegSumVecRevert {
       // "Local-coordinates" segment index must be zeroed and keep
       // track of the output vector location.
       index = 0;
-      return segm_ind_lt.GetValue(0);
+      return static_cast<uint32_t>(segm_ind_lt.GetValue(0) - vec_start_offset_);
     } else {
       // Read next segment
-      return segm_ind_lt.GetValue(index);
+      return static_cast<uint32_t>(segm_ind_lt.GetValue(index) -
+                                   vec_start_offset_);
     }
   }
 
@@ -173,8 +179,9 @@ class KernelSegSumVecRevert {
     T accumulation = 0;
     uint32_t global_in_offset = 0;
     uint32_t out_idx = 0;
-    uint32_t segm_idx = 1;
-    uint32_t segm_end = segm_ind_lt.GetValue(segm_idx);
+    uint32_t segm_idx = 0;
+    uint32_t segm_end = static_cast<uint32_t>(segm_ind_lt.GetValue(segm_idx) -
+                                              vec_start_offset_);
 
     for (uint32_t matrix_tile_idx = 0; matrix_tile_idx < num_tiles_;
          matrix_tile_idx++) {
@@ -252,6 +259,7 @@ class KernelSegSumVecRevert {
   const uint32_t tile_len_;
   const uint32_t matrix_tile_len_;
   const uint32_t num_tiles_;
+  const uint32_t vec_start_offset_;
 
   uint32_t segments_offset_ = 0;
   uint32_t out_offset_ = 0;

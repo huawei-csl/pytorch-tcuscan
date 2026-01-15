@@ -73,8 +73,9 @@ __aicore__ inline void run_seg_sum_single_core(
  * (https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.csr_matrix.html).
  *
  * @param [in] vec_in Pointer to the input vector.
- * @param [in] indptr Pointer to the segment indices vector.
- * @param [in] vec_out Pointer to the output vector.
+ * @param [in] indptr Pointer to the segment indices vector. Use `indptr[1:-1]`
+ * in Python.
+ * @param [in] vec_out Pointer to the output segmented sum.
  * @param [in] workspace Pointer to workspace.
  * @param [in] tiling_gm Pointer to the tiling buffer.
  */

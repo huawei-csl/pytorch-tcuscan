@@ -1,7 +1,5 @@
-
-
 /**
- * Copyright (c) Huawei Technologies Co., Ltd. 2024. All rights reserved.
+ * Copyright (c) Huawei Technologies Co., Ltd. 2024-2026. All rights reserved.
 
  * @file host_utils.h
  * @brief Common host utlitites.
@@ -30,7 +28,7 @@ constexpr int32_t DEFAULT_DEVICE_ID = 0;
  * @return The id of the device.
  */
 int32_t get_device_id() {
-  const char *env_device_id = std::getenv("DEVICE_ID");
+  const char* env_device_id = std::getenv("DEVICE_ID");
   if (env_device_id != nullptr) {
     return std::stoi(env_device_id);
   }
@@ -88,7 +86,7 @@ constexpr T AlignUp(T value, uint32_t alignment) {
  * @return Median value.
  */
 template <typename T>
-double GetMedian(const std::vector<T> &v) {
+double GetMedian(const std::vector<T>& v) {
   assert(v.size() > 0);
   std::vector<T> v_sorted = v;
   std::sort(v_sorted.begin(), v_sorted.end());
@@ -100,18 +98,34 @@ double GetMedian(const std::vector<T> &v) {
 }
 
 /**
- * @brief A type metafunction for Cube's input / output types. For input type
- * half returns float, otherwise int32_t.
+ * @brief A type metafunction for Cube's input / output types. The following
+ * type pairs are supported:(half, float), (float, float), (int8_t, int32_t),
+ * (uint8_t, uint32_t)
  *
- * @tparam InputT Input cube type. Must be half or int8_t.
+ * @tparam InputT Input cube type. Must be int8_t, uint8_t, half, or float.
  */
 template <typename InputT>
 struct CubeOutType {
-  /// Output cube unit type
-  using type = typename std::conditional<
-      sizeof(InputT) == 2, float,
-      typename std::conditional<std::is_same_v<InputT, int8_t>, int32_t,
-                                uint32_t>::type>::type;
+  /// @brief Type
+  using type = float;
+};
+
+/**
+ * @brief Cube data type map int8_t -> int32_t.
+ */
+template <>
+struct CubeOutType<int8_t> {
+  /// @brief Type
+  using type = int32_t;
+};
+
+/**
+ * @brief Cube data type map uint8_t -> uint32_t.
+ */
+template <>
+struct CubeOutType<uint8_t> {
+  /// @brief Type
+  using type = uint32_t;
 };
 
 /**

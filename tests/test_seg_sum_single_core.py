@@ -57,12 +57,14 @@ def _test_tcuscan_seg_sum_single_core(
     expected = A @ ones
     expected = torch.from_numpy(expected.flatten())
 
-    # Drop last entry of indices.
-    indices = indices[:-1]
+    # Drop first (always zero) and the last (always len(x)) entry of indices.
+    assert indices[0] == 0, "First entry must be zero."
+    assert indices[-1] == nnz, "Last entry equals to the nnzs."
+    indices = indices[1:-1].copy()
 
     assert (
-        len(indices) == num_segments
-    ), f"Number of segments. vals: {len(values)}, indices: {len(indices)}"
+        len(indices) + 1 == num_segments
+    ), f"Got num_segments: {num_segments}, len(indices): {len(indices)}"
 
     values_npu = torch.from_numpy(values).npu().to(dtype)
     indices_npu = torch.from_numpy(indices).npu().to(torch.uint32)
@@ -94,7 +96,7 @@ def _test_tcuscan_seg_sum_single_core(
 
 @pytest.mark.parametrize("num_segments", _NUM_SEGMENTS)
 @pytest.mark.parametrize("num_cols", _NUM_COLUMNS)
-@pytest.mark.parametrize("s", [32, 64, 128])  # 32, 64,
+@pytest.mark.parametrize("s", [32, 64, 128])
 @pytest.mark.parametrize("dtype", [torch.int8, torch.float16], ids=str)
 def test_tcuscan_segmented_sum(
     num_segments: int, num_cols: int, s: int, dtype: torch.dtype

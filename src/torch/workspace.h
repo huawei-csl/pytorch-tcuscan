@@ -262,13 +262,15 @@ constexpr uint32_t get_workspace_size(size_t input_elems, size_t matmul_size,
 /**
  * @brief Calculate the workspace size for `seg_sum_single_core`.
  *
- * @tparam InputT Element input data type
- * @tparam OutputT Element output data type
- * @param [in] tiling Tiling parameters used in the kernel.
+ * @tparam InputT data type
+ *
+ * @param [in] tiling Tiling struct.
  * @return Size of the workspace in bytes.
  */
-template <typename InputT, typename OutputT>
+template <typename InputT>
 constexpr uint32_t get_workspace_size(const SegSumSingleCoreTiling& tiling) {
+  using OutputT = host_utils::CubeOutType_t<InputT>;
+
   const uint32_t vec_len = tiling.vec_len;
   const uint32_t matmul_size = tiling.tile_len;
   const uint32_t padded_vec_len =
@@ -284,12 +286,14 @@ constexpr uint32_t get_workspace_size(const SegSumSingleCoreTiling& tiling) {
  * @brief Calculate the workspace size for `seg_sum_single_cube`.
  *
  * @tparam InputT Element input data type
- * @tparam OutputT Element output data type
+ *
  * @param [in] tiling Tiling parameters used in the kernel.
  * @return Size of the workspace in bytes.
  */
-template <typename InputT, typename OutputT>
+template <typename InputT>
 constexpr uint32_t get_workspace_size(const SegSumSingleCubeTiling& tiling) {
+  using OutputT = host_utils::CubeOutType_t<InputT>;
+
   const uint32_t vec_len = tiling.vec_len;
   const uint32_t matmul_size = tiling.tile_len;
   const uint32_t padded_vec_len =

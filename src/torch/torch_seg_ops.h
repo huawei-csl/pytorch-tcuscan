@@ -185,12 +185,20 @@ at::Tensor run_seg_scan(const at::Tensor& x, const at::Tensor& f, int S) {
 }
 
 /**
- * @brief Segmented sum single core
+ * @brief Segmented sum single core.
  *
- * @param x Input data vector.
- * @param indptr Input segment starts vector.
- * @param s Tiling parameter. Typical values: 32, 64, 128.
- * @return Segmented sum of (x, indptr).
+ * Given an input data vector `x` and an segment index vector `indptr`, returns
+ * the segmented sum of `(x, indptr)`.
+ *
+ * The segments in the `indptr` follows the `scipy.sparse.csr_matrix`
+ * notation with the following adjustment: `indptr` does not start with `0` and
+ * does not contain as last entry the value `len(x)`.
+ *
+ * @param [in] x Input data vector.
+ * @param [in] indptr Input segment ending indices.
+ * @param [in] s Tiling parameter. Typical values: 32, 64, 128.
+ * @return Segmented sum. Output length is number of semgents and equals to
+ * `len(indptr) + 1`
  */
 at::Tensor run_seg_sum_single_core(const at::Tensor& x,
                                    const at::Tensor& indptr, int s) {
@@ -203,10 +211,12 @@ at::Tensor run_seg_sum_single_core(const at::Tensor& x,
   constexpr uint32_t BLOCK_DIM = 1;  // single core
   const uint32_t matmul_size = static_cast<uint32_t>(s);
   const uint32_t total_length = x.numel();
+  // The indptr does not contain zero as first entry and len(x) as last entry.
+  // Hence, the number of segments are +1.
   const uint32_t num_segments = indptr.numel();
 
   const at::Tensor z = at::empty(
-      {num_segments}, at::TensorOptions().dtype(dtype_out).device(device));
+      {num_segments + 1}, at::TensorOptions().dtype(dtype_out).device(device));
 
   const tcuscan::SegSumSingleCoreTiling tiling{total_length, num_segments,
                                                matmul_size};
@@ -214,7 +224,7 @@ at::Tensor run_seg_sum_single_core(const at::Tensor& x,
 
   if (dtype == torch::kHalf) {
     const uint32_t user_workspace_size =
-        tcuscan::get_workspace_size<int16_t /* half */, float>(tiling);
+        tcuscan::get_workspace_size<int16_t /* half */>(tiling);
 
     const at::Tensor workspace_tensor =
         tcuscan::alloc_workspace(user_workspace_size, device);
@@ -224,9 +234,9 @@ at::Tensor run_seg_sum_single_core(const at::Tensor& x,
      const_cast<void*>(indptr.storage().data()),
      const_cast<void*>(z.storage().data()),
      const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
-  } else {
+  } else if (dtype == torch::kInt8) {
     const uint32_t user_workspace_size =
-        tcuscan::get_workspace_size<int8_t, int32_t>(tiling);
+        tcuscan::get_workspace_size<int8_t>(tiling);
 
     const at::Tensor workspace_tensor =
         tcuscan::alloc_workspace(user_workspace_size, device);
@@ -244,13 +254,13 @@ at::Tensor run_seg_sum_single_core(const at::Tensor& x,
 }
 
 /**
- * @brief Segmented sum single core
+ * @brief Segmented sum single cube
  *
- * @param x Input data vector.
- * @param upper Upper triangular all-ones matrix of size S.
- * @param lower_strict Strict lower triangular all-ones matrix of size S.
- * @param indptr Input segment starts vector.
- * @param s Tiling parameter. Typical values: 32, 64, 128.
+ * @param [in] x Input data vector.
+ * @param [in] upper Upper triangular all-ones matrix of size S.
+ * @param [in] lower_strict Strict lower triangular all-ones matrix of size S.
+ * @param [in] indptr Input segment starts vector.
+ * @param [in] s Tiling parameter. Typical values: 32, 64, 128.
  * @return Segmented sum of (x, indptr).
  */
 at::Tensor run_seg_sum_single_cube(const at::Tensor& x, const at::Tensor& upper,
@@ -276,7 +286,7 @@ at::Tensor run_seg_sum_single_cube(const at::Tensor& x, const at::Tensor& upper,
 
   if (dtype == torch::kHalf) {
     const uint32_t user_workspace_size =
-        tcuscan::get_workspace_size<int16_t /* half */, float>(tiling);
+        tcuscan::get_workspace_size<int16_t /* half */>(tiling);
 
     const at::Tensor workspace_tensor =
         tcuscan::alloc_workspace(user_workspace_size, device);
