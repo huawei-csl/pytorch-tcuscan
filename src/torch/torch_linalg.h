@@ -144,8 +144,8 @@ at::Tensor run_triu_inv_rec_unroll(const at::Tensor& x) {
       static_cast<uint32_t>(num_elems / (matrix_size * matrix_size));
 
   const at::Tensor z =
-      at::zeros({block_dim, matrix_size, matrix_size},
-                at::TensorOptions().dtype(dtype_out).device(device));
+      at::ones({block_dim, matrix_size, matrix_size},
+               at::TensorOptions().dtype(dtype_out).device(device));
 
   const TriuInvRecUnrollTiling tiling{block_dim, matrix_size};
   uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);

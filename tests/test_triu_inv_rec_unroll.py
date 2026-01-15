@@ -3,10 +3,10 @@ import random
 
 import numpy as np
 import pytest
-import torch_npu  # noqa
 
-import tcuscan_ops
 import torch
+import torch_npu  # noqa
+import tcuscan_ops
 
 random.seed(42)
 torch.manual_seed(42)
@@ -14,6 +14,15 @@ np.random.seed(42)
 
 NPU_DEVICE = os.environ.get("NPU_DEVICE", "npu:0")
 torch.npu.set_device(NPU_DEVICE)
+
+
+def arithmetic_prog_matrix(n, block_dim):
+    U = np.zeros((block_dim, n, n))
+    for i in range(n):
+        for k in range(block_dim):
+            U[k, i, i:] = range(1, n - i + 1)
+    U = np.linalg.inv(U)
+    return torch.from_numpy(np.triu(U, k=1))
 
 
 def block_ones_matrix(n, block_dim):
@@ -66,6 +75,9 @@ def _test_triu_inv_rec_unroll(U: torch.tensor, atol: float, rtol: float, ftol: f
 
     n = U.shape[-1]
     U = U.to(torch.half)
+    U_npu = U.npu()
+    torch.npu.synchronize()
+
     assert U.stride() == (n * n, n, 1)
     Identity = np.ones((U.shape[0], n, n))
     Identity = np.triu(Identity)
@@ -76,7 +88,6 @@ def _test_triu_inv_rec_unroll(U: torch.tensor, atol: float, rtol: float, ftol: f
         golden_numpy[k] = np.linalg.inv(U_plus_I[k])
     golden_cpu = torch.from_numpy(golden_numpy)
 
-    U_npu = U.npu()
     torch.npu.synchronize()
     actual = tcuscan_ops.run_triu_inv_rec_unroll(U_npu)
     torch.npu.synchronize()
@@ -98,7 +109,7 @@ def _test_triu_inv_rec_unroll(U: torch.tensor, atol: float, rtol: float, ftol: f
 
 
 @pytest.mark.parametrize("n", [32, 64, 128])
-@pytest.mark.parametrize("block_dim", [1, 2, 4, 6, 20])
+@pytest.mark.parametrize("block_dim", [1, 2, 4, 6, 20, 32, 64, 128, 256])
 def test_triu_inv_rec_unroll_random(n: int, block_dim: int):
     atol = 3e-5
     rtol = min([0.5, 1e-2 * (n + block_dim)])
@@ -108,7 +119,7 @@ def test_triu_inv_rec_unroll_random(n: int, block_dim: int):
 
 
 @pytest.mark.parametrize("n", [32, 64, 128])
-@pytest.mark.parametrize("block_dim", [1, 2, 4, 6, 20])
+@pytest.mark.parametrize("block_dim", [1, 2, 4, 6, 20, 32, 64, 128, 256])
 def test_triu_inv_rec_unroll_block_random(n: int, block_dim: int):
     atol = 1e-5
     rtol = min([0.5, 1e-2 * (n + block_dim)])
@@ -118,7 +129,7 @@ def test_triu_inv_rec_unroll_block_random(n: int, block_dim: int):
 
 
 @pytest.mark.parametrize("n", [32, 64, 128])
-@pytest.mark.parametrize("block_dim", [1, 2, 4, 6, 20])
+@pytest.mark.parametrize("block_dim", [1, 2, 4, 6, 20, 32, 64, 128, 256])
 def test_triu_inv_rec_unroll_ones(n: int, block_dim: int):
     atol = 0
     rtol = 0
@@ -128,7 +139,7 @@ def test_triu_inv_rec_unroll_ones(n: int, block_dim: int):
 
 
 @pytest.mark.parametrize("n", [32, 64, 128])
-@pytest.mark.parametrize("block_dim", [1, 2, 4, 6, 20])
+@pytest.mark.parametrize("block_dim", [1, 2, 4, 6, 20, 32, 64, 128, 256])
 def test_triu_inv_rec_unroll_block_ones(n: int, block_dim: int):
     atol = 0
     rtol = 0
@@ -138,7 +149,7 @@ def test_triu_inv_rec_unroll_block_ones(n: int, block_dim: int):
 
 
 @pytest.mark.parametrize("n", [32, 64, 128])
-@pytest.mark.parametrize("block_dim", [1, 2, 4, 6, 20])
+@pytest.mark.parametrize("block_dim", [1, 2, 4, 6, 20, 32, 64, 128, 256])
 def test_triu_inv_rec_unroll_big_bad_matrix(n: int, block_dim: int):
     atol = 1e-7
     rtol = 1e-4
@@ -148,10 +159,20 @@ def test_triu_inv_rec_unroll_big_bad_matrix(n: int, block_dim: int):
 
 
 @pytest.mark.parametrize("n", [32, 64, 128])
-@pytest.mark.parametrize("block_dim", [1, 2, 4, 6, 20])
+@pytest.mark.parametrize("block_dim", [1, 2, 4, 6, 20, 32, 64, 128, 256])
 def test_triu_inv_rec_unroll_zeros(n: int, block_dim: int):
     atol = 0
     rtol = 0
     ftol = 0
     U = zeros_matrix(n, block_dim)
+    _test_triu_inv_rec_unroll(U, atol, rtol, ftol)
+
+
+@pytest.mark.parametrize("n", [32, 64, 128])
+@pytest.mark.parametrize("block_dim", [1, 2, 4, 6, 20, 32, 64, 128, 256])
+def test_triu_inv_rec_unroll_ar_prog(n: int, block_dim: int):
+    atol = 0
+    rtol = 0
+    ftol = 0
+    U = arithmetic_prog_matrix(n, block_dim)
     _test_triu_inv_rec_unroll(U, atol, rtol, ftol)

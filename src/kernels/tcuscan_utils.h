@@ -473,6 +473,36 @@ __aicore__ inline void CopyC01ToB1(TQue<QuePosition::B1, B1NumBuffers>& dst_q,
 }
 
 /**
+ * @brief Copy a tensor from CO1 queue to B1 queue.
+ *
+ * @tparam DstDataType Data type of the destination tensor.
+ * @tparam SrcDataType Data type of the source tensor.
+ * @tparam CO1NumBuffers Depth of the CO1 queue.
+ * @tparam FreeSrc Whether to free the source tensor or not.
+ *
+ * @param [in] dst_q Destination queue. The position must be B1.
+ * @param [in] src_q Source queue. The position must be CO1.
+ * @param [in] height Height of the matrix.
+ * @param [in] width Width of the matrix.
+ */
+template <typename DstDataType, typename SrcDataType, int32_t C01NumBuffers,
+          bool FreeSrc = true>
+__aicore__ inline void CopyC01ToB1(TBuf<TPosition::B1>& dst_buf,
+                                   TQue<QuePosition::CO1, C01NumBuffers>& src_q,
+                                   uint32_t height, uint32_t width) {
+  exec_mode::AssertIsAIC();
+  LocalTensor<SrcDataType> src_lt = src_q.template DeQue<SrcDataType>();
+  const LocalTensor<DstDataType> dst_lt = dst_buf.Get<DstDataType>();
+
+  CopyL0CToL1<DstDataType, SrcDataType>(dst_lt, src_lt, height, width);
+  if constexpr (FreeSrc) {
+    src_q.FreeTensor(src_lt);
+  } else {
+    src_q.EnQue(src_lt);
+  }
+}
+
+/**
  * @brief Copy a tensor from CO1 queue to A1 queue.
  *
  * @tparam DstDataType Data type of the destination tensor.
