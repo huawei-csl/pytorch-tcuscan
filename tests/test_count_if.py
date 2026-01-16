@@ -18,7 +18,20 @@ NPU_DEVICE = os.environ.get("NPU_DEVICE", "npu:1")
 torch.npu.config.allow_internal_format = False
 torch.npu.set_device(NPU_DEVICE)
 
-_SIZES = [1024 * 8, 1024 * 16, 2048 * 32, 1024 * 128]
+_SIZES = [
+    1024 * 8,
+    1024 * 16,
+    2048 * 32,
+    1024 * 128,
+    1024 * 8 - 16,
+    1024 * 16 - 16,
+    2048 * 32 - 16,
+    1024 * 128 - 16,
+    1024 * 8 + 16,
+    1024 * 16 + 16,
+    2048 * 32 + 16,
+    1024 * 128 + 15,
+]
 
 
 class CMPMODE(IntEnum):

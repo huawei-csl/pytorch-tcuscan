@@ -33,11 +33,15 @@ namespace tcuscan {
 at::Tensor run_count_if(const at::Tensor& x, float pivot, uint32_t tile_len,
                         uint8_t compare_mode) {
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
+  const auto ascendc_platform =
+      platform_ascendc::PlatformAscendCManager::GetInstance();
+
   const at::Device device = x.options().device();
   const auto dtype = x.options().dtype();
 
   const uint32_t vec_len = x.numel();
-  const uint32_t block_dim = host_utils::CeilDiv(vec_len, tile_len);
+  const uint32_t block_dim = std::min(host_utils::CeilDiv(vec_len, tile_len),
+                                      ascendc_platform->GetCoreNumAiv());
 
   const at::Tensor z =
       at::zeros({1}, at::TensorOptions().dtype(torch::kInt32).device(device));

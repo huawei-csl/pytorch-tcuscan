@@ -912,11 +912,14 @@ __aicore__ inline void CopyL1ToL0B(TQue<QuePosition::B2, L0NumBuffers>& l0_q,
  * @param [in] num_elems Number of elements to load. By default, the function
  * loads all the elements for the local tensor obtained from the queue. If the
  * value is provided, the function will load \f$num_elems\f$ elements.
+ * @param [in] pad_value Value use for padding when \f$num_elems\f$ is not
+ * aligned to UB. It defaults to 0.
  */
 template <typename DataType, int32_t QNumBuffers>
 __aicore__ inline void CopyGmToVec(TQue<QuePosition::VECIN, QNumBuffers>& q,
                                    const GlobalTensor<DataType>& global,
-                                   uint32_t num_elems = 0) {
+                                   uint32_t num_elems = 0,
+                                   DataType pad_value = 0) {
   exec_mode::AssertIsAIV();
   const LocalTensor<DataType> lt = q.template AllocTensor<DataType>();
   if (!num_elems) num_elems = lt.GetSize();
@@ -938,7 +941,7 @@ __aicore__ inline void CopyGmToVec(TQue<QuePosition::VECIN, QNumBuffers>& q,
     pad_params.isPad = true;
     pad_params.leftPadding = 0;
     pad_params.rightPadding = pad_len;
-    pad_params.paddingValue = static_cast<DataType>(0);
+    pad_params.paddingValue = static_cast<DataType>(pad_value);
 
     DataCopyPad(lt, global, params, pad_params);
   }
@@ -2121,21 +2124,23 @@ __aicore__ inline void GreaterEqual(const LocalTensor<OutputT>& out_lt,
 
 namespace fp16 {
 /// @brief Float number with the smallest aboslute value.
-const float FP16_MIN_NORMAL = std::numeric_limits<half>::min();
+constexpr float FP16_MIN_NORMAL = std::numeric_limits<half>::min();
 /// @brief Float number with the largest value.
-const float FP16_MAX_NORMAL = std::numeric_limits<half>::max();
+constexpr float FP16_MAX_NORMAL = std::numeric_limits<half>::max();
+/// @brief Float number with the most negative value.
+constexpr float FP16_LOWEST_NORMAL = 0xfc00;
 /// @brief Difference between float 1 and the next representable value.
-const float FP16_EPSILON = 0x1.0p-10;
+constexpr float FP16_EPSILON = 0x1.0p-10;
 /// @brief Float 1.
-const float FP16_ONE = 1.0f;
+constexpr float FP16_ONE = 1.0f;
 /// @brief Float 0.5.
-const float FP16_HALF = 0.5f;
+constexpr float FP16_HALF = 0.5f;
 /// @brief Float 0.
-const float FP16_ZERO = 0.0f;
+constexpr float FP16_ZERO = 0.0f;
 /// @brief Next representable value after float 1.
-const float FP16_ONE_P_ULP = FP16_ONE + FP16_EPSILON;
+constexpr float FP16_ONE_P_ULP = FP16_ONE + FP16_EPSILON;
 /// @brief Increment ratio
-const float FP16_INC = FP16_ONE_P_ULP * FP16_EPSILON * FP16_HALF;
+constexpr float FP16_INC = FP16_ONE_P_ULP * FP16_EPSILON * FP16_HALF;
 
 /**
  * @brief Computes the next representable value

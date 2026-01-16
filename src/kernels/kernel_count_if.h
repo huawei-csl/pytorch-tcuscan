@@ -6,9 +6,10 @@
  */
 #pragma once
 
+#include <cmath>
+
 #include "ascendc_kernel_operator.h"
 #include "tcuscan_utils.h"
-
 using namespace AscendC;
 
 namespace tcuscan {
@@ -16,18 +17,17 @@ namespace tcuscan {
 /**
  * @brief Returns `torch.count_nonzero(x <= pivot)` given an input vector.
  *
+ * @tparam InputT Input data type.
+ * @tparam ReduceBlocks if true the partial results of each core are accumulated
+ * together, otherwise they are kept separate.
  */
-template <typename T = half>
+template <typename InputT = half, bool ReduceBlocks = true>
 class KernelCountIf {
   /// @brief Accumulation data type for the counts.
   using AccT = int32_t;
   using PackedMaskT = uint8_t;
   using GatherMaskT =
-      typename std::conditional<sizeof(T) == 2, uint16_t, uint32_t>::type;
-  constexpr static uint16_t IN_ELEMS_PER_MASK_ELEM = sizeof(PackedMaskT) * 8;
-
-  /// @brief Minimum size of queue size (UB restriction)
-  constexpr static int32_t MIN_VEC_SIZE = UB_ALIGNMENT / sizeof(AccT);
+      typename std::conditional<sizeof(InputT) == 2, uint16_t, uint32_t>::type;
 
  public:
   /**
@@ -38,20 +38,13 @@ class KernelCountIf {
    * @param [in] compare_mode Comparison enum of \c AscendC::CompareScalar.
    */
   __aicore__ inline KernelCountIf(uint32_t vec_len, uint32_t tile_len,
-                                  AscendC::CMPMODE compare_mode)
+                                  CMPMODE compare_mode)
       : vec_core_num_(GetBlockNum() * GetTaskRation()),
-        vec_len_(vec_len),
-        tile_len_(tile_len),
         compare_mode_(compare_mode),
-        num_tiles_(scalar::CeilDiv(vec_len_, tile_len_)) {
-    ASCENDC_ASSERT(vec_len_ < tile_len_ * vec_core_num_, {
-      KERNEL_LOG(KERNEL_ERROR,
-                 "KernelCountIf only works for input vectors of size at most "
-                 "(number of AIV cores) x (maximum UB size, ~ 10K elements). "
-                 "Got (tile_len=%d, AIVs=%d)",
-                 tile_len_, vec_core_num_);
-    });
-  }
+        tile_len_(tile_len),
+        vec_len_(vec_len),
+        num_tiles_(scalar::CeilDiv(vec_len, tile_len)),
+        max_num_tiles_per_block_(scalar::CeilDiv(num_tiles_, vec_core_num_)) {}
 
   /**
    * @brief Initialize global and local memory structures.
@@ -60,34 +53,14 @@ class KernelCountIf {
    * @param [in] vec_out Pointer to the output vector in global memory.
    */
   __aicore__ inline void Init(GM_ADDR vec_in, GM_ADDR vec_out) {
-    const uint32_t out_queue_len =
-        vec_core_num_ < MIN_VEC_SIZE ? MIN_VEC_SIZE : vec_core_num_;
+    global_input_.SetGlobalBuffer((__gm__ InputT*)vec_in, vec_len_);
+    global_output_.SetGlobalBuffer((__gm__ AccT*)vec_out, vec_core_num_);
 
-    global_in_.SetGlobalBuffer((__gm__ T*)vec_in, vec_len_);
-    global_out_.SetGlobalBuffer((__gm__ int32_t*)vec_out, 1);
+    pipe_.InitBuffer(in_q_, 1, tile_len_ * sizeof(InputT));
 
-    pipe_.InitBuffer(in_q_, 1, tile_len_ * sizeof(T));
-    pipe_.InitBuffer(out_q_, 1, out_queue_len * sizeof(int32_t));
-
-    pipe_.InitBuffer(vec_in_buf_, tile_len_ * sizeof(T));
-    pipe_.InitBuffer(work_buf_, tile_len_ * sizeof(T));
+    pipe_.InitBuffer(work_buf_, tile_len_ * sizeof(InputT));
     pipe_.InitBuffer(packed_mask_buf_, tile_len_ * sizeof(PackedMaskT) / 8);
-  }
-
-  /**
-   * @brief Load input tiles into UB.
-   *
-   * Each AIV core loads one tile inside `work_buf_` TBuf.
-   */
-  __aicore__ inline void LoadInputTileInUB() {
-    const uint32_t global_offset = GetBlockIdx() * tile_len_;
-
-    copy::CopyGmToVec(in_q_, global_in_[global_offset], tile_len_);
-
-    LocalTensor<T> lt = in_q_.DeQue<T>();
-    const LocalTensor<T> vec_in_lt = vec_in_buf_.Get<T>();
-    DataCopy(vec_in_lt, lt, tile_len_);
-    in_q_.FreeTensor(lt);
+    pipe_.InitBuffer(out_q_, 1, MIN_VEC_SIZE * sizeof(AccT));
   }
 
   /**
@@ -97,28 +70,67 @@ class KernelCountIf {
    * pivot} where \f$ x_i \f$ are the input elements.
    *
    */
-  __aicore__ inline void Process(T pivot) {
-    LocalTensor<T> tile_lt = vec_in_buf_.Get<T>();
-    LocalTensor<T> work_lt = work_buf_.Get<T>();
+  __aicore__ inline void Process(InputT pivot) {
+    const LocalTensor<InputT> work_lt = work_buf_.Get<InputT>();
 
-    const LocalTensor<uint8_t> packed_mask_8b = packed_mask_buf_.Get<uint8_t>();
-    CompareScalar(packed_mask_8b, tile_lt, pivot, compare_mode_, tile_len_);
+    const uint32_t num_tiles_to_process = tcuscan::scalar::GetWorkDistribution(
+        vec_len_, tile_len_, vec_core_num_);
 
-    const LocalTensor<GatherMaskT> mask_lt =
-        packed_mask_buf_.Get<GatherMaskT>();
+    uint32_t global_offset =
+        GetBlockIdx() * tile_len_ * max_num_tiles_per_block_;
+    AccT sum = 0;
 
-    uint64_t num_gathered_elems = 0;
-    GatherMask(work_lt, tile_lt, mask_lt, true, tile_len_, {1, 1, 8, 8},
-               num_gathered_elems);
+    for (uint32_t tile_idx = 0; tile_idx < num_tiles_to_process; tile_idx++) {
+      const uint32_t num_elems =
+          scalar::NextTileLen(tile_len_, global_offset, vec_len_);
 
-    AtomicAddWrite(static_cast<int32_t>(num_gathered_elems));
+      if (num_elems > 0) {
+        copy::CopyGmToVec(
+            in_q_, global_input_[global_offset], num_elems,
+            MAP_CMPMODE_TO_BOUNDARY[static_cast<int>(compare_mode_)]);
+        LocalTensor<InputT> input_lt = in_q_.template DeQue<InputT>();
+        const uint32_t input_len =
+            scalar::AlignUp(num_elems, UB_ALIGNMENT / sizeof(InputT));
+        // pad the input
+        if (num_elems < tile_len_) {
+          Duplicate(input_lt[input_len],
+                    MAP_CMPMODE_TO_BOUNDARY[static_cast<int>(compare_mode_)],
+                    input_lt.GetSize() - input_len);
+        }
+
+        const LocalTensor<uint8_t> packed_mask_8b =
+            packed_mask_buf_.Get<uint8_t>();
+        const LocalTensor<GatherMaskT> mask_lt =
+            packed_mask_8b.template ReinterpretCast<GatherMaskT>();
+
+        CompareScalar(packed_mask_8b, input_lt, pivot, compare_mode_,
+                      tile_len_);
+        PipeBarrier<PIPE_ALL>();
+
+        // Gather mask is used only to count the 1s in the mask; input and
+        // output are ignored
+        size_t num_gathered_elems = 0;
+        GatherMask(work_lt, work_lt, mask_lt, true, input_len, {1, 1, 8, 8},
+                   num_gathered_elems);
+
+        in_q_.FreeTensor(input_lt);
+        sum += num_gathered_elems;
+      }
+
+      global_offset += num_elems;
+    }
+
+    if constexpr (ReduceBlocks)
+      AtomicAddWrite(static_cast<int32_t>(sum));
+    else
+      copy::CopyScalarToGm(global_output_[GetBlockIdx()], out_q_, sum);
   }
 
  private:
   __aicore__ inline void AtomicAddWrite(int32_t value) {
-    AscendC::PipeBarrier<PIPE_MTE3>();
+    AscendC::PipeBarrier<PIPE_ALL>();
     AscendC::SetAtomicAdd<int32_t>();
-    copy::CopyScalarToGm(global_out_, out_q_, value);
+    copy::CopyScalarToGm(global_output_, out_q_, value);
     AscendC::SetAtomicNone();
   }
 
@@ -127,18 +139,30 @@ class KernelCountIf {
   TQue<QuePosition::VECIN, 1> in_q_;
   TQue<QuePosition::VECOUT, 1> out_q_;
 
-  TBuf<QuePosition::VECCALC> vec_in_buf_;
   TBuf<QuePosition::VECCALC> work_buf_;
   TBuf<QuePosition::VECCALC> packed_mask_buf_;
 
-  GlobalTensor<T> global_in_;
-  GlobalTensor<int32_t> global_out_;
+  GlobalTensor<InputT> global_input_;
+  GlobalTensor<int32_t> global_output_;
+
+  constexpr static int32_t MIN_VEC_SIZE = UB_ALIGNMENT / sizeof(AccT);
+  constexpr static InputT P_INF = std::numeric_limits<InputT>::max();
+  constexpr static InputT N_INF = std::is_same_v<InputT, half>
+                                      ? fp16::FP16_LOWEST_NORMAL
+                                      : std::numeric_limits<InputT>::lowest();
+
+  // this array maps CMPMODE to a value that always returns false when compared
+  // to the input.
+  // Issue: NaN may behave unexpectedly with CompareScalar
+  constexpr static InputT MAP_CMPMODE_TO_BOUNDARY[] = {N_INF, P_INF, NAN,
+                                                       N_INF, P_INF, NAN};
 
   const uint32_t vec_core_num_;
-  const uint32_t vec_len_;
+  const CMPMODE compare_mode_;
   const uint32_t tile_len_;
-  const AscendC::CMPMODE compare_mode_;
+  const uint32_t vec_len_;
   const uint32_t num_tiles_;
+  const uint32_t max_num_tiles_per_block_;
 };
 
 /**
@@ -155,14 +179,14 @@ class KernelCountIf {
  * @param [in] pivot Initial pivot.
  * @param [in] compare_mode Comparison enum of \c AscendC::CompareScalar.
  */
-template <typename T>
+template <typename InputT>
 __aicore__ inline void run_count_if(GM_ADDR vec_in, GM_ADDR vec_out,
                                     uint32_t vec_len, uint32_t tile_len,
-                                    T pivot, AscendC::CMPMODE compare_mode) {
+                                    InputT pivot,
+                                    AscendC::CMPMODE compare_mode) {
   if ASCEND_IS_AIV {
-    KernelCountIf<T> op(vec_len, tile_len, compare_mode);
+    KernelCountIf<InputT> op(vec_len, tile_len, compare_mode);
     op.Init(vec_in, vec_out);
-    op.LoadInputTileInUB();
     op.Process(pivot);
   }
 }
