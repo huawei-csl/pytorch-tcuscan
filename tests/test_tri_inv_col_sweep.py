@@ -60,19 +60,24 @@ def np_triu_inv_cs(input_x, dtype: np.dtype = np.float16):
 
 
 def rand_np_tril(batch_size: int, n: int, dtype: np.dtype):
-    "Returns a random unit lower triangular matrix of size n."
+    "Returns a random strictly lower triangular matrix of size n."
     A = np.random.rand(batch_size, n, n).astype(dtype)
-    A = np.tril(A)
-    for k in range(batch_size):
-        np.fill_diagonal(A[k, :, :], 1.0)
+    A = np.tril(A, k=-1)
     return A.astype(dtype)
 
 
 def ones_np_tril(batch_size: int, n: int, dtype: np.dtype):
-    "Returns an all-ones lower triangular matrix of size n."
+    "Returns an all-ones strictly lower triangular matrix of size n."
     A = np.ones((batch_size, n, n)).astype(dtype)
-    A = np.tril(A)
+    A = np.tril(A, k=-1)
     return A.astype(dtype)
+
+
+def compute_inv_with_numpy(A: np.array):
+    A_copy = A.astype(np.float64)
+    for k in range(A.shape[0]):
+        np.fill_diagonal(A_copy[k, :, :], 1.0)
+    return np.linalg.inv(A_copy).astype(A.dtype)
 
 
 @pytest.mark.parametrize("batch_size", [2, 4, 40, 256])
@@ -113,7 +118,10 @@ def test_tri_inv_col_sweep(
 @pytest.mark.parametrize("data_type", [np.float32], ids=str)
 @pytest.mark.parametrize(
     "mat_gen,atol,rtol",
-    [(rand_np_tril, 1e-5, 1e-5), (ones_np_tril, 0, 0)],
+    [
+        (rand_np_tril, 1e-5, 1e-5),
+        (ones_np_tril, 0, 0),
+    ],
 )
 def test_tri_inv_col_sweep_np_linalg_inv(
     batch_size: int,
@@ -125,18 +133,57 @@ def test_tri_inv_col_sweep_np_linalg_inv(
 ):
 
     input_x_cpu = mat_gen(batch_size, matrix_size, data_type)
-    golden_numpy_cpu = np.linalg.inv(input_x_cpu)
+    golden_numpy_cpu = compute_inv_with_numpy(input_x_cpu)
 
     # Convert input matrices from row-major order to column-major order
     input_x_cpu = input_x_cpu.transpose(0, 2, 1)
     input_x = torch.from_numpy(input_x_cpu).npu()
-    golden_numpy_as_torch = torch.from_numpy(golden_numpy_cpu).npu()
+    golden_cpu = torch.from_numpy(golden_numpy_cpu)
 
     torch.npu.synchronize()
     actual = tcuscan_ops.run_tri_inv_col_sweep(input_x)
+    torch.npu.synchronize()
+    actual_cpu = actual.cpu()
     torch.npu.synchronize()
 
     # rtol must be scaled w.r.t to the input size, see Higham's paper, Eq. (2.3)
     # https://nhigham.com/wp-content/uploads/2023/08/high89t.pdf
     scaled_rtol = min([0.05, 10 * (matrix_size + batch_size) * rtol])
-    assert torch.allclose(actual, golden_numpy_as_torch, atol=atol, rtol=scaled_rtol)
+    assert torch.allclose(actual_cpu, golden_cpu, atol=atol, rtol=scaled_rtol)
+
+
+@pytest.mark.parametrize("batch_size", [2, 4, 40, 256])
+@pytest.mark.parametrize("matrix_size", [16, 32, 64, 128])
+@pytest.mark.parametrize("data_type", [np.float16, np.float32], ids=str)
+@pytest.mark.parametrize(
+    "mat_gen",
+    (rand_np_tril, ones_np_tril),
+)
+def test_tri_inv_col_sweep_diagonal_robustness(
+    batch_size: int,
+    matrix_size: int,
+    data_type: np.dtype,
+    mat_gen: callable,
+):
+
+    x_zero_diagonal = mat_gen(batch_size, matrix_size, data_type)
+    x_unit_diagonal = x_zero_diagonal.copy()
+    for k in range(batch_size):
+        np.fill_diagonal(x_unit_diagonal[k, :, :], 1.0)
+    x_zero_diagonal = x_zero_diagonal.transpose(0, 2, 1)
+    x_unit_diagonal = x_unit_diagonal.transpose(0, 2, 1)
+
+    # Convert input matrices from row-major order to column-major order
+    x_zero_npu = torch.from_numpy(x_zero_diagonal).npu()
+    x_unit_npu = torch.from_numpy(x_unit_diagonal).npu()
+
+    torch.npu.synchronize()
+    actual_zero = tcuscan_ops.run_tri_inv_col_sweep(x_zero_npu)
+    torch.npu.synchronize()
+    actual_unit = tcuscan_ops.run_tri_inv_col_sweep(x_unit_npu)
+    torch.npu.synchronize()
+    actual_zero_cpu = actual_zero.cpu()
+    actual_unit_cpu = actual_unit.cpu()
+    torch.npu.synchronize()
+
+    assert torch.equal(actual_zero_cpu, actual_unit_cpu)

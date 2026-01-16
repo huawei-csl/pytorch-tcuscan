@@ -15,11 +15,13 @@ using namespace AscendC;
 namespace tcuscan {
 
 /**
- * @brief Returns the matrix inverse of an upper triangular square matrix of
- * size `matrix_size`. The matrix has ones on the main diagonal.
- *
- * The column sweep algorithm is used for the linear system Ax=e_j where e_j is
- * the standard vector.
+ * @brief Returns the matrix inverse of the matrix I+A, where I
+ * is the identity and A is the input strictly lower triangular matrix
+ * of size matrix_size. The matrix A must be in column-major format.
+ * The diagonal elements of the input are always ignored and treated
+ * as one, e.g., it does not matter if the input is A or I+A. The
+ * column sweep algorithm is used for the linear system (I+A)x=e_j where
+ * e_j is the j-th standard vector.
  *
  * @tparam T Input data type. Supports only half dtype.
  *
