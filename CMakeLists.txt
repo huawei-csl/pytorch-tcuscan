@@ -153,8 +153,6 @@ target_link_directories(tcuscan_ops PRIVATE ${TORCH_INSTALL_PREFIX}/lib
 target_include_directories(tcuscan_ops PRIVATE ${TORCH_NPU_PATH}/include
                                                ${TORCH_INCLUDE_DIRS})
 
-target_compile_options(tcuscan_ops PRIVATE -D_GLIBCXX_USE_CXX11_ABI=0)
-
 if(PIP_INSTALL)
   message(STATUS ">>> Running under scikit-build-core (pip install)")
 

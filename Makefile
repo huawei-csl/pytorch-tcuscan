@@ -8,12 +8,12 @@ PROFILING_SCRIPTS_PATH=scripts/profiling/
 CONDA_ENV_NAME="pytorch_tcuscan"
 
 TORCH_NPU_URL=https://gitcode.com/Ascend/pytorch/releases/download
-PT_WHEEL_NAME=torch_npu-2.6.0.post2-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
-PT_WHEEL_URL=${TORCH_NPU_URL}/v7.1.0.2-pytorch2.6.0/${PT_WHEEL_NAME}
+PT_WHEEL_NAME=torch_npu-2.9.0-cp310-cp310-manylinux_2_28_x86_64.whl
+PT_WHEEL_URL=${TORCH_NPU_URL}/v7.3.0-pytorch2.9.0/${PT_WHEEL_NAME}
 
 
-PT_WHEEL_AARCH_NAME=torch_npu-2.5.1.post3-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl
-PT_WHEEL_AARCH_URL=${TORCH_NPU_URL}/v7.1.0.2-pytorch2.5.1/${PT_WHEEL_AARCH_NAME}
+PT_WHEEL_AARCH_NAME=torch_npu-2.9.0-cp310-cp310-manylinux_2_28_aarch64.whl
+PT_WHEEL_AARCH_URL=${TORCH_NPU_URL}/v7.3.0-pytorch2.9.0/${PT_WHEEL_AARCH_NAME}
 
 
 ASCEND_DEVICE=Ascend910B4
@@ -40,12 +40,12 @@ create_conda_env:
 	conda install -y cmake -n ${CONDA_ENV_NAME}
 	conda run -n ${CONDA_ENV_NAME} pip3 install -r requirements.txt
 	wget -nc ${PT_WHEEL_URL}
-	conda run -n ${CONDA_ENV_NAME} pip3 install ${PT_WHEEL_NAME} --index-url https://download.pytorch.org/whl/cpu
+	conda run -n ${CONDA_ENV_NAME} pip3 install ${PT_WHEEL_NAME} --extra-index-url https://download.pytorch.org/whl/cpu
 
 setup_once:
 	pip3 install -r requirements.txt
 	wget -nc ${PT_WHEEL_URL}
-	pip3 install --force-reinstall ${PT_WHEEL_NAME} --index-url https://download.pytorch.org/whl/cpu
+	pip3 install --force-reinstall ${PT_WHEEL_NAME} --extra-index-url https://download.pytorch.org/whl/cpu
 
 # For 910B2 experiments, you need to update the L2_SIZE (constexpr) and SOC_VERSION (const static char*) in the code
 setup_once_aarch64:
