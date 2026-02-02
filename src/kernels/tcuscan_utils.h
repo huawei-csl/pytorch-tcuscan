@@ -60,7 +60,6 @@ template <typename T>
 __aicore__ inline void FillIdentity(const LocalTensor<T>& mat_lt,
                                     uint32_t matrix_size) {
   AscendC::Duplicate(mat_lt, static_cast<T>(0), matrix_size * matrix_size);
-  AscendC::PipeBarrier<PIPE_ALL>();
 
   // Set one on the main diagonal
   for (uint32_t i = 0; i < matrix_size; i++) {
@@ -81,7 +80,6 @@ __aicore__ inline void FillStandardVector(const LocalTensor<T>& lt,
                                           uint32_t column_index) {
   // Write zeros on j-th column of input matrix
   Duplicate<T>(lt, static_cast<T>(0), matrix_size);
-  AscendC::PipeBarrier<PIPE_ALL>();
 
   // Write one on the diagonal (j,j)-th element of input matrix.
   lt.SetValue(column_index, static_cast<T>(1));

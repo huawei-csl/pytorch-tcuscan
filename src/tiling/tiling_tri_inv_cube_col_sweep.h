@@ -21,6 +21,8 @@ struct TriInvCubeColSweepTiling {
   uint32_t num_blocks;
   /// @brief Matrix size.
   uint32_t matrix_size;
+  /// @brief Workspace circular buffer length.
+  uint32_t ws_circular_buffer_len;
 };
 #pragma pack(pop)
 

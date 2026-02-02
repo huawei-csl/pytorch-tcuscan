@@ -93,7 +93,7 @@ def _run_test(input_x_cpu: torch.tensor, atol: float, rtol: float):
     assert torch.allclose(actual.float(), expected.float(), atol=atol, rtol=rtol)
 
 
-@pytest.mark.parametrize("batch_size", [1, 2, 4, 128])
+@pytest.mark.parametrize("batch_size", [1, 2, 3, 4, 40, 256])
 @pytest.mark.parametrize("matrix_size", [16, 32, 64, 128])
 def test_tri_inv_cube_col_sweep_random(batch_size: int, matrix_size: int):
     data_type = np.float16
@@ -101,7 +101,7 @@ def test_tri_inv_cube_col_sweep_random(batch_size: int, matrix_size: int):
     _run_test(input_x_cpu, atol=1e-1, rtol=1e-1)
 
 
-@pytest.mark.parametrize("batch_size", [1, 2, 4])
+@pytest.mark.parametrize("batch_size", [1, 2, 3, 4, 40, 256])
 @pytest.mark.parametrize("matrix_size", [16, 32, 64, 128])
 def test_tri_inv_cube_col_sweep_identity(batch_size: int, matrix_size: int):
     data_type = np.float16
@@ -109,7 +109,7 @@ def test_tri_inv_cube_col_sweep_identity(batch_size: int, matrix_size: int):
     _run_test(input_x_cpu, atol=0, rtol=0)
 
 
-@pytest.mark.parametrize("batch_size", [1, 2, 4])
+@pytest.mark.parametrize("batch_size", [1, 2, 3, 4, 40, 256])
 @pytest.mark.parametrize("matrix_size", [16, 32, 64, 128])
 def test_tri_inv_cube_col_sweep_ones_tensor(batch_size: int, matrix_size: int):
     data_type = np.float16

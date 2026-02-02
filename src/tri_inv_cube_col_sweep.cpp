@@ -27,15 +27,16 @@ extern "C" __global__ __aicore__ void tri_inv_cube_col_sweep_fp16(
   GetTilingData(&tiling, tiling_gm);
 
   const uint32_t matrix_size = tiling.matrix_size;
+  const uint32_t ws_circular_buffer_len = tiling.ws_circular_buffer_len;
 
   if ASCEND_IS_AIV {
-    KernelVecColSweepMatGen<half> op(matrix_size);
+    KernelVecColSweepMatGen<half> op(matrix_size, ws_circular_buffer_len);
     op.Init(vec_in, workspace);
     op.Process();
   }
 
   if ASCEND_IS_AIC {
-    KernelTriInvCubeColSweep<half> op(matrix_size);
+    KernelTriInvCubeColSweep<half> op(matrix_size, ws_circular_buffer_len);
     op.Init(workspace, vec_out);
     op.Process();
   }

@@ -341,8 +341,8 @@ constexpr uint32_t get_workspace_size(const CubeReduceTiling& tiling) {
  */
 template <typename T>
 constexpr uint32_t get_workspace_size(const TriInvCubeColSweepTiling& tiling) {
-  const uint32_t num_elems =
-      tiling.num_blocks * tiling.matrix_size * tiling.matrix_size;
+  const uint32_t num_elems = tiling.num_blocks * tiling.matrix_size *
+                             tiling.matrix_size * tiling.ws_circular_buffer_len;
   const uint32_t workspace_size = num_elems * sizeof(T);
 
   return workspace_size;

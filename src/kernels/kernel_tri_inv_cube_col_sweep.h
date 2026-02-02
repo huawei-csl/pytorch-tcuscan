@@ -34,11 +34,17 @@ class KernelTriInvCubeColSweep {
    * @brief Class constructor.
    *
    * @param [in] matrix_size Input square matrix size to invert.
+   * @param [in] circular_buffer_len Length of workspace circular buffer to
+   * overcome GM memory consistency issues.
    */
-  __aicore__ inline KernelTriInvCubeColSweep(uint32_t matrix_size)
+  __aicore__ inline KernelTriInvCubeColSweep(uint32_t matrix_size,
+                                             uint32_t circular_buffer_len)
       : matrix_size_(matrix_size),
         tile_len_(matrix_size * matrix_size),
-        global_offset_(GetBlockIdx() * tile_len_) {}
+        vec_len_(GetBlockNum() * tile_len_),
+        ws_circular_buffer_len_(circular_buffer_len),
+        global_in_offset_(GetBlockIdx() * tile_len_ * ws_circular_buffer_len_),
+        global_out_offset_(GetBlockIdx() * tile_len_) {}
 
   /**
    * @brief Initialize global and local memory structures.
@@ -50,9 +56,9 @@ class KernelTriInvCubeColSweep {
    */
   __aicore__ inline void Init(GM_ADDR matrix_stream_in,
                               GM_ADDR inv_matrix_out) {
-    const uint32_t vec_len = GetBlockNum() * tile_len_;
-    global_A_.SetGlobalBuffer((__gm__ InputT*)matrix_stream_in, vec_len);
-    global_C_.SetGlobalBuffer((__gm__ OutputT*)inv_matrix_out, vec_len);
+    global_A_.SetGlobalBuffer((__gm__ InputT*)matrix_stream_in,
+                              vec_len_ * ws_circular_buffer_len_);
+    global_C_.SetGlobalBuffer((__gm__ OutputT*)inv_matrix_out, vec_len_);
 
     pipe_.InitBuffer(a1_q_, 1, tile_len_ * sizeof(InputT));
     pipe_.InitBuffer(a2_q_, 1, tile_len_ * sizeof(InputT));
@@ -70,29 +76,32 @@ class KernelTriInvCubeColSweep {
     sync::SyncGroup<sync::GroupSyncDirection::FULL>();
     LoadIdentityMatrixinL0C();
 
+    // Read again the identity matrix from AIV core.
+    uint32_t circular_buf_idx = 0;
+
     // Matrix column sweep algorithm requires `matrix_size_` iterations.
     for (uint32_t iter = 0; iter < matrix_size_; iter++) {
-      (void)iter;
       // Sync with all AIVs in group, to write the matrix.
       sync::SyncGroup<sync::GroupSyncDirection::FULL>();
 
       // Load next matrix A and perform C = A @ C
-      LoadMatrixAintoL0A();
+      LoadMatrixAintoL0A(circular_buf_idx);
       MultiplyAWithC();
-      AscendC::PipeBarrier<PIPE_ALL>();
+      circular_buf_idx = (circular_buf_idx + 1) % ws_circular_buffer_len_;
     }
 
     // Write L0C matrix to global memory
-    copy::CopyCL0ToGlobal(global_C_[global_offset_], co1_q_, M_, N_);
+    copy::CopyCL0ToGlobal(global_C_[global_out_offset_], co1_q_, M_, N_);
   }
 
  private:
   /**
    * @brief Loads matrix from global memory into L0A (`a1_q_` queue).
    */
-  __aicore__ inline void LoadMatrixAintoL0A() {
+  __aicore__ inline void LoadMatrixAintoL0A(uint32_t iter) {
     // Load matrix from global_A_ into L0A
-    copy::CopyGmToL1A(a1_q_, global_A_[global_offset_], m_blocks_, k_blocks_);
+    copy::CopyGmToL1A(a1_q_, global_A_[global_in_offset_ + iter * tile_len_],
+                      m_blocks_, k_blocks_);
     copy::CopyL1ToL0A<InputT, true>(a2_q_, a1_q_, m_blocks_, k_blocks_);
   }
   /**
@@ -121,7 +130,8 @@ class KernelTriInvCubeColSweep {
    * queue).
    */
   __aicore__ inline void LoadIdentityMatrixinL0A() {
-    copy::CopyGmToL1A(a1_q_, global_A_[global_offset_], m_blocks_, k_blocks_);
+    copy::CopyGmToL1A(a1_q_, global_A_[global_in_offset_], m_blocks_,
+                      k_blocks_);
     copy::CopyL1ToL0A<InputT, true>(a2_q_, a1_q_, m_blocks_, k_blocks_);
   }
 
@@ -131,7 +141,7 @@ class KernelTriInvCubeColSweep {
    */
   __aicore__ inline void LoadIdentityMatrixinL0B() {
     // Here, we "abuse" the 'global_A_' pointer
-    copy::CopyTransposedGmToL0B(b2_q_, b1_q_, global_A_[global_offset_],
+    copy::CopyTransposedGmToL0B(b2_q_, b1_q_, global_A_[global_in_offset_],
                                 k_blocks_, n_blocks_);
   }
 
@@ -149,7 +159,10 @@ class KernelTriInvCubeColSweep {
 
   const uint32_t matrix_size_;
   const uint32_t tile_len_;
-  const uint32_t global_offset_;
+  const uint32_t vec_len_;
+  const uint32_t ws_circular_buffer_len_;
+  const uint32_t global_in_offset_;
+  const uint32_t global_out_offset_;
 
   constexpr static uint32_t M_CUBE_BLOCK_SIZE = tcuscan::GetFractalMN<InputT>();
   constexpr static uint32_t N_CUBE_BLOCK_SIZE = tcuscan::GetFractalMN<InputT>();

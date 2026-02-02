@@ -95,7 +95,9 @@ at::Tensor run_tri_inv_cube_col_sweep(const at::Tensor& x) {
       at::empty({block_dim, matrix_size, matrix_size},
                 at::TensorOptions().dtype(dtype_out).device(device));
 
-  const TriInvCubeColSweepTiling tiling{block_dim, matrix_size};
+  constexpr uint32_t WS_CIRCULAR_BUFFER_LEN = 4;
+  const TriInvCubeColSweepTiling tiling{block_dim, matrix_size,
+                                        WS_CIRCULAR_BUFFER_LEN};
   uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
   if (dtype == torch::kHalf) {
     const size_t workspace_size =

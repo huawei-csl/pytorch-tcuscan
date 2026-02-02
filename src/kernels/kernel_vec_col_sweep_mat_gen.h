@@ -18,7 +18,7 @@ namespace tcuscan {
  * @brief Returns a sequence of matrices that encode the column-sweep steps in
  * matrix notation. On the first iteration, it returns the identity matrix.
  *
- * @tparam Input data type. Support fp16/half.
+ * @tparam Input data type. Supports only fp16/half.
  *
  * See discussion on Section 3.2.1 of [1], in particular Equations 3.8 and 3.9
  * on page 54.
@@ -38,11 +38,11 @@ namespace tcuscan {
 
   * \endcode
   *
-  *  [1] Parallelism in Matrix Computations.E.Gallopoulos, B.Philippe and
- A.H.Sameh.
-  * Hard cover(ISBN : 978 - 94 - 017 - 7187 - 0),
-  * Soft cover(ISBN : 978 - 94 - 024 - 0317 - 6),
-  * Electronic(ISBN : 978 - 94 - 017 - 7188 - 7)
+  *  [1] (book) E.Gallopoulos, B.Philippe and A.H.Sameh. Parallelism in Matrix
+  *  Computations.
+  *  [2] (book) Nicholas J. Higham. Accuracy and Stability of Numerical
+  *  Algorithms: Second Edition 2002 (Chapter 8, Section 8.4 "A Parallel Fan-in
+   * Algorithm")
   **/
 template <typename T = half>
 class KernelVecColSweepMatGen {
@@ -51,12 +51,17 @@ class KernelVecColSweepMatGen {
    * @brief Class constructor.
    *
    * @param [in] matrix_size Input square matrix size.
+   * @param [in] circular_buffer_len Length of workspace circular buffer to
+   * overcome GM memory consistency issues.
    */
-  __aicore__ inline KernelVecColSweepMatGen(uint32_t matrix_size)
+  __aicore__ inline KernelVecColSweepMatGen(uint32_t matrix_size,
+                                            uint32_t circular_buffer_len)
       : matrix_size_(matrix_size),
         tile_len_(matrix_size * matrix_size),
         aic_id_(scalar::FloorDiv(GetBlockIdx(), GetTaskRation())),
-        global_offset_(aic_id_ * tile_len_) {}
+        global_in_offset_(aic_id_ * tile_len_),
+        ws_circular_buffer_len_(circular_buffer_len),
+        global_out_offset_(aic_id_ * tile_len_ * ws_circular_buffer_len_) {}
 
   /**
    * @brief Initialize global and local memory structures.
@@ -80,13 +85,13 @@ class KernelVecColSweepMatGen {
    */
   __aicore__ inline void Process() {
     // Read input matrix into work_buf_.
-    copy::CopyGmToVec(in_q_, global_in_[global_offset_]);
+    copy::CopyGmToVec(in_q_, global_in_[global_in_offset_]);
     ReadInputMatrixInUB();
 
     // AIV-0 writes identity matrix for AIC
     if (GetSubBlockIdx() == 0) {
       EnQueueIdentityMatrix();
-      copy::CopyVecToGm(global_out_[global_offset_], out_q_);
+      copy::CopyVecToGm(global_out_[global_out_offset_], out_q_);
     }
 
     //  Sync with all AIVs in group, to write the matrix.
@@ -96,6 +101,7 @@ class KernelVecColSweepMatGen {
     sync::SyncGroup<sync::GroupSyncDirection::FULL>();
 
     const LocalTensor<T> work_lt = work_buf_.Get<T>();
+    uint32_t circular_buf_idx = 1;
 
     // Matrix column sweep algorithm requires `matrix_size_` iterations.
     for (int32_t col_index = matrix_size_ - 2; col_index >= 0; col_index--) {
@@ -105,14 +111,15 @@ class KernelVecColSweepMatGen {
         const LocalTensor<T> vec_out_lt = out_q_.AllocTensor<T>();
         tcuscan::FillIdentity(vec_out_lt, matrix_size_);
 
-        AscendC::PipeBarrier<PIPE_ALL>();
         // Write the (col_index)-th column of matrix M.
         const uint32_t col_offset = col_index * matrix_size_;
         DataCopy(vec_out_lt[col_offset], work_lt[col_offset], matrix_size_);
-        AscendC::PipeBarrier<PIPE_ALL>();
 
         out_q_.EnQue<T>(vec_out_lt);
-        copy::CopyVecToGm(global_out_[global_offset_], out_q_);
+        copy::CopyVecToGm(
+            global_out_[global_out_offset_ + circular_buf_idx * tile_len_],
+            out_q_);
+        circular_buf_idx = (circular_buf_idx + 1) % ws_circular_buffer_len_;
       }
 
       // Sync with all AIVs in group, to write the matrix.
@@ -157,7 +164,9 @@ class KernelVecColSweepMatGen {
   const uint32_t matrix_size_;
   const uint32_t tile_len_;
   const uint32_t aic_id_;
-  const uint32_t global_offset_;
+  const uint32_t global_in_offset_;
+  const uint32_t ws_circular_buffer_len_;
+  const uint32_t global_out_offset_;
 };
 
 }  // namespace tcuscan
