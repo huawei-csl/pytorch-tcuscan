@@ -130,7 +130,6 @@ at::Tensor run_tri_inv_cube_col_sweep(const at::Tensor& x) {
  *
  */
 at::Tensor run_triu_inv_rec_unroll(const at::Tensor& x) {
-  auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();
   const auto dtype = x.options().dtype();
   const auto dtype_out = torch::kFloat32;
@@ -146,8 +145,10 @@ at::Tensor run_triu_inv_rec_unroll(const at::Tensor& x) {
       static_cast<uint32_t>(num_elems / (matrix_size * matrix_size));
 
   const at::Tensor z =
-      at::ones({block_dim, matrix_size, matrix_size},
-               at::TensorOptions().dtype(dtype_out).device(device));
+      at::empty({block_dim, matrix_size, matrix_size},
+                at::TensorOptions().dtype(dtype_out).device(device));
+
+  auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
   const TriuInvRecUnrollTiling tiling{block_dim, matrix_size};
   uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
