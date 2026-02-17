@@ -32,7 +32,6 @@ namespace tcuscan {
  */
 at::Tensor run_count_if(const at::Tensor& x, float pivot, uint32_t tile_len,
                         uint8_t compare_mode) {
-  auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const auto ascendc_platform =
       platform_ascendc::PlatformAscendCManager::GetInstance();
 
@@ -50,6 +49,8 @@ at::Tensor run_count_if(const at::Tensor& x, float pivot, uint32_t tile_len,
   uint8_t* tiling_device = alloc_copy_tiling(tiling);
 
   const at::Tensor workspace_tensor = alloc_workspace(0, device);
+
+  auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
   if (dtype == at::kHalf) {
     ACLRT_LAUNCH_KERNEL(count_if_fp16)
