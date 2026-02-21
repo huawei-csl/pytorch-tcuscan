@@ -23,8 +23,27 @@ extern "C" __global__ __aicore__ void tri_inv_col_sweep_fp16(
   tcuscan::TriInvColumnSweepTiling tiling;
   GetTilingData(&tiling, tiling_gm);
 
-  tcuscan::tri_inv_col_sweep<half>(vec_in, vec_out, tiling.num_elems,
-                                   tiling.matrix_size);
+  const uint32_t num_elems = tiling.num_elems;
+  const uint32_t matrix_size = tiling.matrix_size;
+
+  switch (matrix_size) {
+    case 16:
+      tcuscan::tri_inv_col_sweep<half, 16>(vec_in, vec_out, num_elems);
+      break;
+    case 32:
+      tcuscan::tri_inv_col_sweep<half, 32>(vec_in, vec_out, num_elems);
+      break;
+    case 64:
+      tcuscan::tri_inv_col_sweep<half, 64>(vec_in, vec_out, num_elems);
+      break;
+    case 128:
+      tcuscan::tri_inv_col_sweep<half, 128>(vec_in, vec_out, num_elems);
+      break;
+    default:
+      static_assert(
+          "tri_inv_col_sweep_fp16: Invalid input matrix size. Supported sizes "
+          "16,32,64,128.");
+  }
 }
 
 /**
@@ -41,6 +60,25 @@ extern "C" __global__ __aicore__ void tri_inv_col_sweep_fp32(
   tcuscan::TriInvColumnSweepTiling tiling;
   GetTilingData(&tiling, tiling_gm);
 
-  tcuscan::tri_inv_col_sweep<float>(vec_in, vec_out, tiling.num_elems,
-                                    tiling.matrix_size);
+  const uint32_t num_elems = tiling.num_elems;
+  const uint32_t matrix_size = tiling.matrix_size;
+
+  switch (matrix_size) {
+    case 16:
+      tcuscan::tri_inv_col_sweep<float, 16>(vec_in, vec_out, num_elems);
+      break;
+    case 32:
+      tcuscan::tri_inv_col_sweep<float, 32>(vec_in, vec_out, num_elems);
+      break;
+    case 64:
+      tcuscan::tri_inv_col_sweep<float, 64>(vec_in, vec_out, num_elems);
+      break;
+    case 128:
+      tcuscan::tri_inv_col_sweep<float, 128>(vec_in, vec_out, num_elems);
+      break;
+    default:
+      static_assert(
+          "tri_inv_col_sweep_fp16: Invalid input matrix size. Supported sizes "
+          "16,32,64,128.");
+  }
 }

@@ -478,7 +478,7 @@ __aicore__ inline void CopyC01ToB1(TQue<QuePosition::B1, B1NumBuffers>& dst_q,
  * @tparam CO1NumBuffers Depth of the CO1 queue.
  * @tparam FreeSrc Whether to free the source tensor or not.
  *
- * @param [in] dst_q Destination queue. The position must be B1.
+ * @param [in] dst_buf Destination buffer. The position must be B1.
  * @param [in] src_q Source queue. The position must be CO1.
  * @param [in] height Height of the matrix.
  * @param [in] width Width of the matrix.

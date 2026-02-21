@@ -32,19 +32,27 @@ namespace tcuscan {
  * @return Returns Matrix inverse for each matrix over the `batch_dim`.
  */
 at::Tensor run_tri_inv_col_sweep(const at::Tensor& x) {
+  const auto ascendc_platform =
+      platform_ascendc::PlatformAscendCManager::GetInstance();
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();
   const auto dtype = x.options().dtype();
-  if (x.dim() < 2)
+  if (x.dim() < 2) {
     throw std::runtime_error("Input tensor must have at least 2 dimensions.\n");
+  }
 
   const uint32_t matrix_size = static_cast<uint32_t>(x.size(-1));
-  if (matrix_size != x.size(-2))
+  if (matrix_size != x.size(-2)) {
     throw std::runtime_error("Only square matrices are supported.\n");
+  }
 
   const uint32_t num_elems = static_cast<uint32_t>(x.numel());
-  const uint32_t block_dim =
-      static_cast<uint32_t>(num_elems / (matrix_size * matrix_size));
+  const uint32_t num_matrices = num_elems / (matrix_size * matrix_size);
+
+  uint32_t block_dim = ascendc_platform->GetCoreNumAiv();
+  if (num_matrices < block_dim) {
+    block_dim = num_matrices;
+  }
 
   const at::Tensor z = at::empty_like(x);
   const at::Tensor workspace_tensor = tcuscan::alloc_workspace(0, device);
