@@ -27,8 +27,10 @@ namespace tcuscan {
  * @tparam SyncBefore If true, the `KernelSegSumVecRevert` (this kernel) waits
  * for the cube unit to send a synchronization signal after each matrix tile is
  * ready. Matrix tile has length `tile_len * tile_len`.
+ * @tparam UseAtomicWrite If true, the output is written using atomic-add
+ * semantics.
  */
-template <typename T, bool SyncBefore = false>
+template <typename T, bool SyncBefore = false, bool UseAtomicWrite = false>
 class KernelSegSumVecRevert {
   constexpr static uint32_t BUFFER_NUM = 2;
 
@@ -109,7 +111,14 @@ class KernelSegSumVecRevert {
     // Write tile to GM and "re-allocate" the output tile.
     if (index >= tile_len_) {
       out_q_.template EnQue<T>(vec_out_lt);
+      if constexpr (UseAtomicWrite) {
+        AscendC::PipeBarrier<PIPE_ALL>();
+        AscendC::SetAtomicAdd<int32_t>();
+      }
       copy::CopyVecToGm(global_out_[out_offset_], out_q_, tile_len_);
+      if constexpr (UseAtomicWrite) {
+        AscendC::SetAtomicNone();
+      }
       out_offset_ += tile_len_;
       vec_out_lt = out_q_.template AllocTensor<T>();
 
@@ -240,7 +249,14 @@ class KernelSegSumVecRevert {
 
     const uint32_t tail_len = out_idx + 1;
     out_q_.template EnQue<T>(vec_out_lt);
+    if constexpr (UseAtomicWrite) {
+      AscendC::PipeBarrier<PIPE_ALL>();
+      AscendC::SetAtomicAdd<int32_t>();
+    }
     copy::CopyVecToGm(global_out_[out_offset_], out_q_, tail_len);
+    if constexpr (UseAtomicWrite) {
+      AscendC::SetAtomicNone();
+    }
   }
 
   TPipe pipe_;
