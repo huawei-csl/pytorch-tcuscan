@@ -51,12 +51,14 @@ class KernelTriInvColumnSweep {
    * @brief Class constructor.
    *
    * @param [in] vec_len Dimension of the input vectors.
+   * @param [in] num_out_tiles Number of tiles per output matrix. Each AIV only
+   * computes a tile of the output inverse matrix.
    */
-  __aicore__ inline KernelTriInvColumnSweep(uint32_t vec_len)
-      : vec_core_num_(GetBlockNum() * GetTaskRation()),
-        vec_len_(vec_len),
-        max_num_matrices_per_core_(
-            scalar::CeilDiv(vec_len, tile_len_ * vec_core_num_)) {}
+  __aicore__ inline KernelTriInvColumnSweep(uint32_t vec_len,
+                                            uint32_t num_out_tiles)
+      : vec_len_(vec_len),
+        num_cols_per_out_matrix_(MATRIX_SIZE / num_out_tiles),
+        out_tile_len_(num_cols_per_out_matrix_ * MATRIX_SIZE) {}
 
   /**
    * @brief Initialize global and local memory structures.
@@ -69,7 +71,7 @@ class KernelTriInvColumnSweep {
     global_out_.SetGlobalBuffer((__gm__ T*)vec_out, vec_len_);
 
     pipe_.InitBuffer(in_q_, BUFFER_NUM, tile_len_ * sizeof(T));
-    pipe_.InitBuffer(out_q_, BUFFER_NUM, tile_len_ * sizeof(T));
+    pipe_.InitBuffer(out_q_, BUFFER_NUM, out_tile_len_ * sizeof(T));
     pipe_.InitBuffer(b_buf_, MATRIX_SIZE * sizeof(T));
   }
 
@@ -78,26 +80,22 @@ class KernelTriInvColumnSweep {
    *
    */
   __aicore__ inline void Process() {
-    const uint32_t global_offset =
-        GetBlockIdx() * max_num_matrices_per_core_ * tile_len_;
+    const int64_t id = GetBlockIdx();
+    const int32_t num_out_tiles = MATRIX_SIZE / num_cols_per_out_matrix_;
 
-    const uint32_t num_matrices_to_process =
-        tcuscan::scalar::GetWorkDistribution(vec_len_, tile_len_,
-                                             vec_core_num_);
+    const uint32_t in_matrix_idx = scalar::FloorDiv(id, num_out_tiles);
 
-    for (uint32_t matrix_idx = 0; matrix_idx < num_matrices_to_process;
-         matrix_idx++) {
-      const uint32_t offset = global_offset + matrix_idx * tile_len_;
-      copy::CopyGmToVec(in_q_, global_in_[offset], tile_len_);
-      InvertMatrix();
-      copy::CopyVecToGm(global_out_[offset], out_q_, tile_len_);
-    }
+    const uint32_t in_offset = in_matrix_idx * tile_len_;
+
+    const int32_t out_offset = in_offset + out_tile_len_ * (id % num_out_tiles);
+    copy::CopyGmToVec(in_q_, global_in_[in_offset], tile_len_);
+    InvertMatrix();
+    copy::CopyVecToGm(global_out_[out_offset], out_q_, out_tile_len_);
   }
 
  private:
   __aicore__ inline void InvertMatrix() {
     constexpr int32_t n_rows = MATRIX_SIZE;
-    constexpr int32_t n_cols = MATRIX_SIZE;
 
     LocalTensor<T> vec_in_lt = in_q_.template DeQue<T>();
     const LocalTensor<T> vec_out_lt = out_q_.template AllocTensor<T>();
@@ -105,10 +103,14 @@ class KernelTriInvColumnSweep {
     // Left-hand side Ax=b.
     LocalTensor<T> b = b_buf_.Get<T>();
 
-    Duplicate(vec_out_lt, static_cast<T>(0), tile_len_);
+    Duplicate(vec_out_lt, static_cast<T>(0), out_tile_len_);
 
     // For every output column j-th
-    for (int32_t j = 0; j < n_cols; j++) {
+    const int32_t num_out_splits = MATRIX_SIZE / num_cols_per_out_matrix_;
+    const int32_t start =
+        num_cols_per_out_matrix_ * (GetBlockIdx() % num_out_splits);
+    const int32_t end = start + num_cols_per_out_matrix_;
+    for (int32_t j = start; j < end; j++) {
       // Column sweep on each column.
 
       // `b` vector is e_j standard vector.
@@ -116,7 +118,7 @@ class KernelTriInvColumnSweep {
       b.SetValue(j, static_cast<T>(1));
 
       // Ax=b
-      LocalTensor<T> x = vec_out_lt[j * n_rows];
+      LocalTensor<T> x = vec_out_lt[(j - start) * n_rows];
       for (int32_t k = n_rows - 1; k >= 0; k--) {
         const LocalTensor<T> A_k = vec_in_lt[k * n_rows];
 
@@ -146,10 +148,10 @@ class KernelTriInvColumnSweep {
   GlobalTensor<T> global_in_;
   GlobalTensor<T> global_out_;
 
-  const uint32_t vec_core_num_;
   const uint32_t vec_len_;
+  const uint32_t num_cols_per_out_matrix_;
+  const uint32_t out_tile_len_;
   constexpr static uint32_t tile_len_ = MATRIX_SIZE * MATRIX_SIZE;
-  const uint32_t max_num_matrices_per_core_;
 };
 
 /**
@@ -161,12 +163,16 @@ class KernelTriInvColumnSweep {
  * @param [in] vec_in Pointer to the input vector.
  * @param [in] vec_out Pointer ot the output vector.
  * @param [in] vec_len Dimension of the input vector.
+ * @param [in] num_cols_per_out_matrix Number of columns of each output
+ * inverse matrix computed per each assigned AIV core.
  */
 template <typename T, unsigned MATRIX_SIZE>
 __aicore__ inline void tri_inv_col_sweep(GM_ADDR vec_in, GM_ADDR vec_out,
-                                         uint32_t vec_len) {
+                                         uint32_t vec_len,
+                                         uint32_t num_cols_per_out_matrix) {
   if ASCEND_IS_AIV {
-    KernelTriInvColumnSweep<T, MATRIX_SIZE> op(vec_len);
+    KernelTriInvColumnSweep<T, MATRIX_SIZE> op(vec_len,
+                                               num_cols_per_out_matrix);
     op.Init(vec_in, vec_out);
     op.Process();
   }

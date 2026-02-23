@@ -25,19 +25,24 @@ extern "C" __global__ __aicore__ void tri_inv_col_sweep_fp16(
 
   const uint32_t num_elems = tiling.num_elems;
   const uint32_t matrix_size = tiling.matrix_size;
+  const uint32_t num_out_tiles = tiling.num_out_tiles;
 
   switch (matrix_size) {
     case 16:
-      tcuscan::tri_inv_col_sweep<half, 16>(vec_in, vec_out, num_elems);
+      tcuscan::tri_inv_col_sweep<half, 16>(vec_in, vec_out, num_elems,
+                                           num_out_tiles);
       break;
     case 32:
-      tcuscan::tri_inv_col_sweep<half, 32>(vec_in, vec_out, num_elems);
+      tcuscan::tri_inv_col_sweep<half, 32>(vec_in, vec_out, num_elems,
+                                           num_out_tiles);
       break;
     case 64:
-      tcuscan::tri_inv_col_sweep<half, 64>(vec_in, vec_out, num_elems);
+      tcuscan::tri_inv_col_sweep<half, 64>(vec_in, vec_out, num_elems,
+                                           num_out_tiles);
       break;
     case 128:
-      tcuscan::tri_inv_col_sweep<half, 128>(vec_in, vec_out, num_elems);
+      tcuscan::tri_inv_col_sweep<half, 128>(vec_in, vec_out, num_elems,
+                                            num_out_tiles);
       break;
     default:
       static_assert(
@@ -62,23 +67,28 @@ extern "C" __global__ __aicore__ void tri_inv_col_sweep_fp32(
 
   const uint32_t num_elems = tiling.num_elems;
   const uint32_t matrix_size = tiling.matrix_size;
+  const uint32_t num_out_tiles = tiling.num_out_tiles;
 
   switch (matrix_size) {
     case 16:
-      tcuscan::tri_inv_col_sweep<float, 16>(vec_in, vec_out, num_elems);
+      tcuscan::tri_inv_col_sweep<float, 16>(vec_in, vec_out, num_elems,
+                                            num_out_tiles);
       break;
     case 32:
-      tcuscan::tri_inv_col_sweep<float, 32>(vec_in, vec_out, num_elems);
+      tcuscan::tri_inv_col_sweep<float, 32>(vec_in, vec_out, num_elems,
+                                            num_out_tiles);
       break;
     case 64:
-      tcuscan::tri_inv_col_sweep<float, 64>(vec_in, vec_out, num_elems);
+      tcuscan::tri_inv_col_sweep<float, 64>(vec_in, vec_out, num_elems,
+                                            num_out_tiles);
       break;
     case 128:
-      tcuscan::tri_inv_col_sweep<float, 128>(vec_in, vec_out, num_elems);
+      tcuscan::tri_inv_col_sweep<float, 128>(vec_in, vec_out, num_elems,
+                                             num_out_tiles);
       break;
     default:
       static_assert(
-          "tri_inv_col_sweep_fp16: Invalid input matrix size. Supported sizes "
+          "tri_inv_col_sweep_fp32: Invalid input matrix size. Supported sizes "
           "16,32,64,128.");
   }
 }

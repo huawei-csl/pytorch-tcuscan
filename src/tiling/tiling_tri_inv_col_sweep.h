@@ -23,6 +23,8 @@ struct TriInvColumnSweepTiling {
   uint32_t num_elems;
   /// @brief Input matrix size.
   uint32_t matrix_size;
+  /// @brief Number of output (matrix) tiles.
+  uint32_t num_out_tiles;
 };
 #pragma pack(pop)
 

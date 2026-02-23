@@ -32,9 +32,6 @@ namespace tcuscan {
  * @return Returns Matrix inverse for each matrix over the `batch_dim`.
  */
 at::Tensor run_tri_inv_col_sweep(const at::Tensor& x) {
-  const auto ascendc_platform =
-      platform_ascendc::PlatformAscendCManager::GetInstance();
-  auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();
   const auto dtype = x.options().dtype();
   if (x.dim() < 2) {
@@ -49,16 +46,17 @@ at::Tensor run_tri_inv_col_sweep(const at::Tensor& x) {
   const uint32_t num_elems = static_cast<uint32_t>(x.numel());
   const uint32_t num_matrices = num_elems / (matrix_size * matrix_size);
 
-  uint32_t block_dim = ascendc_platform->GetCoreNumAiv();
-  if (num_matrices < block_dim) {
-    block_dim = num_matrices;
-  }
+  const uint32_t num_out_tiles = matrix_size / 16;
+  const uint32_t block_dim = num_matrices * num_out_tiles;
 
   const at::Tensor z = at::empty_like(x);
   const at::Tensor workspace_tensor = tcuscan::alloc_workspace(0, device);
-  const TriInvColumnSweepTiling tiling{block_dim, num_elems, matrix_size};
+
+  const TriInvColumnSweepTiling tiling{block_dim, num_elems, matrix_size,
+                                       num_out_tiles};
   uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
 
+  auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   if (dtype == torch::kHalf) {
     ACLRT_LAUNCH_KERNEL(tri_inv_col_sweep_fp16)
     (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
