@@ -27,7 +27,6 @@ namespace tcuscan {
  * @return Copy of input vector `x`.
  */
 at::Tensor run_copy(const at::Tensor& x, int s) {
-  auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();
   const auto dtype = x.options().dtype();
 
@@ -42,6 +41,8 @@ at::Tensor run_copy(const at::Tensor& x, int s) {
   const CopyTiling tiling{num_block, total_length, tile_size};
   uint8_t* tiling_device = alloc_copy_tiling(tiling);
 
+  auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
+
   if (dtype == at::kFloat) {
     ACLRT_LAUNCH_KERNEL(copy_fp32)
     (1 /* single core*/, acl_stream, const_cast<void*>(x.storage().data()),
@@ -55,7 +56,6 @@ at::Tensor run_copy(const at::Tensor& x, int s) {
   }
 
   aclrtFree(tiling_device);
-  aclrtSynchronizeStream(acl_stream);
 
   return z;
 }

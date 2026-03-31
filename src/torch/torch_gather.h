@@ -38,7 +38,6 @@ at::Tensor run_mc_gather(const at::Tensor& values, const at::Tensor& idxs,
   const auto ascendc_platform =
       platform_ascendc::PlatformAscendCManager::GetInstance();
 
-  auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const auto dtype = values.options().dtype();
   const at::Device device = values.options().device();
 
@@ -57,6 +56,8 @@ at::Tensor run_mc_gather(const at::Tensor& values, const at::Tensor& idxs,
 
   const McGatherTiling tiling{block_dim, values_len, idx_len, tile_len};
   uint8_t* tiling_device = alloc_copy_tiling(tiling);
+
+  auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
   if (dtype == torch::kHalf) {
     ACLRT_LAUNCH_KERNEL(mc_gather_fp16)
@@ -92,7 +93,6 @@ at::Tensor run_csr_gather(const at::Tensor& values, const at::Tensor& cols,
   const auto ascendc_platform =
       platform_ascendc::PlatformAscendCManager::GetInstance();
   const uint32_t max_aiv_cores = ascendc_platform->GetCoreNumAiv();
-  auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();
 
   const at::Tensor z = at::empty_like(values);
@@ -113,6 +113,8 @@ at::Tensor run_csr_gather(const at::Tensor& values, const at::Tensor& cols,
   if (block_dim <= 1) {
     block_dim = 1;
   }
+
+  auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
   ACLRT_LAUNCH_KERNEL(csr_gather)
   (block_dim, acl_stream, const_cast<void*>(values.storage().data()),
@@ -140,7 +142,6 @@ at::Tensor run_gather_spmv(const at::Tensor& values, const at::Tensor& idxs,
   const auto ascendc_platform =
       platform_ascendc::PlatformAscendCManager::GetInstance();
   const uint32_t max_aiv_cores = ascendc_platform->GetCoreNumAiv();
-  auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
 
   const at::Device device = values.options().device();
 
@@ -156,6 +157,8 @@ at::Tensor run_gather_spmv(const at::Tensor& values, const at::Tensor& idxs,
   const GatherSpmvTiling tiling{block_dim, values_len, idx_len, tile_len};
   uint8_t* tiling_device = alloc_copy_tiling(tiling);
 
+  auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
+
   ACLRT_LAUNCH_KERNEL(gather_spmv)
   (block_dim, acl_stream, const_cast<void*>(values.storage().data()),
    const_cast<void*>(idxs.storage().data()),
@@ -163,6 +166,7 @@ at::Tensor run_gather_spmv(const at::Tensor& values, const at::Tensor& idxs,
    const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   aclrtFree(tiling_device);
   aclrtSynchronizeStream(acl_stream);
+
   return z;
 }
 }  // namespace tcuscan

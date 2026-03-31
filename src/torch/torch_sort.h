@@ -31,7 +31,6 @@ namespace tcuscan {
 std::tuple<at::Tensor, at::Tensor> run_radix_sort(const at::Tensor& x, int S) {
   const auto ascendc_platform =
       platform_ascendc::PlatformAscendCManager::GetInstance();
-  auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();
   const auto dtype = x.options().dtype();
 
@@ -62,6 +61,8 @@ std::tuple<at::Tensor, at::Tensor> run_radix_sort(const at::Tensor& x, int S) {
   const at::Tensor workspace_tensor =
       tcuscan::alloc_workspace(user_workspace_size, device);
 
+  auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
+
   if (dtype == torch::kHalf) {
     ACLRT_LAUNCH_KERNEL(radix_sort_fp16)
     (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
@@ -77,7 +78,6 @@ std::tuple<at::Tensor, at::Tensor> run_radix_sort(const at::Tensor& x, int S) {
   }
 
   aclrtFree(tiling_device);
-  aclrtSynchronizeStream(acl_stream);
 
   return std::make_tuple(vec_out, indices_out);
 }

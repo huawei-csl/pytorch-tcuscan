@@ -82,7 +82,6 @@ at::Tensor run_tri_inv_col_sweep(const at::Tensor& x) {
  * @return Returns Matrix inverse for each matrix over the `batch_dim`.
  */
 at::Tensor run_tri_inv_cube_col_sweep(const at::Tensor& x) {
-  auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();
   const auto dtype = x.options().dtype();
   const auto dtype_out = torch::kFloat32;
@@ -105,6 +104,9 @@ at::Tensor run_tri_inv_cube_col_sweep(const at::Tensor& x) {
   const TriInvCubeColSweepTiling tiling{block_dim, matrix_size,
                                         WS_CIRCULAR_BUFFER_LEN};
   uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
+
+  auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
+
   if (dtype == torch::kHalf) {
     const size_t workspace_size =
         tcuscan::get_workspace_size<uint16_t /* half */>(tiling);
@@ -120,7 +122,6 @@ at::Tensor run_tri_inv_cube_col_sweep(const at::Tensor& x) {
   }
 
   aclrtFree(tiling_device);
-  aclrtSynchronizeStream(acl_stream);
 
   return z;
 }
@@ -172,7 +173,7 @@ at::Tensor run_triu_inv_rec_unroll(const at::Tensor& x) {
   }
 
   aclrtFree(tiling_device);
-  aclrtSynchronizeStream(acl_stream);
+
   return z;
 }
 

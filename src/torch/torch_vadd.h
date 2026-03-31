@@ -26,7 +26,6 @@ namespace tcuscan {
  * @return Returns element-wise addition, i.e., x+y.
  */
 at::Tensor run_add(const at::Tensor& x, const at::Tensor& y) {
-  auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Tensor z = at::empty_like(x);
   const at::Device device = x.options().device();
   const uint32_t tile_len = 128;
@@ -37,13 +36,14 @@ at::Tensor run_add(const at::Tensor& x, const at::Tensor& y) {
   const VaddTiling tiling{total_len, tile_len};
   uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
 
+  auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
+
   ACLRT_LAUNCH_KERNEL(vadd_custom)
   (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
    const_cast<void*>(y.storage().data()), const_cast<void*>(z.storage().data()),
    const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
 
   aclrtFree(tiling_device);
-  aclrtSynchronizeStream(acl_stream);
 
   return z;
 }

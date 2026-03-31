@@ -83,7 +83,6 @@ at::Tensor run_reduce_tiles(const at::Tensor& x, uint32_t tile_len,
  * i-th block reduction.
  */
 at::Tensor run_cube_reduce(const at::Tensor& x, uint32_t num_blocks) {
-  auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();
   const auto dtype = x.options().dtype();
   const auto dtype_out =
@@ -98,6 +97,8 @@ at::Tensor run_cube_reduce(const at::Tensor& x, uint32_t num_blocks) {
       tcuscan::tiling::heuristics::cube_reduce::CalculateTiling(vec_len,
                                                                 num_blocks);
   uint8_t* tiling_device = alloc_copy_tiling(tiling);
+
+  auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
   if (dtype == torch::kInt8) {
     const uint32_t workspace_size = tcuscan::get_workspace_size<int8_t>(tiling);
@@ -138,7 +139,6 @@ at::Tensor run_cube_reduce(const at::Tensor& x, uint32_t num_blocks) {
  */
 at::Tensor run_complete_rows(const at::Tensor& x, const at::Tensor& sums,
                              int tile_width, int tile_height) {
-  auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();
   const auto dtype = x.options().dtype();
   const auto dtype_out =
@@ -156,6 +156,9 @@ at::Tensor run_complete_rows(const at::Tensor& x, const at::Tensor& sums,
   uint8_t* tiling_device = alloc_copy_tiling(tiling);
 
   const at::Tensor workspace_tensor = alloc_workspace(0, device);
+
+  auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
+
   if (dtype == torch::kLong) {
     ACLRT_LAUNCH_KERNEL(complete_rows_int32)
     (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
@@ -171,7 +174,6 @@ at::Tensor run_complete_rows(const at::Tensor& x, const at::Tensor& sums,
   }
 
   aclrtFree(tiling_device);
-  aclrtSynchronizeStream(acl_stream);
 
   return z;
 }
@@ -191,7 +193,6 @@ at::Tensor run_complete_rows(const at::Tensor& x, const at::Tensor& sums,
  */
 at::Tensor run_complete_blocks(const at::Tensor& x, const at::Tensor& sums,
                                int tile_length) {
-  auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();
   const auto dtype = x.options().dtype();
 
@@ -204,6 +205,9 @@ at::Tensor run_complete_blocks(const at::Tensor& x, const at::Tensor& sums,
   uint8_t* tiling_device = alloc_copy_tiling(tiling);
 
   const at::Tensor workspace_tensor = alloc_workspace(0, device);
+
+  auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
+
   if (dtype == torch::kFloat) {
     ACLRT_LAUNCH_KERNEL(complete_blocks_fp32)
     (num_blocks, acl_stream, const_cast<void*>(x.storage().data()),
@@ -219,7 +223,6 @@ at::Tensor run_complete_blocks(const at::Tensor& x, const at::Tensor& sums,
   }
 
   aclrtFree(tiling_device);
-  aclrtSynchronizeStream(acl_stream);
 
   return z;
 }

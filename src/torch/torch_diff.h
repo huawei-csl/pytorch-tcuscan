@@ -27,7 +27,6 @@ namespace tcuscan {
  * @return Return vector so that z[i] = x[i+1] - x[i] where x[-1] = 0
  */
 at::Tensor run_diff(const at::Tensor& x, int64_t max_size) {
-  auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const auto dtype = x.options().dtype();
   const at::Device device = x.options().device();
   // Tiling length must be around 10,000
@@ -52,6 +51,8 @@ at::Tensor run_diff(const at::Tensor& x, int64_t max_size) {
   const DiffTiling tiling{total_length, tile_len};
   uint8_t* tiling_device = alloc_copy_tiling(tiling);
 
+  auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
+
   if (dtype == torch::kHalf) {
     ACLRT_LAUNCH_KERNEL(diff_fp16)
     (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
@@ -65,7 +66,6 @@ at::Tensor run_diff(const at::Tensor& x, int64_t max_size) {
   }
 
   aclrtFree(tiling_device);
-  aclrtSynchronizeStream(acl_stream);
 
   return z;
 }

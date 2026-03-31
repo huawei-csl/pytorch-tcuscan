@@ -156,7 +156,6 @@ at::Tensor run_seg_scan_mc_revert(const at::Tensor& x, const at::Tensor& f,
  * @return Segmented scan of (x, f).
  */
 at::Tensor run_seg_scan(const at::Tensor& x, const at::Tensor& f, int S) {
-  auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();
 
   const uint32_t matmul_size = static_cast<uint32_t>(S);
@@ -172,6 +171,8 @@ at::Tensor run_seg_scan(const at::Tensor& x, const at::Tensor& f, int S) {
       tcuscan::get_workspace_size<int16_t /* half */, int8_t>(tiling);
   const at::Tensor workspace_tensor =
       tcuscan::alloc_workspace(user_workspace_size, device);
+
+  auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
   ACLRT_LAUNCH_KERNEL(seg_scan_single_core)
   (1 /* single core*/, acl_stream, const_cast<void*>(x.storage().data()),
@@ -202,7 +203,6 @@ at::Tensor run_seg_scan(const at::Tensor& x, const at::Tensor& f, int S) {
  */
 at::Tensor run_seg_sum_single_core(const at::Tensor& x,
                                    const at::Tensor& indptr, int s) {
-  auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();
   const auto dtype = x.options().dtype();
   const auto dtype_out =
@@ -222,6 +222,7 @@ at::Tensor run_seg_sum_single_core(const at::Tensor& x,
                                                matmul_size};
   uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
 
+  auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
   if (dtype == torch::kHalf) {
     const uint32_t user_workspace_size =
         tcuscan::get_workspace_size<int16_t /* half */>(tiling);
@@ -266,7 +267,6 @@ at::Tensor run_seg_sum_single_core(const at::Tensor& x,
 at::Tensor run_seg_sum_single_cube(const at::Tensor& x, const at::Tensor& upper,
                                    const at::Tensor& lower_strict,
                                    const at::Tensor& indptr, int s) {
-  auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();
   const auto dtype = x.options().dtype();
   const auto dtype_out =
@@ -283,6 +283,8 @@ at::Tensor run_seg_sum_single_cube(const at::Tensor& x, const at::Tensor& upper,
   const tcuscan::SegSumSingleCubeTiling tiling{total_length, num_segments,
                                                matmul_size};
   uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
+
+  auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
   if (dtype == torch::kHalf) {
     const uint32_t user_workspace_size =

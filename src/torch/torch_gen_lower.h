@@ -30,7 +30,6 @@ namespace tcuscan {
  */
 at::Tensor run_gen_lower(uint32_t matrix_size, const at::Device& device,
                          const torch::Dtype dtype) {
-  auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const uint32_t total_len = matrix_size * matrix_size;
   const at::Tensor z =
       at::empty({matrix_size, matrix_size},
@@ -41,6 +40,9 @@ at::Tensor run_gen_lower(uint32_t matrix_size, const at::Device& device,
 
   const GenLowerTiling tiling{matrix_size, tile_len};
   uint8_t* tiling_device = alloc_copy_tiling(tiling);
+
+  auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
+
   if (dtype == at::kHalf) {
     ACLRT_LAUNCH_KERNEL(gen_lower_fp16)
     (block_dim, acl_stream, const_cast<void*>(z.storage().data()),
@@ -52,7 +54,6 @@ at::Tensor run_gen_lower(uint32_t matrix_size, const at::Device& device,
   }
 
   aclrtFree(tiling_device);
-  aclrtSynchronizeStream(acl_stream);
 
   return z;
 }

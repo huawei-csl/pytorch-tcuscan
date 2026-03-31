@@ -247,7 +247,6 @@ std::tuple<at::Tensor, at::Tensor> run_compress_ind_no_arange(
     const at::Tensor& x, const at::Tensor& mask, int S) {
   const auto ascendc_platform =
       platform_ascendc::PlatformAscendCManager::GetInstance();
-  auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();
   const auto dtype = x.options().dtype();
 
@@ -280,6 +279,7 @@ std::tuple<at::Tensor, at::Tensor> run_compress_ind_no_arange(
   uint8_t* tiling_device = alloc_copy_tiling(tiling);
 
   const at::Tensor workspace_tensor = alloc_workspace(0, device);
+  auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
   if (dtype == torch::kHalf or dtype == torch::kInt16) {
     ACLRT_LAUNCH_KERNEL(compress_ind_no_arange_fp16)
@@ -300,7 +300,6 @@ std::tuple<at::Tensor, at::Tensor> run_compress_ind_no_arange(
   }
 
   aclrtFree(tiling_device);
-  aclrtSynchronizeStream(acl_stream);
 
   return std::make_tuple(z, indices_out);
 }
@@ -342,7 +341,6 @@ at::Tensor run_filter_less_equal(const at::Tensor& x, float pivot, int S) {
 at::Tensor run_where(const at::Tensor& x, float pivot, int S) {
   const auto ascendc_platform =
       platform_ascendc::PlatformAscendCManager::GetInstance();
-  auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();
   const auto dtype = x.options().dtype();
 
@@ -378,6 +376,8 @@ at::Tensor run_where(const at::Tensor& x, float pivot, int S) {
   const WhereTiling tiling{block_dim, total_len, vec_tile_len, pivot};
   uint8_t* tiling_device = alloc_copy_tiling(tiling);
 
+  auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
+
   if (dtype == at::kHalf) {
     ACLRT_LAUNCH_KERNEL(where_fp16)
     (block_dim, acl_stream, const_cast<void*>(mask.storage().data()),
@@ -389,7 +389,6 @@ at::Tensor run_where(const at::Tensor& x, float pivot, int S) {
   }
 
   aclrtFree(tiling_device);
-  aclrtSynchronizeStream(acl_stream);
 
   return z;
 }

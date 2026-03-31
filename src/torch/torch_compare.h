@@ -62,7 +62,6 @@ at::Tensor run_count_if(const at::Tensor& x, float pivot, uint32_t tile_len,
   }
 
   aclrtFree(tiling_device);
-  aclrtSynchronizeStream(acl_stream);
 
   return z;
 }
@@ -77,7 +76,6 @@ at::Tensor run_count_if(const at::Tensor& x, float pivot, uint32_t tile_len,
  */
 at::Tensor run_greater_equal(const at::Tensor& x, float pivot,
                              uint32_t tile_len) {
-  auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();
   const auto dtype = x.options().dtype();
 
@@ -92,6 +90,8 @@ at::Tensor run_greater_equal(const at::Tensor& x, float pivot,
 
   const at::Tensor workspace_tensor = alloc_workspace(0, device);
 
+  auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
+
   if (dtype == at::kHalf) {
     ACLRT_LAUNCH_KERNEL(greater_equal_fp16)
     (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
@@ -102,7 +102,6 @@ at::Tensor run_greater_equal(const at::Tensor& x, float pivot,
   }
 
   aclrtFree(tiling_device);
-  aclrtSynchronizeStream(acl_stream);
 
   return z;
 }
