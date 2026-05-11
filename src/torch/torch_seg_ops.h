@@ -39,7 +39,6 @@ namespace tcuscan {
  * @return Segmented scan of (x, f).
  */
 at::Tensor run_seg_scan_vec(const at::Tensor& x, const at::Tensor& f, int S) {
-  auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();
 
   const uint32_t tile_len = static_cast<uint32_t>(S);
@@ -54,6 +53,8 @@ at::Tensor run_seg_scan_vec(const at::Tensor& x, const at::Tensor& f, int S) {
   const uint32_t user_workspace_size = 0;
   const at::Tensor workspace_tensor =
       tcuscan::alloc_workspace(user_workspace_size, device);
+
+  auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
   ACLRT_LAUNCH_KERNEL(seg_scan_vec_single_core)
   (1 /* single core*/, acl_stream, const_cast<void*>(x.storage().data()),
@@ -111,7 +112,6 @@ at::Tensor run_seg_sum(const at::Tensor& x, const at::Tensor& f, int S) {
  */
 at::Tensor run_seg_scan_mc_revert(const at::Tensor& x, const at::Tensor& f,
                                   const at::Tensor& diff) {
-  auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();
 
   const uint32_t tile_len = 4 * 1024;
@@ -131,6 +131,8 @@ at::Tensor run_seg_scan_mc_revert(const at::Tensor& x, const at::Tensor& f,
   uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
 
   const at::Tensor workspace_tensor = tcuscan::alloc_workspace(0, device);
+
+  auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
   ACLRT_LAUNCH_KERNEL(seg_scan_mc_revert)
   (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
@@ -223,6 +225,7 @@ at::Tensor run_seg_sum_single_core(const at::Tensor& x,
   uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
 
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
+
   if (dtype == torch::kHalf) {
     const uint32_t user_workspace_size =
         tcuscan::get_workspace_size<int16_t /* half */>(tiling);

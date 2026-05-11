@@ -155,7 +155,6 @@ std::tuple<at::Tensor, at::Tensor> run_topk_fp16(const at::Tensor& x,
                                                  float x_max, int S) {
   const auto ascendc_platform =
       platform_ascendc::PlatformAscendCManager::GetInstance();
-  auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();
   const auto dtype = x.options().dtype();
 
@@ -194,6 +193,8 @@ std::tuple<at::Tensor, at::Tensor> run_topk_fp16(const at::Tensor& x,
   tiling.k = k;
 
   uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
+
+  auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
   ACLRT_LAUNCH_KERNEL(topk_fp16)
   (block_dim, acl_stream, const_cast<void*>(x.storage().data()),

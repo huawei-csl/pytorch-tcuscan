@@ -41,7 +41,6 @@ namespace tcuscan {
 at::Tensor run_compress(const at::Tensor& x, const at::Tensor& mask, int S) {
   const auto ascendc_platform =
       platform_ascendc::PlatformAscendCManager::GetInstance();
-  auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();
   const auto dtype = x.options().dtype();
 
@@ -73,6 +72,8 @@ at::Tensor run_compress(const at::Tensor& x, const at::Tensor& mask, int S) {
   const uint32_t user_workspace_size = tcuscan::get_workspace_size(tiling);
   const at::Tensor workspace_tensor =
       alloc_workspace(user_workspace_size, device);
+
+  auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
   if (dtype == torch::kHalf or dtype == torch::kInt16) {
     ACLRT_LAUNCH_KERNEL(compress_with_sums_fp16)
@@ -109,7 +110,6 @@ at::Tensor run_compress_pos(const at::Tensor& x, const at::Tensor& mask,
                             uint32_t output_len, int S) {
   const auto ascendc_platform =
       platform_ascendc::PlatformAscendCManager::GetInstance();
-  auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();
   const auto dtype = x.options().dtype();
 
@@ -137,6 +137,8 @@ at::Tensor run_compress_pos(const at::Tensor& x, const at::Tensor& mask,
   const uint32_t user_workspace_size = tcuscan::get_workspace_size(tiling);
   const at::Tensor workspace_tensor =
       alloc_workspace(user_workspace_size, device);
+
+  auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
   if (dtype == torch::kHalf or dtype == torch::kInt16) {
     ACLRT_LAUNCH_KERNEL(compress_fp16)
@@ -172,7 +174,6 @@ std::tuple<at::Tensor, at::Tensor> run_compress_ind(
     int S) {
   const auto ascendc_platform =
       platform_ascendc::PlatformAscendCManager::GetInstance();
-  auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();
   const auto dtype = x.options().dtype();
   const auto indices_dtype = indices_in.options().dtype();
@@ -208,6 +209,8 @@ std::tuple<at::Tensor, at::Tensor> run_compress_ind(
   const uint32_t user_workspace_size = tcuscan::get_workspace_size(tiling);
   const at::Tensor workspace_tensor =
       alloc_workspace(user_workspace_size, device);
+
+  auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
   if (dtype == torch::kHalf or dtype == torch::kInt16) {
     ACLRT_LAUNCH_KERNEL(compress_ind_fp16)
@@ -279,6 +282,7 @@ std::tuple<at::Tensor, at::Tensor> run_compress_ind_no_arange(
   uint8_t* tiling_device = alloc_copy_tiling(tiling);
 
   const at::Tensor workspace_tensor = alloc_workspace(0, device);
+
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
   if (dtype == torch::kHalf or dtype == torch::kInt16) {

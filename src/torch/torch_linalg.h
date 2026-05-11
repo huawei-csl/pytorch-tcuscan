@@ -56,7 +56,7 @@ at::Tensor run_tri_inv_col_sweep(const at::Tensor& x) {
                                        num_out_tiles};
   uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
 
-  auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
+  auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
   if (dtype == torch::kHalf) {
     ACLRT_LAUNCH_KERNEL(tri_inv_col_sweep_fp16)
     (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
