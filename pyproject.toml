@@ -9,8 +9,7 @@ requires = [
   "psutil==6.1.0",
   "PyYAML==6.0.2",
   "attrs==24.2.0",
-  "torch @ https://download.pytorch.org/whl/cpu/torch-2.9.0%2Bcpu-cp310-cp310-manylinux_2_28_x86_64.whl#sha256=bd2a257e670ede9fc01c6d76dccdc473040913b8e9328169bf177dbdc38e2484",
-  "torch_npu==2.9.0",
+  "torch-npu==2.9.0.post2",
 ]
 build-backend = "scikit_build_core.build"
 
@@ -43,8 +42,7 @@ dependencies = [
 
 [project.optional-dependencies]
 torch = [
-  "torch @ https://download.pytorch.org/whl/cpu/torch-2.9.0%2Bcpu-cp310-cp310-manylinux_2_28_x86_64.whl#sha256=bd2a257e670ede9fc01c6d76dccdc473040913b8e9328169bf177dbdc38e2484",
-  "torch_npu==2.9.0",
+  "torch-npu==2.9.0.post2",
 ]
 
 [tool.scikit-build]
