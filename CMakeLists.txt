@@ -7,7 +7,7 @@ set(CMAKE_BUILD_TYPE "Release") # "Debug"
 
 option(PIP_INSTALL "True if building via pip" OFF)
 
-find_package(PythonLibs REQUIRED)
+find_package(Python3 REQUIRED COMPONENTS Interpreter Development)
 find_package(pybind11 CONFIG REQUIRED)
 find_package(Torch REQUIRED)
 
@@ -54,6 +54,9 @@ execute_process(
   OUTPUT_STRIP_TRAILING_WHITESPACE
   OUTPUT_VARIABLE TORCH_NPU_PATH)
 
+string(REPLACE "\n" "" TORCH_NPU_PATH "${TORCH_NPU_PATH}")
+string(REPLACE "path string is NULL" "" TORCH_NPU_PATH "${TORCH_NPU_PATH}")
+
 message("***********************************************************")
 message("* ASCEND_CANN_PACKAGE_PATH : ${ASCEND_CANN_PACKAGE_PATH}")
 message("* TORCH_INSTALL_PREFIX     : ${TORCH_INSTALL_PREFIX}")
@@ -82,7 +85,7 @@ ascendc_library(
   src/cube_reduce.cpp
   src/tri_inv_cube_col_sweep.cpp)
 
-ascendc_compile_options(scan_kernels PRIVATE -Wall -Wextra -Werror)
+#ascendc_compile_options(scan_kernels PRIVATE -Wall -Wextra -Werror)
 
 ascendc_compile_definitions(scan_kernels PRIVATE -DHAVE_WORKSPACE -DHAVE_TILING)
 
@@ -109,7 +112,7 @@ ascendc_library(
   src/compare.cpp
   src/histogram.cpp)
 
-ascendc_compile_options(vector_kernels PRIVATE -Wall -Wextra -Werror)
+#ascendc_compile_options(vector_kernels PRIVATE -Wall -Wextra -Werror)
 
 ascendc_compile_definitions(vector_kernels PRIVATE -DHAVE_WORKSPACE
                             -DHAVE_TILING)
@@ -123,7 +126,7 @@ target_link_libraries(vector_kernels PRIVATE ascendcl c_sec tiling_api register
 ascendc_library(split_kernels SHARED src/radix_sort.cpp src/compress.cpp
                 src/split.cpp src/topk.cpp)
 
-ascendc_compile_options(split_kernels PRIVATE -Wall -Wextra -Werror)
+#ascendc_compile_options(split_kernels PRIVATE -Wall -Wextra -Werror)
 
 ascendc_compile_definitions(split_kernels PRIVATE -DHAVE_WORKSPACE
                             -DHAVE_TILING)

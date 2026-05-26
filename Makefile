@@ -1,4 +1,4 @@
-.PHONY: all clean setup_ci setup_once setup_once_aarch64 build test profile
+.PHONY: all clean setup_once setup_once_aarch64 build test profile
 
 DENSITY?=0.001
 LOCAL_SPARSE_MATRIX_NAME?='Williams/pdb1HYS/pdb1HYS'
@@ -7,14 +7,7 @@ FULL_SPARSE_MATRIX_PATH=${BASE_SPARSE_MATRIX_PATH}/${LOCAL_SPARSE_MATRIX_NAME}
 PROFILING_SCRIPTS_PATH=scripts/profiling/
 CONDA_ENV_NAME="pytorch_tcuscan"
 
-TORCH_NPU_URL=https://gitcode.com/Ascend/pytorch/releases/download
-PT_WHEEL_NAME=torch_npu-2.9.0.post2-cp310-cp310-manylinux_2_28_x86_64.whl
-PT_WHEEL_URL=${TORCH_NPU_URL}/v26.0.0-pytorch2.9.0/${PT_WHEEL_NAME}
-
-
-PT_WHEEL_AARCH_NAME=torch_npu-2.9.0.post2-cp310-cp310-manylinux_2_28_aarch64.whl
-PT_WHEEL_AARCH_URL=${TORCH_NPU_URL}/v26.0.0-pytorch2.9.0/${PT_WHEEL_AARCH_NAME}
-
+TORCH_NPU_VER=torch_npu-2.9.0.post2
 
 ASCEND_DEVICE=Ascend910B4
 DEVICE_TYPE?=npu
@@ -24,9 +17,6 @@ all: build test
 clean:
 	rm -rf build/ tests/__pycache__/
 	rm -f *.so
-
-setup_ci:
-	pip3 install --cache-dir=/scratch/TCUSCAN/wheels/ -r requirements.txt
 
 install_in_local_conda_env: create_conda_env
 	conda run -n ${CONDA_ENV_NAME} ./build.sh -v ${ASCEND_DEVICE}
@@ -39,19 +29,16 @@ create_conda_env:
 	# PyTorch Ascend requires cmake >= 3.18
 	conda install -y cmake -n ${CONDA_ENV_NAME}
 	conda run -n ${CONDA_ENV_NAME} pip3 install -r requirements.txt
-	wget -nc ${PT_WHEEL_URL}
-	conda run -n ${CONDA_ENV_NAME} pip3 install ${PT_WHEEL_NAME} --extra-index-url https://download.pytorch.org/whl/cpu
+	conda run -n ${CONDA_ENV_NAME} pip3 install ${TORCH_NPU_VER} --extra-index-url https://download.pytorch.org/whl/cpu
 
 setup_once:
 	pip3 install -r requirements.txt
-	wget -nc ${PT_WHEEL_URL}
-	pip3 install --force-reinstall ${PT_WHEEL_NAME} --extra-index-url https://download.pytorch.org/whl/cpu
+	pip3 install --force-reinstall ${TORCH_NPU_VER} --extra-index-url https://download.pytorch.org/whl/cpu
 
 # For 910B2 experiments, you need to update the L2_SIZE (constexpr) and SOC_VERSION (const static char*) in the code
 setup_once_aarch64:
 	pip3 install -r requirements.txt
-	wget -nc ${PT_WHEEL_AARCH_URL}
-	pip3 install --force-reinstall  ${PT_WHEEL_AARCH_NAME}
+	pip3 install --force-reinstall  ${TORCH_NPU_VER}
 
 clang_tidy: build_tidy
 	python3 ./scripts/ci/run-clang-tidy.py -j 1 -p build/ src/
