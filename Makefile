@@ -8,12 +8,12 @@ PROFILING_SCRIPTS_PATH=scripts/profiling/
 CONDA_ENV_NAME="pytorch_tcuscan"
 
 TORCH_NPU_URL=https://gitcode.com/Ascend/pytorch/releases/download
-PT_WHEEL_NAME=torch_npu-2.9.0-cp310-cp310-manylinux_2_28_x86_64.whl
-PT_WHEEL_URL=${TORCH_NPU_URL}/v7.3.0-pytorch2.9.0/${PT_WHEEL_NAME}
+PT_WHEEL_NAME=torch_npu-2.9.0.post2-cp310-cp310-manylinux_2_28_x86_64.whl
+PT_WHEEL_URL=${TORCH_NPU_URL}/v26.0.0-pytorch2.9.0/${PT_WHEEL_NAME}
 
 
-PT_WHEEL_AARCH_NAME=torch_npu-2.9.0-cp310-cp310-manylinux_2_28_aarch64.whl
-PT_WHEEL_AARCH_URL=${TORCH_NPU_URL}/v7.3.0-pytorch2.9.0/${PT_WHEEL_AARCH_NAME}
+PT_WHEEL_AARCH_NAME=torch_npu-2.9.0.post2-cp310-cp310-manylinux_2_28_aarch64.whl
+PT_WHEEL_AARCH_URL=${TORCH_NPU_URL}/v26.0.0-pytorch2.9.0/${PT_WHEEL_AARCH_NAME}
 
 
 ASCEND_DEVICE=Ascend910B4

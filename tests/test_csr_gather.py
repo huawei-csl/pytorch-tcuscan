@@ -54,8 +54,8 @@ def ref_csr_gather(input_values, input_cols, input_x):
     return input_values * input_x[input_cols]
 
 
-def _test_tcuscan_csr_gather(col_len, x_len):
-    input_values = torch.randn(col_len, dtype=torch.float16, device=NPU_DEVICE)
+def _test_tcuscan_csr_gather(col_len, x_len: int, in_dtype: torch.dtype):
+    input_values = torch.randn(col_len, dtype=in_dtype, device=NPU_DEVICE)
     input_cols = torch.randint(
         low=0, high=x_len, size=(col_len,), dtype=torch.int32, device=NPU_DEVICE
     )
@@ -63,7 +63,7 @@ def _test_tcuscan_csr_gather(col_len, x_len):
         low=0, high=x_len, size=(x_len,), dtype=torch.int32, device=NPU_DEVICE
     )
     input_rows = torch.cumsum(input_rows, dim=-1)
-    input_x = torch.randn(x_len, dtype=torch.float16, device=NPU_DEVICE)
+    input_x = torch.randn(x_len, dtype=in_dtype, device=NPU_DEVICE)
 
     expected = ref_csr_gather(input_values, input_cols, input_x)
     torch.npu.synchronize()
@@ -76,11 +76,15 @@ def _test_tcuscan_csr_gather(col_len, x_len):
 
 @pytest.mark.parametrize("col_len", _CSR_GATHER_SIZES)
 @pytest.mark.parametrize("x_len", _X_LENS)
-def test_tcuscan_csr_gather(col_len: int, x_len: int):
-    _test_tcuscan_csr_gather(col_len, x_len)
+@pytest.mark.parametrize("dtype", [torch.int16, torch.float16], ids=str)
+def test_tcuscan_csr_gather(col_len: int, x_len: int, dtype: torch.dtype):
+    _test_tcuscan_csr_gather(col_len, x_len, dtype)
 
 
 @pytest.mark.parametrize("col_len", get_profiling_lengths())
 @pytest.mark.parametrize("x_len", _X_LENS)
-def test_tcuscan_csr_gather_profiling_lens(col_len: int, x_len: int):
-    _test_tcuscan_csr_gather(col_len, x_len)
+@pytest.mark.parametrize("dtype", [torch.int16, torch.float16], ids=str)
+def test_tcuscan_csr_gather_profiling_lens(
+    col_len: int, x_len: int, dtype: torch.dtype
+):
+    _test_tcuscan_csr_gather(col_len, x_len, dtype)

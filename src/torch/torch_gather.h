@@ -13,7 +13,8 @@
 #include "../tiling/tiling_csr_gather.h"
 #include "../tiling/tiling_gather_spmv.h"
 #include "../tiling/tiling_mc_gather.h"
-#include "aclrtlaunch_csr_gather.h"
+#include "aclrtlaunch_csr_gather_fp16.h"
+#include "aclrtlaunch_csr_gather_int16.h"
 #include "aclrtlaunch_gather_spmv.h"
 #include "aclrtlaunch_mc_gather_fp16.h"
 #include "aclrtlaunch_mc_gather_fp32.h"
@@ -94,6 +95,7 @@ at::Tensor run_csr_gather(const at::Tensor& values, const at::Tensor& cols,
       platform_ascendc::PlatformAscendCManager::GetInstance();
   const uint32_t max_aiv_cores = ascendc_platform->GetCoreNumAiv();
   const at::Device device = x.options().device();
+  const auto dtype = values.options().dtype();
 
   const at::Tensor z = at::empty_like(values);
   const at::Tensor workspace_tensor = alloc_workspace(0, device);
@@ -116,12 +118,23 @@ at::Tensor run_csr_gather(const at::Tensor& values, const at::Tensor& cols,
 
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
-  ACLRT_LAUNCH_KERNEL(csr_gather)
-  (block_dim, acl_stream, const_cast<void*>(values.storage().data()),
-   const_cast<void*>(cols.storage().data()),
-   const_cast<void*>(rows.storage().data()),
-   const_cast<void*>(x.storage().data()), const_cast<void*>(z.storage().data()),
-   const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+  if (dtype == torch::kHalf) {
+    ACLRT_LAUNCH_KERNEL(csr_gather_fp16)
+    (block_dim, acl_stream, const_cast<void*>(values.storage().data()),
+     const_cast<void*>(cols.storage().data()),
+     const_cast<void*>(rows.storage().data()),
+     const_cast<void*>(x.storage().data()),
+     const_cast<void*>(z.storage().data()),
+     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+  } else if (dtype == torch::kInt16) {
+    ACLRT_LAUNCH_KERNEL(csr_gather_int16)
+    (block_dim, acl_stream, const_cast<void*>(values.storage().data()),
+     const_cast<void*>(cols.storage().data()),
+     const_cast<void*>(rows.storage().data()),
+     const_cast<void*>(x.storage().data()),
+     const_cast<void*>(z.storage().data()),
+     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+  }
 
   aclrtFree(tiling_device);
   aclrtSynchronizeStream(acl_stream);
