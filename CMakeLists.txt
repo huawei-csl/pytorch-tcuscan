@@ -7,6 +7,7 @@ set(CMAKE_BUILD_TYPE "Release") # "Debug"
 
 option(PIP_INSTALL "True if building via pip" OFF)
 
+find_package(Python3 EXACT REQUIRED COMPONENTS Interpreter Development)
 find_package(PythonLibs REQUIRED)
 find_package(pybind11 CONFIG REQUIRED)
 find_package(Torch REQUIRED)
