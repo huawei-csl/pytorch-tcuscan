@@ -162,6 +162,7 @@ class KernelCSRGather {
 /**
  * @brief Run the `csr_gather` kernel.
  *
+ * @tparam InputT Input datatype. Supports `half` and `int16_t`.
  * @tparam ForceMixMode Indicates if kernel should schedule dummy cube
  * operations to make sure it runs in mix mode. Can be safely set to `false`
  * when running inside another mix mode kernel.
@@ -176,7 +177,7 @@ class KernelCSRGather {
  * @param [in] x_in_len Length of the input x vector.
  * @param [in] tile_len Length of the tile processed in a single iteration.
  */
-template <bool ForceMixMode = true>
+template <typename InputT, bool ForceMixMode = true>
 __aicore__ inline void run_csr_gather(GM_ADDR values_in, GM_ADDR cols_in,
                                       GM_ADDR rows_in, GM_ADDR x_in,
                                       GM_ADDR z_out, uint32_t values_in_len,
@@ -187,9 +188,17 @@ __aicore__ inline void run_csr_gather(GM_ADDR values_in, GM_ADDR cols_in,
   }
 
   if ASCEND_IS_AIV {
-    KernelCSRGather<half> op(values_in_len, rows_in_len, x_in_len, tile_len);
-    op.Init(values_in, cols_in, rows_in, x_in, z_out);
-    op.Process();
+    if constexpr (std::is_same_v<InputT, half>) {
+      KernelCSRGather<half> op(values_in_len, rows_in_len, x_in_len, tile_len);
+      op.Init(values_in, cols_in, rows_in, x_in, z_out);
+      op.Process();
+    }
+    if constexpr (std::is_same_v<InputT, int16_t>) {
+      KernelCSRGather<int16_t> op(values_in_len, rows_in_len, x_in_len,
+                                  tile_len);
+      op.Init(values_in, cols_in, rows_in, x_in, z_out);
+      op.Process();
+    }
   }
 }
 
