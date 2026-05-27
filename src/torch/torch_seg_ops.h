@@ -19,6 +19,7 @@
 #include "aclrtlaunch_seg_scan_mc_revert.h"
 #include "aclrtlaunch_seg_scan_single_core.h"
 #include "aclrtlaunch_seg_scan_vec_single_core.h"
+#include "aclrtlaunch_seg_sum_multi_core_fp16.h"
 #include "aclrtlaunch_seg_sum_single_core_fp16.h"
 #include "aclrtlaunch_seg_sum_single_core_int8.h"
 #include "aclrtlaunch_seg_sum_single_cube_fp16.h"
@@ -333,10 +334,17 @@ at::Tensor run_seg_sum_multi_core(const at::Tensor& x, const at::Tensor& indptr,
   const auto dtype_out =
       dtype == torch::kHalf ? torch::kFloat32 : torch::kInt32;
 
-  constexpr uint32_t BLOCK_DIM = 1;  // single core
   const uint32_t matmul_size = static_cast<uint32_t>(s);
   const uint32_t total_length = x.numel();
   const uint32_t num_segments = indptr.numel();
+
+  const uint32_t l = host_utils::CeilDiv(total_length, block_dim);
+
+  const at::Tensor sstart =
+      torch::arange(0, std::min(block_dim * l, total_length), l,
+                    at::TensorOptions().dtype(torch::kInt32).device(device));
+  const at::Tensor bstart =
+      torch::searchsorted(indptr, sstart, /*right=*/false);
 
   const at::Tensor z = at::empty(
       {num_segments}, at::TensorOptions().dtype(dtype_out).device(device));
@@ -352,20 +360,10 @@ at::Tensor run_seg_sum_multi_core(const at::Tensor& x, const at::Tensor& indptr,
     const at::Tensor workspace_tensor =
         tcuscan::alloc_workspace(user_workspace_size, device);
 
-    ACLRT_LAUNCH_KERNEL(seg_sum_single_core_fp16)
-    (BLOCK_DIM, acl_stream, const_cast<void*>(x.storage().data()),
+    ACLRT_LAUNCH_KERNEL(seg_sum_multi_core_fp16)
+    (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
      const_cast<void*>(indptr.storage().data()),
-     const_cast<void*>(z.storage().data()),
-     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
-  } else {
-    const uint32_t user_workspace_size =
-        tcuscan::get_workspace_size<int8_t>(tiling);
-
-    const at::Tensor workspace_tensor =
-        tcuscan::alloc_workspace(user_workspace_size, device);
-    ACLRT_LAUNCH_KERNEL(seg_sum_single_core_int8)
-    (BLOCK_DIM, acl_stream, const_cast<void*>(x.storage().data()),
-     const_cast<void*>(indptr.storage().data()),
+     const_cast<void*>(bstart.storage().data()),
      const_cast<void*>(z.storage().data()),
      const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   }

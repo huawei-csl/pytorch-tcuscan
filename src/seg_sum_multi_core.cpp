@@ -7,10 +7,9 @@
 
 #include "kernels/constants.h"
 #include "kernels/kernel_pad.h"
-#include "kernels/kernel_row_scan.h"
-#include "kernels/kernel_seg_sum_vec_revert.h"
+#include "kernels/kernel_seg_sum_single_core.h"
 #include "kernels/tcuscan_utils.h"
-#include "tiling/tiling_seg_sum_single_core.h"
+#include "tiling/tiling_seg_sum_multi_core.h"
 
 using namespace AscendC;
 using namespace tcuscan;
@@ -45,13 +44,12 @@ __aicore__ inline void run_seg_sum_multi_core(
   GM_ADDR const padded_input = workspace;
   GM_ADDR const spec_block_scan = workspace + pad_size;
 
-  const uint32_t num_blocks = GetBlockNum();
+  const uint32_t num_blocks = AscendC::GetBlockNum();
   const uint32_t ell = scalar::CeilDiv(vec_len, num_blocks);
 
-  const auto id = GetBlockId();
-  const uint32_t p = scalar::GetGMValue<int32_t>(bstart_in, id, GetBlockNum());
-  const uint32_t q =
-      scalar::GetGMValue<int32_t>(bstart_in, id + 1, GetBlockNum());
+  const auto id = AscendC::GetBlockIdx();
+  const uint32_t p = scalar::GetGMValue<int32_t>(bstart_in, id, num_blocks);
+  const uint32_t q = scalar::GetGMValue<int32_t>(bstart_in, id + 1, num_blocks);
 
   const uint32_t s = id * ell;
   const uint32_t e = (id + 1) * ell > vec_len ? vec_len : (id + 1) * ell;
