@@ -76,12 +76,15 @@ def _test_tcuscan_spmv(nnr: int, s: int, density: float, dtype: torch.dtype):
         actual.shape == expected.shape
     ), f"Output shape mismatch. Got {actual.shape}. Expected {expected.shape}"
 
+    expected_dtype = torch.float32 if dtype == torch.float16 else torch.int32
+    assert actual.dtype == expected_dtype
+
     assert torch.allclose(
         actual_cpu.float(), expected, atol=1e-01
     ), f"Error spmv ({expected.dtype}). s={s}"
 
 
-@pytest.mark.parametrize("s", [128])
+@pytest.mark.parametrize("s", [32, 64, 128])
 @pytest.mark.parametrize("density", [0.01, 0.001, 0.0001])
 @pytest.mark.parametrize("nrow", _NROW)
 @pytest.mark.parametrize("dtype", [torch.int8, torch.float16], ids=str)
