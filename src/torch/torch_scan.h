@@ -186,6 +186,7 @@ at::Tensor run_scan_batch(const at::Tensor& x, int S) {
 at::Tensor run_scan_multi_core(const at::Tensor& x, int S) {
   const auto ascendc_platform =
       platform_ascendc::PlatformAscendCManager::GetInstance();
+  auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
   const at::Device device = x.options().device();
   const auto dtype = x.options().dtype();
   const auto dtype_out = dtype == torch::kHalf || dtype == torch::kFloat32
@@ -213,8 +214,6 @@ at::Tensor run_scan_multi_core(const at::Tensor& x, int S) {
   const MultiCoreScanTiling tiling{block_dim, total_length, matmul_size,
                                    l2_cache_size};
   uint8_t* tiling_device = alloc_copy_tiling(tiling);
-
-  auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
   if (dtype == torch::kHalf) {
     const uint32_t user_workspace_size =
