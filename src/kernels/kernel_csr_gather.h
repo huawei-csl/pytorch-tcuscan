@@ -200,6 +200,11 @@ __aicore__ inline void run_csr_gather(GM_ADDR values_in, GM_ADDR cols_in,
       op.Init(values_in, cols_in, rows_in, x_in, z_out);
       op.Process();
     }
+    if constexpr (std::is_same_v<InputT, float>) {
+      KernelCSRGather<float> op(values_in_len, rows_in_len, x_in_len, tile_len);
+      op.Init(values_in, cols_in, rows_in, x_in, z_out);
+      op.Process();
+    }
   }
 }
 
