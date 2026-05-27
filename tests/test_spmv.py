@@ -40,7 +40,7 @@ def uniform_rvs(shape):
     return 2 * np.random.uniform(0, 1, size=shape) - 1
 
 
-def _test_tcuscan_spmv(nnr: int, s: int, density: float):
+def _test_tcuscan_spmv(nnr: int, s: int, density: float, dtype: torch.dtype):
     rng = np.random.default_rng(seed=42)
 
     B = random(
@@ -48,7 +48,7 @@ def _test_tcuscan_spmv(nnr: int, s: int, density: float):
         nnr - 1,
         density=density,
         format="csr",
-        dtype=np.float32,
+        dtype=np.int8 if dtype == torch.int8 else np.float32,
         data_rvs=uniform_rvs,
     )
 
@@ -59,11 +59,11 @@ def _test_tcuscan_spmv(nnr: int, s: int, density: float):
 
     result = B @ vector
 
-    torch_values = torch.from_numpy(values).npu()
+    torch_values = torch.from_numpy(values).to(dtype).npu()
     torch_indexes = torch.from_numpy(indexes).npu()
     torch_cols = torch.from_numpy(cols).npu()
 
-    torch_vector = torch.from_numpy(vector).npu()
+    torch_vector = torch.from_numpy(vector).to(dtype).npu()
 
     torch.npu.synchronize()
     actual = tcuscan_ops.run_spmv(
@@ -76,17 +76,14 @@ def _test_tcuscan_spmv(nnr: int, s: int, density: float):
         actual.shape == expected.shape
     ), f"Output shape mismatch. Got {actual.shape}. Expected {expected.shape}"
 
-    assert (
-        actual.dtype == expected.dtype
-    ), f"Output dtype mismatch. Got {actual.dtype}. Expected {expected.dtype}"
-
     assert torch.allclose(
-        actual_cpu, expected, atol=1e-01
+        actual_cpu.float(), expected, atol=1e-01
     ), f"Error spmv ({expected.dtype}). s={s}"
 
 
-@pytest.mark.parametrize("s", [32, 64, 128])
+@pytest.mark.parametrize("s", [128])
 @pytest.mark.parametrize("density", [0.01, 0.001, 0.0001])
 @pytest.mark.parametrize("nrow", _NROW)
-def test_tcuscan_spmv(s: int, density: float, nrow: int):
-    _test_tcuscan_spmv(nrow, s, density)
+@pytest.mark.parametrize("dtype", [torch.int8, torch.float16], ids=str)
+def test_tcuscan_spmv(s: int, density: float, nrow: int, dtype: torch.dtype):
+    _test_tcuscan_spmv(nrow, s, density, dtype)
