@@ -88,6 +88,6 @@ def _test_tcuscan_spmv(nnr: int, s: int, density: float, dtype: torch.dtype):
 @pytest.mark.parametrize("s", [32, 64, 128])
 @pytest.mark.parametrize("density", [0.01, 0.001, 0.0001])
 @pytest.mark.parametrize("nrow", _NROW)
-@pytest.mark.parametrize("dtype", [torch.int8, torch.float16], ids=str)
+@pytest.mark.parametrize("dtype", [torch.int16, torch.float16], ids=str)
 def test_tcuscan_spmv(s: int, density: float, nrow: int, dtype: torch.dtype):
     _test_tcuscan_spmv(nrow, s, density, dtype)
