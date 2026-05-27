@@ -37,25 +37,26 @@ _NROW = [
 
 
 def uniform_rvs(shape):
-    return 2 * np.random.uniform(0, 1, size=shape) - 1
+    return 6 * np.random.uniform(0, 1, size=shape) - 1
 
 
 def _test_tcuscan_spmv(nnr: int, s: int, density: float, dtype: torch.dtype):
     rng = np.random.default_rng(seed=42)
+    out_dtype = np.int32 if dtype == torch.int16 else np.float32
 
     B = random(
         nnr - 1,
         nnr - 1,
         density=density,
         format="csr",
-        dtype=np.int8 if dtype == torch.int8 else np.float32,
+        dtype=out_dtype,
         data_rvs=uniform_rvs,
     )
 
-    values = (B.data).astype(np.float16)
+    values = (B.data).astype(out_dtype)
     indexes = (B.indptr).astype(np.uint32)
     cols = (B.indices).astype(np.uint32)
-    vector = rng.uniform(1, 9, nnr - 1).astype(np.float16)
+    vector = rng.uniform(1, 9, nnr - 1).astype(out_dtype)
 
     result = B @ vector
 
@@ -80,7 +81,7 @@ def _test_tcuscan_spmv(nnr: int, s: int, density: float, dtype: torch.dtype):
     assert actual.dtype == expected_dtype
 
     assert torch.allclose(
-        actual_cpu.float(), expected, atol=1e-01
+        actual_cpu, expected, atol=1e-01
     ), f"Error spmv ({expected.dtype}). s={s}"
 
 

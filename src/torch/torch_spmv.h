@@ -68,10 +68,8 @@ at::Tensor run_spmv(const at::Tensor& vals, const at::Tensor& idx,
 
   const auto dtype = vals.options().dtype();
   at::Tensor product;
-  if (dtype == torch::kInt8) {
-    product = tcuscan::run_csr_gather(vals.to(torch::kInt16), cols, idx,
-                                      x.to(torch::kInt16))
-                  .to(torch::kInt8);
+  if (dtype == torch::kInt16) {
+    product = tcuscan::run_csr_gather(vals, cols, idx, x).to(torch::kInt8);
   } else {
     product = tcuscan::run_csr_gather(vals, cols, idx, x);
   }
