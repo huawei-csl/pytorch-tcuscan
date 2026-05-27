@@ -7,13 +7,13 @@ AscendC TCUSCAN operators (scan, sort, split, top-k, compress, etc) using the Cu
 
 ```bash
 export CMAKE_GENERATOR="Unix Makefiles"
-pip install -v ssh://git@szv-open.codehub.huawei.com:2222/innersource/tcuscan_G/pytorch-tcuscan.git
+pip install -v ssh://git@szv-open.codehub.huawei.com:2222/innersource/tcuscan_G/pytorch-tcuscan.git --extra-index-url https://download.pytorch.org/whl/cpu
 ```
 
 Or clone the repository and run:
 ```bash
 export CMAKE_GENERATOR="Unix Makefiles"
-pip install -v
+pip install -v . --extra-index-url https://download.pytorch.org/whl/cpu
 ```
 
 Then, inside Python, type `import tcuscan`.
