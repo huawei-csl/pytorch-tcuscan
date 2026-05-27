@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 # coding=utf-8
 #
-# Copyright (C) 2023-2024. Huawei Technologies Co., Ltd. All rights reserved.
+# Copyright (C) 2023-2026. Huawei Technologies Co., Ltd. All rights reserved.
 #
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -76,14 +76,14 @@ def _test_tcuscan_csr_gather(col_len, x_len: int, in_dtype: torch.dtype):
 
 @pytest.mark.parametrize("col_len", _CSR_GATHER_SIZES)
 @pytest.mark.parametrize("x_len", _X_LENS)
-@pytest.mark.parametrize("dtype", [torch.int16, torch.float16], ids=str)
+@pytest.mark.parametrize("dtype", [torch.int16, torch.float16, torch.float32], ids=str)
 def test_tcuscan_csr_gather(col_len: int, x_len: int, dtype: torch.dtype):
     _test_tcuscan_csr_gather(col_len, x_len, dtype)
 
 
 @pytest.mark.parametrize("col_len", get_profiling_lengths())
 @pytest.mark.parametrize("x_len", _X_LENS)
-@pytest.mark.parametrize("dtype", [torch.int16, torch.float16], ids=str)
+@pytest.mark.parametrize("dtype", [torch.int16, torch.float16, torch.float32], ids=str)
 def test_tcuscan_csr_gather_profiling_lens(
     col_len: int, x_len: int, dtype: torch.dtype
 ):
