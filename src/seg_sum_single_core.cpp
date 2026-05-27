@@ -21,6 +21,8 @@ namespace tcuscan {
  * @brief Run the `seg_sum_single_core` kernel.
  *
  * @tparam T input data type
+ * @tparam UseAtomicWrite If true, the output is written using atomic-add
+ * semantics.
  *
  * @param [in] vec_in Pointer to the input vector.
  * @param [in] upper Pointer to an upper-triangular all-ones square matrix of
@@ -32,7 +34,7 @@ namespace tcuscan {
  * @param [in] num_segments Number of segments.
  * @param [in] tile_len Tile length.
  */
-template <typename T>
+template <typename T, bool UseAtomicWrite = false>
 __aicore__ inline void run_seg_sum_single_core(
     GM_ADDR vec_in, GM_ADDR upper, GM_ADDR segm_ind_in, GM_ADDR vec_out,
     GM_ADDR workspace, uint32_t vec_len, uint32_t num_segments,
@@ -57,7 +59,8 @@ __aicore__ inline void run_seg_sum_single_core(
   }
 
   if ASCEND_IS_AIV {
-    KernelSegSumVecRevert<OutputT, true> op(vec_len, num_segments, tile_len);
+    KernelSegSumVecRevert<OutputT, true, UseAtomicWrite> op(
+        vec_len, num_segments, tile_len);
     op.Init(spec_block_scan, segm_ind_in, vec_out);
     op.Process();
   }
