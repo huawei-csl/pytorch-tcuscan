@@ -20,7 +20,7 @@ namespace tcuscan {
  * [1] Segmented Operations for Sparse Matrix Computation on Vector
  * Multiprocessors: https://dl.acm.org/doi/10.5555/865221.
  */
-template <typename DataType>
+template <typename T>
 class KernelCSRGather {
   constexpr static uint32_t BUFFER_NUM = 2;
 
@@ -57,18 +57,18 @@ class KernelCSRGather {
   __aicore__ inline void Init(GM_ADDR values_in, GM_ADDR cols_in,
                               GM_ADDR rows_in, GM_ADDR x_in, GM_ADDR z_out) {
     // CSR Matrix (values, columns, row_ptr)
-    global_values_.SetGlobalBuffer((__gm__ DataType*)values_in, values_in_len_);
+    global_values_.SetGlobalBuffer((__gm__ T*)values_in, values_in_len_);
     global_cols_.SetGlobalBuffer((__gm__ uint32_t*)cols_in, values_in_len_);
     global_rows_.SetGlobalBuffer((__gm__ uint32_t*)rows_in, rows_in_len_);
 
-    global_x_.SetGlobalBuffer((__gm__ DataType*)x_in, x_in_len_);
-    global_z_.SetGlobalBuffer((__gm__ DataType*)z_out, values_in_len_);
+    global_x_.SetGlobalBuffer((__gm__ T*)x_in, x_in_len_);
+    global_z_.SetGlobalBuffer((__gm__ T*)z_out, values_in_len_);
 
-    pipe.InitBuffer(values_q_, BUFFER_NUM, tile_len_ * sizeof(DataType));
+    pipe.InitBuffer(values_q_, BUFFER_NUM, tile_len_ * sizeof(T));
     pipe.InitBuffer(cols_q_, BUFFER_NUM, tile_len_ * sizeof(uint32_t));
     pipe.InitBuffer(rows_q_, BUFFER_NUM, tile_len_ * sizeof(uint32_t));
-    pipe.InitBuffer(x_q_, 1, x_in_len_ * sizeof(DataType));
-    pipe.InitBuffer(output_q_, BUFFER_NUM, tile_len_ * sizeof(DataType));
+    pipe.InitBuffer(x_q_, 1, x_in_len_ * sizeof(T));
+    pipe.InitBuffer(output_q_, BUFFER_NUM, tile_len_ * sizeof(T));
 
     pipe.InitBuffer(tbuf_, tile_len_ * sizeof(uint32_t));
   }
@@ -87,7 +87,7 @@ class KernelCSRGather {
 
     // Read whole vector x
     copy::CopyGmToVec(x_q_, global_x_, x_in_len_);
-    x_lt_ = x_q_.DeQue<DataType>();
+    x_lt_ = x_q_.DeQue<T>();
 
     for (uint32_t tile_idx = 0; tile_idx < num_tiles_to_process; tile_idx++) {
       const bool is_full_tile = gm_offset + tile_len_ <= values_in_len_;
@@ -107,7 +107,7 @@ class KernelCSRGather {
       gm_offset += tile_len_;
     }
 
-    x_q_.FreeTensor<DataType>(x_lt_);
+    x_q_.FreeTensor<T>(x_lt_);
   }
 
   /**
@@ -118,18 +118,19 @@ class KernelCSRGather {
    */
   __aicore__ inline void ProcessTile(uint32_t num_elems) {
     LocalTensor<uint32_t> cols_lt = cols_q_.DeQue<uint32_t>();
-    LocalTensor<DataType> z_lt = output_q_.AllocTensor<DataType>();
+    LocalTensor<T> z_lt = output_q_.AllocTensor<T>();
 
     LocalTensor<uint32_t> cols_uint32_t = tbuf_.Get<uint32_t>();
 
-    ShiftLeft<uint32_t>(cols_uint32_t, cols_lt, 1, cols_lt.GetSize());
+    ShiftLeft<uint32_t>(cols_uint32_t, cols_lt, sizeof(T) / 2,
+                        cols_lt.GetSize());
     cols_q_.FreeTensor<uint32_t>(cols_lt);
     AscendC::Gather(z_lt, x_lt_, cols_uint32_t, (uint32_t)0, num_elems);
-    LocalTensor<DataType> values_lt = values_q_.DeQue<DataType>();
+    LocalTensor<T> values_lt = values_q_.DeQue<T>();
     Mul(z_lt, z_lt, values_lt, num_elems);
-    values_q_.FreeTensor<DataType>(values_lt);
+    values_q_.FreeTensor<T>(values_lt);
 
-    output_q_.EnQue<DataType>(z_lt);
+    output_q_.EnQue<T>(z_lt);
   }
 
  private:
@@ -142,13 +143,13 @@ class KernelCSRGather {
 
   TBuf<QuePosition::VECCALC> tbuf_;
 
-  GlobalTensor<DataType> global_values_;
+  GlobalTensor<T> global_values_;
   GlobalTensor<uint32_t> global_cols_;
   GlobalTensor<uint32_t> global_rows_;
-  GlobalTensor<DataType> global_x_;
-  GlobalTensor<DataType> global_z_;
+  GlobalTensor<T> global_x_;
+  GlobalTensor<T> global_z_;
 
-  LocalTensor<DataType> x_lt_;
+  LocalTensor<T> x_lt_;
 
   const uint32_t vec_core_num_;
   const uint32_t values_in_len_;
@@ -162,7 +163,7 @@ class KernelCSRGather {
 /**
  * @brief Run the `csr_gather` kernel.
  *
- * @tparam InputT Input datatype. Supports `half` and `int16_t`.
+ * @tparam InputT Input datatype. Supports `half`, `int16_t` and `float32`.
  * @tparam ForceMixMode Indicates if kernel should schedule dummy cube
  * operations to make sure it runs in mix mode. Can be safely set to `false`
  * when running inside another mix mode kernel.
