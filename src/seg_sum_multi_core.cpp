@@ -63,8 +63,7 @@ __aicore__ inline void run_seg_sum_multi_core(
         tile_len);
   } else {
     run_seg_sum_single_core<T, true /* UseAtomicWrite */>(
-        vec_in + s * sizeof(T), upper, segm_ind_in + p * sizeof(int32_t),
-        vec_out + p * sizeof(OutputT), workspace /* TODO*/, e - s, q - p + 1,
+        vec_in, upper, segm_ind_in, vec_out, workspace /* TODO*/, e, q - p + 1,
         tile_len);
   }
 }
