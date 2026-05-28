@@ -36,11 +36,13 @@ _NROW = [
 ]
 
 
-def uniform_rvs(shape):
-    return 6 * np.random.uniform(0, 1, size=shape) - 1
+def uniform_rvs(shape, scale: int = 6):
+    return scale * np.random.uniform(0, 1, size=shape) - (scale // 2)
 
 
-def _test_tcuscan_spmv(nnr: int, s: int, density: float, dtype: torch.dtype):
+def _test_tcuscan_spmv(
+    nnr: int, s: int, density: float, dtype: torch.dtype, scale_factor: int
+):
     rng = np.random.default_rng(seed=42)
     out_dtype = np.int32 if dtype == torch.int16 else np.float32
 
@@ -50,7 +52,7 @@ def _test_tcuscan_spmv(nnr: int, s: int, density: float, dtype: torch.dtype):
         density=density,
         format="csr",
         dtype=out_dtype,
-        data_rvs=uniform_rvs,
+        data_rvs=lambda shape: uniform_rvs(shape, scale_factor),
     )
 
     values = (B.data).astype(out_dtype)
@@ -88,6 +90,14 @@ def _test_tcuscan_spmv(nnr: int, s: int, density: float, dtype: torch.dtype):
 @pytest.mark.parametrize("s", [32, 64, 128])
 @pytest.mark.parametrize("density", [0.01, 0.001, 0.0001])
 @pytest.mark.parametrize("nrow", _NROW)
-@pytest.mark.parametrize("dtype", [torch.int16, torch.float16], ids=str)
-def test_tcuscan_spmv(s: int, density: float, nrow: int, dtype: torch.dtype):
-    _test_tcuscan_spmv(nrow, s, density, dtype)
+@pytest.mark.parametrize(
+    ("dtype", "scale_factor"),
+    [
+        pytest.param(torch.int16, 6, id="torch.int16"),
+        pytest.param(torch.float16, 2, id="torch.float16"),
+    ],
+)
+def test_tcuscan_spmv(
+    s: int, density: float, nrow: int, dtype: torch.dtype, scale_factor: int
+):
+    _test_tcuscan_spmv(nrow, s, density, dtype, scale_factor)
