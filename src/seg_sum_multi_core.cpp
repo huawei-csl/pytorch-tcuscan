@@ -29,20 +29,15 @@ using namespace tcuscan;
  * @param [in] vec_len Input vector length.
  * @param [in] num_segments Number of segments.
  * @param [in] tile_len Tile length.
+ * @param [in] single_core_ws_size Workspace size needed for the single core
+ * kernel.
  */
 template <typename T>
 __aicore__ inline void run_seg_sum_multi_core(
     GM_ADDR vec_in, GM_ADDR upper, GM_ADDR segm_ind_in, GM_ADDR bstart_in,
     GM_ADDR vec_out, GM_ADDR workspace, uint32_t vec_len, uint32_t num_segments,
-    uint32_t tile_len) {
+    uint32_t tile_len, uint32_t single_core_ws_size) {
   using OutputT = tcuscan::cube_unit::CubeOutType_t<T>;
-
-  const uint32_t align_size = tile_len * tile_len;
-  const uint32_t padded_vec_len = scalar::AlignUp(vec_len, align_size);
-  const uint32_t pad_size = padded_vec_len * sizeof(T);
-
-  GM_ADDR const padded_input = workspace;
-  GM_ADDR const spec_block_scan = workspace + pad_size;
 
   const uint32_t num_blocks = AscendC::GetBlockNum();
   const uint32_t ell = scalar::CeilDiv(vec_len, num_blocks);
@@ -59,12 +54,11 @@ __aicore__ inline void run_seg_sum_multi_core(
   if (id > 0) {
     run_seg_sum_single_core<T, true /* UseAtomicWrite */>(
         vec_in + (s - 1) * sizeof(T), upper, segm_ind_in + p * sizeof(int32_t),
-        vec_out + p * sizeof(OutputT), workspace /* TODO*/, e - s, q - p + 1,
-        tile_len);
+        vec_out + p * sizeof(OutputT), workspace + id * single_core_ws_size,
+        e - s, q - p + 1, tile_len);
   } else {
     run_seg_sum_single_core<T, true /* UseAtomicWrite */>(
-        vec_in, upper, segm_ind_in, vec_out, workspace /* TODO*/, e, q - p + 1,
-        tile_len);
+        vec_in, upper, segm_ind_in, vec_out, workspace, e, q - p + 1, tile_len);
   }
 }
 
@@ -91,9 +85,11 @@ extern "C" __global__ __aicore__ void seg_sum_multi_core_fp16(
   const uint32_t vec_len = tiling.num_elems;
   const uint32_t num_segments = tiling.num_segments;
   const uint32_t matmul_size = tiling.tile_len;
+  const uint32_t single_core_ws_size = tiling.single_core_ws_size;
 
   GM_ADDR const lower = load_tril_matrix<half>(matmul_size);
 
   run_seg_sum_multi_core<half>(vec_in, lower, indptr, bstart, vec_out,
-                               workspace, vec_len, num_segments, matmul_size);
+                               workspace, vec_len, num_segments, matmul_size,
+                               single_core_ws_size);
 }

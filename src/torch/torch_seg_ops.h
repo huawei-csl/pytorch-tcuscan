@@ -349,16 +349,20 @@ at::Tensor run_seg_sum_multi_core(const at::Tensor& x, const at::Tensor& indptr,
   const at::Tensor z = at::empty(
       {num_segments}, at::TensorOptions().dtype(dtype_out).device(device));
 
+  const tcuscan::SegSumSingleCoreTiling single_core_tiling{
+      total_length, num_segments, matmul_size};
+
+  const uint32_t singe_core_ws_size =
+      tcuscan::get_workspace_size<int16_t /* half */>(single_core_tiling);
+
   const tcuscan::SegSumMultiCoreTiling tiling{total_length, num_segments,
-                                              matmul_size};
+                                              matmul_size, singe_core_ws_size};
   uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
 
   if (dtype == torch::kHalf) {
-    const uint32_t user_workspace_size =
-        tcuscan::get_workspace_size<int16_t /* half */>(tiling);
-
+    // Workspace is duplicated across AI cores, hence multiplied by block_dim
     const at::Tensor workspace_tensor =
-        tcuscan::alloc_workspace(user_workspace_size, device);
+        tcuscan::alloc_workspace(block_dim * singe_core_ws_size, device);
 
     ACLRT_LAUNCH_KERNEL(seg_sum_multi_core_fp16)
     (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
