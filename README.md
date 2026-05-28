@@ -2,22 +2,20 @@
 
 AscendC TCUSCAN operators (scan, sort, split, top-k, compress, etc) using the Cube unit.
 
-
 ## Getting started
 
 ```bash
 export CMAKE_GENERATOR="Unix Makefiles"
-pip install -v ssh://git@szv-open.codehub.huawei.com:2222/innersource/tcuscan_G/pytorch-tcuscan.git
+pip install -v https://github.com/huawei-csl/pytorch-tcuscan.git --extra-index-url https://download.pytorch.org/whl/cpu
 ```
 
 Or clone the repository and run:
 ```bash
 export CMAKE_GENERATOR="Unix Makefiles"
-pip install -v
+pip install -v . --extra-index-url https://download.pytorch.org/whl/cpu
 ```
 
 Then, inside Python, type `import tcuscan`.
-
 
 # Development
 Integrating TCUSCAN kernels to pytorch npu.
@@ -47,16 +45,16 @@ import tcuscan_ops
 ```
 
 ## Integrating a new kernel
-To integrate a new kernel from the `ascend-scan-910b` repo we need three main steps.
+To integrate a new kernel you need three main steps.
 
-### 1: Copy kernel header files
-The first step is to copy the kernel header files from the `ascend-scan-910b` repo.
-Let's say the kernel is `${MYKERNEL}`
-We need to copy:
+### 1: Define your kernel API
+
+Let's say the kernel is `${MYKERNEL}` with the following files:
+
 ```bash
-cp ascendc-scan-910b/src/kernels/kernel_${MYKERNEL}.h pytorch-tcuscan/src/kernels/kernel_${MYKERNEL}.h
-cp ascendc-scan-910b/src/kernels/kernel_${MYKERNEL}.cpp pytorch-tcuscan/src/${MYKERNEL}.cpp
-cp ascendc-scan-910b/src/kernels/tiling_${MYKERNEL}.h pytorch-tcuscan/src/tiling/tiling_${MYKERNEL}.h
+pytorch-tcuscan/src/kernels/kernel_${MYKERNEL}.h
+pytorch-tcuscan/src/${MYKERNEL}.cpp
+pytorch-tcuscan/src/tiling/tiling_${MYKERNEL}.h
 ```
 The `${MYKERNEL}.cpp` file needs to be also added inside `CMakeLists.txt`
 

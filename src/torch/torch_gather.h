@@ -14,6 +14,7 @@
 #include "../tiling/tiling_gather_spmv.h"
 #include "../tiling/tiling_mc_gather.h"
 #include "aclrtlaunch_csr_gather_fp16.h"
+#include "aclrtlaunch_csr_gather_fp32.h"
 #include "aclrtlaunch_csr_gather_int16.h"
 #include "aclrtlaunch_gather_spmv.h"
 #include "aclrtlaunch_mc_gather_fp16.h"
@@ -128,6 +129,14 @@ at::Tensor run_csr_gather(const at::Tensor& values, const at::Tensor& cols,
      const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else if (dtype == torch::kInt16) {
     ACLRT_LAUNCH_KERNEL(csr_gather_int16)
+    (block_dim, acl_stream, const_cast<void*>(values.storage().data()),
+     const_cast<void*>(cols.storage().data()),
+     const_cast<void*>(rows.storage().data()),
+     const_cast<void*>(x.storage().data()),
+     const_cast<void*>(z.storage().data()),
+     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+  } else if (dtype == torch::kFloat) {
+    ACLRT_LAUNCH_KERNEL(csr_gather_fp32)
     (block_dim, acl_stream, const_cast<void*>(values.storage().data()),
      const_cast<void*>(cols.storage().data()),
      const_cast<void*>(rows.storage().data()),
