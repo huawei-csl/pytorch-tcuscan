@@ -320,14 +320,12 @@ at::Tensor run_seg_sum_single_cube(const at::Tensor& x, const at::Tensor& upper,
  *
  * @param [in] x Input data vector.
  * @param [in] indptr Input segment starts vector.
- * @param [in] bstarts Start indices of each block.
  * @param [in] s Tiling parameter. Typical values: 32, 64, 128.
  * @param [in] block_dim Number of blocks.
  * @return Segmented sum of (x, indptr).
  */
 at::Tensor run_seg_sum_multi_core(const at::Tensor& x, const at::Tensor& indptr,
-                                  const at::Tensor& bstarts, int s,
-                                  int block_dim) {
+                                  int s, int block_dim) {
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();
   const auto dtype = x.options().dtype();
