@@ -326,7 +326,6 @@ at::Tensor run_seg_sum_single_cube(const at::Tensor& x, const at::Tensor& upper,
  */
 at::Tensor run_seg_sum_multi_core(const at::Tensor& x, const at::Tensor& indptr,
                                   int s, int block_dim) {
-  auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();
   const auto dtype = x.options().dtype();
   const auto dtype_out =
@@ -347,8 +346,8 @@ at::Tensor run_seg_sum_multi_core(const at::Tensor& x, const at::Tensor& indptr,
   const at::Tensor z = at::empty(
       {num_segments}, at::TensorOptions().dtype(dtype_out).device(device));
 
-  const tcuscan::SegSumSingleCoreTiling single_core_tiling{
-      total_length, num_segments, matmul_size};
+  const tcuscan::SegSumSingleCoreTiling single_core_tiling{l, num_segments,
+                                                           matmul_size};
 
   const uint32_t singe_core_ws_size =
       tcuscan::get_workspace_size<int16_t /* half */>(single_core_tiling);
@@ -357,11 +356,13 @@ at::Tensor run_seg_sum_multi_core(const at::Tensor& x, const at::Tensor& indptr,
                                               matmul_size, singe_core_ws_size};
   uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
 
-  if (dtype == torch::kHalf) {
-    // Workspace is duplicated across AI cores, hence multiplied by block_dim
-    const at::Tensor workspace_tensor =
-        tcuscan::alloc_workspace(block_dim * singe_core_ws_size, device);
+  // Workspace is duplicated across AI cores, hence multiplied by block_dim
+  const at::Tensor workspace_tensor =
+      tcuscan::alloc_workspace(block_dim * singe_core_ws_size, device);
 
+  auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
+
+  if (dtype == torch::kHalf) {
     ACLRT_LAUNCH_KERNEL(seg_sum_multi_core_fp16)
     (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
      const_cast<void*>(indptr.storage().data()),

@@ -49,16 +49,20 @@ __aicore__ inline void run_seg_sum_multi_core(
   const uint32_t s = id * ell;
   const uint32_t e = (id + 1) * ell > vec_len ? vec_len : (id + 1) * ell;
 
+  const uint32_t vec_len_block = e - s + 1;
+  const uint32_t segment_len = q - p + 1;
+
   // Call single core segmented per AI core
   // First block needs special offsetting
   if (id > 0) {
     run_seg_sum_single_core<T, true /* UseAtomicWrite */>(
-        vec_in + (s - 1) * sizeof(T), upper, segm_ind_in + p * sizeof(int32_t),
+        vec_in, upper, segm_ind_in + p * sizeof(int32_t),
         vec_out + p * sizeof(OutputT), workspace + id * single_core_ws_size,
-        e - s, q - p + 1, tile_len);
+        vec_len_block, segment_len, tile_len, s);
   } else {
     run_seg_sum_single_core<T, true /* UseAtomicWrite */>(
-        vec_in, upper, segm_ind_in, vec_out, workspace, e, q - p + 1, tile_len);
+        vec_in, upper, segm_ind_in, vec_out, workspace, vec_len_block,
+        segment_len, tile_len);
   }
 }
 

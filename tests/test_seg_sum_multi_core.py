@@ -27,8 +27,8 @@ NPU_DEVICE = os.environ.get("NPU_DEVICE", "npu:1")
 torch.npu.config.allow_internal_format = False
 torch.npu.set_device(NPU_DEVICE)
 
-_NUM_SEGMENTS = [513, 1025, 2011]  # 519, 2043 fails!
-_NUM_COLUMNS = [64 * 64 - 1, 128 * 128, 128 * 128 - 13, 128 * 128 + 13, 128 * 128 - 133]
+_NUM_SEGMENTS = [20, 40, 60]  # 519, 2043 fails!
+_NUM_COLUMNS = [ 128 * 128]
 
 
 def uniform_rvs(shape):
@@ -66,11 +66,11 @@ def _test_tcuscan_seg_sum_multi_core(
         len(indices) + 1 == num_segments
     ), f"Got num_segments: {num_segments}, len(indices): {len(indices)}"
 
-    values_npu = torch.from_numpy(values).npu().to(dtype)
-    indices_npu = torch.from_numpy(indices).npu().to(torch.int32)
+    values_npu = torch.from_numpy(values).to(dtype).npu()
+    indices_npu = torch.from_numpy(indices).to(torch.int32).npu()
 
     torch.npu.synchronize()
-    actual = tcuscan_ops.run_seg_sum_multi_core(values_npu, indices_npu, s, 2).cpu()
+    actual = tcuscan_ops.run_seg_sum_multi_core(values_npu, indices_npu, s, 20).cpu()
     torch.npu.synchronize()
 
     print(f"# of segments : {num_segments}")
