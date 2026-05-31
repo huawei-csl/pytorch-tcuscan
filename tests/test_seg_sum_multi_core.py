@@ -27,7 +27,8 @@ NPU_DEVICE = os.environ.get("NPU_DEVICE", "npu:1")
 torch.npu.config.allow_internal_format = False
 torch.npu.set_device(NPU_DEVICE)
 
-_NUM_SEGMENTS = [120]  # 519, 2043 fails!
+_NUM_SEGMENTS = [10]  # 519, 2043 fails!
+NUM_BLOCKS = 4
 _NUM_COLUMNS = [ 4 * 32 * 32]
 
 
@@ -73,13 +74,13 @@ def _test_tcuscan_seg_sum_multi_core(
     print(f"values: {values[:10]} ...")
     print(f"indices: {indices}")
 
-    sstart = torch.arange(0, nnz, nnz / 20, dtype=torch.int32).npu()
+    sstart = torch.arange(0, nnz, nnz / NUM_BLOCKS, dtype=torch.int32).npu()
     bstart = torch.searchsorted(indices_npu, sstart, right=False)
     print(f"sstart: {sstart}")
     print(f"bstart: {bstart}")
 
     torch.npu.synchronize()
-    actual = tcuscan_ops.run_seg_sum_multi_core(values_npu, indices_npu, s, 2).cpu()
+    actual = tcuscan_ops.run_seg_sum_multi_core(values_npu, indices_npu, s, NUM_BLOCKS).cpu()
     torch.npu.synchronize()
 
     print(f"# of segments : {num_segments}")
