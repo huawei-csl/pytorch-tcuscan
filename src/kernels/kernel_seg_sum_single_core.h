@@ -31,12 +31,14 @@ namespace tcuscan {
  * @param [in] vec_len Input vector length.
  * @param [in] num_segments Number of segments.
  * @param [in] tile_len Tile length.
+ * @param [in] vec_start_offset Start offset of input data vector. Segment
+ * values will be offset accordindly. Default value: `0`.
  */
 template <typename T, bool UseAtomicWrite = false>
 __aicore__ inline void run_seg_sum_single_core(
     GM_ADDR vec_in, GM_ADDR upper, GM_ADDR segm_ind_in, GM_ADDR vec_out,
     GM_ADDR workspace, uint32_t vec_len, uint32_t num_segments,
-    uint32_t tile_len) {
+    uint32_t tile_len, uint32_t vec_start_offset = 0) {
   using OutputT = tcuscan::cube_unit::CubeOutType_t<T>;
 
   const uint32_t align_size = tile_len * tile_len;
@@ -58,7 +60,7 @@ __aicore__ inline void run_seg_sum_single_core(
 
   if ASCEND_IS_AIV {
     KernelSegSumVecRevert<OutputT, true, UseAtomicWrite> op(
-        vec_len, num_segments, tile_len);
+        vec_len, num_segments, tile_len, vec_start_offset);
     op.Init(spec_block_scan, segm_ind_in, vec_out);
     op.Process();
   }
