@@ -59,7 +59,7 @@ class KernelHistogram {
     global_out_.SetGlobalBuffer((__gm__ int32_t*)vec_out, num_bins_);
 
     pipe_.InitBuffer(in_q_, BUFFER_NUM, tile_len_ * sizeof(T));
-    pipe_.InitBuffer(out_q_, BUFFER_NUM, num_bins_ * sizeof(int32_t));
+    pipe_.InitBuffer(out_q_, 1, num_bins_ * sizeof(int32_t));
 
     pipe_.InitBuffer(out_buf_, num_bins_ * sizeof(int32_t));
     pipe_.InitBuffer(work_buf_, tile_len_ * sizeof(T));
@@ -137,7 +137,7 @@ class KernelHistogram {
                        packed_mask_8b.GetSize() / 4);
     AscendC::Duplicate(work_lt, static_cast<T>(0), work_lt.GetSize());
     AscendC::PipeBarrier<PIPE_ALL>();
-    CompareScalar(packed_mask_8b, vec_lt, pivot, CMPMODE::LT, size);
+    CompareScalar(packed_mask_8b, vec_lt, pivot, CMPMODE::LT, tile_len_);
     AscendC::PipeBarrier<PIPE_ALL>();
 
     const LocalTensor<GatherMaskT> mask_lt =
