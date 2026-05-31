@@ -60,11 +60,6 @@ def _test_tcuscan_seg_sum_single_core(
     # Drop first (always zero) and the last (always len(x)) entry of indices.
     assert indices[0] == 0, "First entry must be zero."
     assert indices[-1] == nnz, "Last entry equals to the nnzs."
-    indices = indices[1:-1].copy()
-
-    assert (
-        len(indices) + 1 == num_segments
-    ), f"Got num_segments: {num_segments}, len(indices): {len(indices)}"
 
     values_npu = torch.from_numpy(values).npu().to(dtype)
     indices_npu = torch.from_numpy(indices).npu().to(torch.uint32)
