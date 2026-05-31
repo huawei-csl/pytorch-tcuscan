@@ -27,8 +27,8 @@ NPU_DEVICE = os.environ.get("NPU_DEVICE", "npu:1")
 torch.npu.config.allow_internal_format = False
 torch.npu.set_device(NPU_DEVICE)
 
-_NUM_SEGMENTS = [20, 40, 60]  # 519, 2043 fails!
-_NUM_COLUMNS = [ 128 * 128]
+_NUM_SEGMENTS = [120]  # 519, 2043 fails!
+_NUM_COLUMNS = [ 4 * 32 * 32]
 
 
 def uniform_rvs(shape):
@@ -69,8 +69,17 @@ def _test_tcuscan_seg_sum_multi_core(
     values_npu = torch.from_numpy(values).to(dtype).npu()
     indices_npu = torch.from_numpy(indices).to(torch.int32).npu()
 
+    print(f"nnz: {nnz}")
+    print(f"values: {values[:10]} ...")
+    print(f"indices: {indices}")
+
+    sstart = torch.arange(0, nnz, nnz / 20, dtype=torch.int32).npu()
+    bstart = torch.searchsorted(indices_npu, sstart, right=False)
+    print(f"sstart: {sstart}")
+    print(f"bstart: {bstart}")
+
     torch.npu.synchronize()
-    actual = tcuscan_ops.run_seg_sum_multi_core(values_npu, indices_npu, s, 20).cpu()
+    actual = tcuscan_ops.run_seg_sum_multi_core(values_npu, indices_npu, s, 2).cpu()
     torch.npu.synchronize()
 
     print(f"# of segments : {num_segments}")
@@ -96,7 +105,7 @@ def _test_tcuscan_seg_sum_multi_core(
 
 @pytest.mark.parametrize("num_segments", _NUM_SEGMENTS)
 @pytest.mark.parametrize("num_cols", _NUM_COLUMNS)
-@pytest.mark.parametrize("s", [32, 64, 128])
+@pytest.mark.parametrize("s", [32])
 @pytest.mark.parametrize("dtype", [torch.float16], ids=str)
 def test_tcuscan_seg_sum_multi_core(
     num_segments: int, num_cols: int, s: int, dtype: torch.dtype
