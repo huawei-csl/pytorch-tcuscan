@@ -35,29 +35,33 @@ __aicore__ inline void run_seg_sum_multi_core(
     GM_ADDR vec_in, GM_ADDR upper, GM_ADDR segm_ind_in, GM_ADDR bstart_in,
     GM_ADDR vec_out, GM_ADDR workspace, uint32_t vec_len, uint32_t num_segments,
     uint32_t tile_len, uint32_t block_len) {
-  using OutputT = tcuscan::cube_unit::CubeOutType_t<T>;
+  /*
+using OutputT = tcuscan::cube_unit::CubeOutType_t<T>;
 
-  const uint32_t num_blocks = AscendC::GetBlockNum();
+const uint32_t num_blocks = AscendC::GetBlockNum();
 
-  const auto id = AscendC::GetBlockIdx();
-  const uint32_t p = scalar::GetGMValue<int32_t>(bstart_in, id, num_blocks);
-  const uint32_t q = scalar::GetGMValue<int32_t>(bstart_in, id + 1, num_blocks);
+const auto id = AscendC::GetBlockIdx();
+const uint32_t p = scalar::GetGMValue<int32_t>(bstart_in, id, num_blocks);
+const uint32_t q = scalar::GetGMValue<int32_t>(bstart_in, id + 1, num_blocks);
 
-  const uint32_t segment_len = q - p + 1;
+const uint32_t segment_len = q - p + 1;
 
-  const uint32_t workspace_size_per_block = block_len * sizeof(OutputT);
+const uint32_t workspace_size_per_block = block_len * sizeof(OutputT);
 
-  if (id > 0) {
-    run_seg_sum_single_core_aligned<T, true /* UseAtomicWrite */>(
-        vec_in, upper, segm_ind_in + p * sizeof(int32_t),
-        vec_out + p * sizeof(OutputT),
-        workspace + id * workspace_size_per_block, block_len, segment_len,
-        tile_len);
-  } else {
-    run_seg_sum_single_core_aligned<T, true /* UseAtomicWrite */>(
-        vec_in, upper, segm_ind_in, vec_out, workspace, block_len, segment_len,
-        tile_len);
-  }
+sync::SyncGroup<sync::GroupSyncDirection::FULL>();
+
+if (false) {
+  run_seg_sum_single_core_aligned<T, true >(
+      vec_in, upper, segm_ind_in + p * sizeof(int32_t),
+      vec_out + p * sizeof(OutputT),
+      workspace + id * workspace_size_per_block, block_len, segment_len,
+      tile_len);
+} else {
+  run_seg_sum_single_core_aligned<T, true
+      > (vec_in, upper, segm_ind_in, vec_out, workspace, block_len, segment_len,
+         tile_len);
+}
+*/
 }
 
 /**
