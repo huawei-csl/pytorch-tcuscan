@@ -344,7 +344,8 @@ at::Tensor run_seg_sum_multi_core(const at::Tensor& x, const at::Tensor& indptr,
   const uint32_t ell = matmul_size * matmul_size;
 
   const at::Tensor sstart =
-      torch::arange(0, std::min(block_dim * ell, total_length), ell,
+      ell *
+      torch::arange(0, block_dim + 1, 1,
                     at::TensorOptions().dtype(torch::kInt32).device(device));
   const at::Tensor bstart =
       torch::searchsorted(indptr, sstart, /*right=*/false);
