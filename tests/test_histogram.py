@@ -18,7 +18,7 @@ torch.npu.config.allow_internal_format = False
 torch.npu.set_device(NPU_DEVICE)
 
 _SIZES = [
-    # 10 * 1024, FAILS!
+    10 * 1024,
     20 * 1024,
     30 * 1024,
     40 * 1024,

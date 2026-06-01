@@ -112,6 +112,9 @@ class KernelCountIf {
         size_t num_gathered_elems = 0;
         GatherMask(work_lt, work_lt, mask_lt, true, input_len, {1, 1, 8, 8},
                    num_gathered_elems);
+        // Ensure the vector pipe has written num_gathered_elems before the
+        // scalar CPU reads it in the accumulation below.
+        PipeBarrier<PIPE_V>();
 
         in_q_.FreeTensor(input_lt);
         sum += num_gathered_elems;
@@ -122,8 +125,10 @@ class KernelCountIf {
 
     if constexpr (ReduceBlocks)
       AtomicAddWrite(static_cast<int32_t>(sum));
-    else
+    else {
+      AscendC::PipeBarrier<PIPE_ALL>();
       copy::CopyScalarToGm(global_output_[GetBlockIdx()], out_q_, sum);
+    }
   }
 
  private:
