@@ -215,16 +215,21 @@ at::Tensor run_seg_sum_single_core(const at::Tensor& x,
   const uint32_t total_length = x.numel();
   // The indptr does not contain zero as first entry and len(x) as last entry.
   // Hence, the number of segments are +1.
-  const uint32_t num_segments = indptr.numel();
+  const uint32_t num_segments = indptr.numel() - 1;
 
   const at::Tensor z = at::empty(
-      {num_segments + 1}, at::TensorOptions().dtype(dtype_out).device(device));
+      {num_segments}, at::TensorOptions().dtype(dtype_out).device(device));
 
   const tcuscan::SegSumSingleCoreTiling tiling{total_length, num_segments,
                                                matmul_size};
   uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
 
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
+
+  // Offset indptr by one element, since first element is always zero.
+  void* indptr_data = static_cast<void*>(
+      static_cast<uint8_t*>(const_cast<void*>(indptr.storage().data())) +
+      indptr.element_size());
 
   if (dtype == torch::kHalf) {
     const uint32_t user_workspace_size =
@@ -234,8 +239,7 @@ at::Tensor run_seg_sum_single_core(const at::Tensor& x,
         tcuscan::alloc_workspace(user_workspace_size, device);
 
     ACLRT_LAUNCH_KERNEL(seg_sum_single_core_fp16)
-    (BLOCK_DIM, acl_stream, const_cast<void*>(x.storage().data()),
-     const_cast<void*>(indptr.storage().data()),
+    (BLOCK_DIM, acl_stream, const_cast<void*>(x.storage().data()), indptr_data,
      const_cast<void*>(z.storage().data()),
      const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else if (dtype == torch::kInt8) {
@@ -245,8 +249,7 @@ at::Tensor run_seg_sum_single_core(const at::Tensor& x,
     const at::Tensor workspace_tensor =
         tcuscan::alloc_workspace(user_workspace_size, device);
     ACLRT_LAUNCH_KERNEL(seg_sum_single_core_int8)
-    (BLOCK_DIM, acl_stream, const_cast<void*>(x.storage().data()),
-     const_cast<void*>(indptr.storage().data()),
+    (BLOCK_DIM, acl_stream, const_cast<void*>(x.storage().data()), indptr_data,
      const_cast<void*>(z.storage().data()),
      const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   }
