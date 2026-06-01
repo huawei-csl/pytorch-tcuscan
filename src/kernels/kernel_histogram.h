@@ -16,7 +16,7 @@ namespace tcuscan {
 /**
  * @brief Returns `torch.histogram(x, bins=num_bins)`.
  *
- * EXPERIMENTAL
+ * @tparam T Input data type. Supported types are `float16`.
  */
 template <typename T>
 class KernelHistogram {
