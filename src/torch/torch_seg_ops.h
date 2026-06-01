@@ -338,10 +338,10 @@ at::Tensor run_seg_sum_multi_core(const at::Tensor& x, const at::Tensor& indptr,
   const uint32_t total_length = x.numel();
   const uint32_t num_segments = indptr.numel();
 
-  const uint32_t l = host_utils::CeilDiv(total_length, block_dim);
+  const uint32_t ell = matmul_size * matmul_size;
 
   const at::Tensor sstart =
-      torch::arange(0, std::min(block_dim * l, total_length), l,
+      torch::arange(0, std::min(block_dim * ell, total_length), ell,
                     at::TensorOptions().dtype(torch::kInt32).device(device));
   const at::Tensor bstart =
       torch::searchsorted(indptr, sstart, /*right=*/false);
@@ -349,14 +349,14 @@ at::Tensor run_seg_sum_multi_core(const at::Tensor& x, const at::Tensor& indptr,
   const at::Tensor z = at::empty(
       {num_segments}, at::TensorOptions().dtype(dtype_out).device(device));
 
-  const tcuscan::SegSumSingleCoreTiling single_core_tiling{l, num_segments,
+  const tcuscan::SegSumSingleCoreTiling single_core_tiling{ell, num_segments,
                                                            matmul_size};
 
   const uint32_t singe_core_ws_size =
       tcuscan::get_workspace_size<int16_t /* half */>(single_core_tiling);
 
   const tcuscan::SegSumMultiCoreTiling tiling{total_length, num_segments,
-                                              matmul_size, singe_core_ws_size};
+                                              matmul_size, ell};
   uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
 
   // Workspace is duplicated across AI cores, hence multiplied by block_dim

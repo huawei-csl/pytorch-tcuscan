@@ -66,4 +66,52 @@ __aicore__ inline void run_seg_sum_single_core(
   }
 }
 
+/**
+ * @brief Run the `seg_sum_single_core_aligned` kernel.
+ *
+ * @tparam T input data type
+ * @tparam UseAtomicWrite If true, the output is written using atomic-add
+ * semantics.
+ *
+ * @param [in] vec_in Pointer to the input vector.
+ * @param [in] upper Pointer to an upper-triangular all-ones square matrix of
+ * size \f$\textit{matmul_size}\f$.
+ * @param [in] segm_ind_in Pointer to the segment indices vector.
+ * @param [in] vec_out Pointer ot the output vector.
+ * @param [in] workspace Pointer to a memory region used as workspace.
+ * @param [in] vec_len Input vector length.
+ * @param [in] num_segments Number of segments.
+ * @param [in] tile_len Tile length.
+ * @param [in] vec_start_offset Start offset of input data vector. Segment
+ * values will be offset accordindly. Default value: `0`.
+ */
+template <typename T, bool UseAtomicWrite = false>
+__aicore__ inline void run_seg_sum_single_core_aligned(
+    GM_ADDR vec_in, GM_ADDR upper, GM_ADDR segm_ind_in, GM_ADDR vec_out,
+    GM_ADDR workspace, uint32_t vec_len, uint32_t num_segments,
+    uint32_t tile_len, uint32_t vec_start_offset = 0) {
+  using OutputT = tcuscan::cube_unit::CubeOutType_t<T>;
+  const bool AIC_AIV_SYNC = true;
+
+  const uint32_t align_size = tile_len * tile_len;
+  ASCENDC_ASSERT((vec_len % align_size == 0), {
+    KERNEL_LOG(
+        KERNEL_ERROR,
+        "AIC requires the input to be aligned as multiple of matrix tiles.");
+  });
+
+  if ASCEND_IS_AIC {
+    KernelRowScan<T, AIC_AIV_SYNC> op_cube(tile_len, tile_len, vec_len);
+    op_cube.Init(vec_in, upper, workspace);
+    op_cube.Process();
+  }
+
+  if ASCEND_IS_AIV {
+    KernelSegSumVecRevert<OutputT, AIC_AIV_SYNC, UseAtomicWrite> op(
+        vec_len, num_segments, tile_len, vec_start_offset);
+    op.Init(workspace, segm_ind_in, vec_out);
+    op.Process();
+  }
+}
+
 }  // namespace tcuscan

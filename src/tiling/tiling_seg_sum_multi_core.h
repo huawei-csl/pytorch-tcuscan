@@ -22,8 +22,8 @@ struct SegSumMultiCoreTiling {
   uint32_t num_segments;
   /// @brief Tiling length.
   uint32_t tile_len;
-  /// @brief Workspace size for single core segmented sum per block.
-  uint32_t single_core_ws_size;
+  /// @brief Block length.
+  uint32_t block_len;
 };
 
 #pragma pack(pop)
