@@ -323,14 +323,15 @@ at::Tensor run_seg_sum_single_cube(const at::Tensor& x, const at::Tensor& upper,
  *
  * @param [in] x Input data vector.
  * @param [in] indptr Input segment starts vector.
- * @param [in] bstart Block start indices for each segment. Length is `block_dim
- * +
+ * @param [in] bstart Block start indices for each segment.
+ * @param [in] segm_len_per_block Segment lengths per block.
  * @param [in] s Tiling parameter. Typical values: 32, 64, 128.
  * @param [in] block_dim Number of blocks.
  * @return Segmented sum vector of (x, indptr).
  */
 at::Tensor run_seg_sum_multi_core(const at::Tensor& x, const at::Tensor& indptr,
-                                  const at::Tensor& bstart, int s,
+                                  const at::Tensor& bstart,
+                                  const at::Tensor& segm_len_per_block, int s,
                                   int block_dim) {
   const at::Device device = x.options().device();
   const auto dtype = x.options().dtype();
@@ -347,7 +348,7 @@ at::Tensor run_seg_sum_multi_core(const at::Tensor& x, const at::Tensor& indptr,
   const uint32_t block_len = host_utils::CeilDiv(total_length, block_dim);
 
   const at::Tensor z = at::empty(
-      {num_segments}, at::TensorOptions().dtype(dtype_out).device(device));
+      {total_length}, at::TensorOptions().dtype(dtype_out).device(device));
 
   const tcuscan::SegSumSingleCoreTiling single_core_tiling{
       block_len, num_segments, matmul_size};
@@ -374,6 +375,7 @@ at::Tensor run_seg_sum_multi_core(const at::Tensor& x, const at::Tensor& indptr,
     ACLRT_LAUNCH_KERNEL(seg_sum_multi_core_fp16)
     (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
      const_cast<void*>(indptr_data), const_cast<void*>(bstart.storage().data()),
+     const_cast<void*>(segm_len_per_block.storage().data()),
      const_cast<void*>(z.storage().data()),
      const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   }

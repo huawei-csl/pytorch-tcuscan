@@ -72,13 +72,15 @@ def _test_tcuscan_seg_sum_multi_core(
 
     assert nnz % (s*s) == 0, "Number of non-zeros must be aligned"
 
-    sstart = torch.arange(0, nnz, nnz / NUM_BLOCKS, dtype=torch.int32).npu()
+    sstart = torch.arange(0, nnz, nnz // NUM_BLOCKS, dtype=torch.int32).npu()
     bstart = torch.searchsorted(indices_npu, sstart, right=False)
-    print(f"sstart: {sstart}")
-    print(f"bstart: {bstart}")
+    segm_len_per_block = torch.diff(bstart).npu()
+    print(f"sstart (len: {len(sstart)}): {sstart}")
+    print(f"bstart (len:{len(bstart)}): {bstart}")
+    print(f"segm_len_per_block (len:{len(segm_len_per_block)}): {segm_len_per_block}")
 
     torch.npu.synchronize()
-    actual = tcuscan_ops.run_seg_sum_multi_core(values_npu, indices_npu, bstart, s, NUM_BLOCKS).cpu()
+    actual = tcuscan_ops.run_seg_sum_multi_core(values_npu, indices_npu, bstart, segm_len_per_block, s, NUM_BLOCKS).cpu()
     torch.npu.synchronize()
 
     print(f"# of segments : {num_segments}")
