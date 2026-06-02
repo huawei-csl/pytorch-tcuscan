@@ -347,14 +347,11 @@ at::Tensor run_seg_sum_multi_core(const at::Tensor& x, const at::Tensor& indptr,
 
   const uint32_t block_len = host_utils::CeilDiv(total_length, block_dim);
 
-  const at::Tensor z = at::empty(
+  const at::Tensor z = at::zeros(
       {num_segments}, at::TensorOptions().dtype(dtype_out).device(device));
 
   const tcuscan::SegSumSingleCoreTiling single_core_tiling{
       block_len, num_segments, matmul_size};
-
-  const uint32_t singe_core_ws_size =
-      tcuscan::get_workspace_size<int16_t /* half */>(single_core_tiling);
 
   const tcuscan::SegSumMultiCoreTiling tiling{total_length, num_segments,
                                               matmul_size, block_len};

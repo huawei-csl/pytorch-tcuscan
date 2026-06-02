@@ -28,7 +28,7 @@ torch.npu.config.allow_internal_format = False
 torch.npu.set_device(NPU_DEVICE)
 
 NUM_SEGMENTS = [131]
-MAX_SEGMENT_LEN = [5000]
+MAX_SEGMENT_LEN = [3000, 5000]
 
 
 def uniform_rvs(shape):
