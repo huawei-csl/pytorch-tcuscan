@@ -35,33 +35,34 @@ __aicore__ inline void run_seg_sum_multi_core(
     GM_ADDR vec_in, GM_ADDR upper, GM_ADDR segm_ind_in, GM_ADDR bstart_in,
     GM_ADDR vec_out, GM_ADDR workspace, uint32_t vec_len, uint32_t num_segments,
     uint32_t tile_len, uint32_t block_len) {
+  using OutputT = tcuscan::cube_unit::CubeOutType_t<T>;
+
+  const uint32_t num_blocks = AscendC::GetBlockNum();
+
+  const auto id = AscendC::GetBlockIdx();
+  const uint32_t p = scalar::GetGMValue<int32_t>(bstart_in, id, num_blocks);
+  // bstart_in has num_blocks + 1 entries; the last entry is num_segments.
+  const uint32_t q =
+      scalar::GetGMValue<int32_t>(bstart_in, id + 1, num_blocks + 1);
+
+  const uint32_t segment_len = q - p + 1;
+
+  const uint32_t workspace_size_per_block = block_len * sizeof(OutputT);
+
   /*
-using OutputT = tcuscan::cube_unit::CubeOutType_t<T>;
 
-const uint32_t num_blocks = AscendC::GetBlockNum();
-
-const auto id = AscendC::GetBlockIdx();
-const uint32_t p = scalar::GetGMValue<int32_t>(bstart_in, id, num_blocks);
-const uint32_t q = scalar::GetGMValue<int32_t>(bstart_in, id + 1, num_blocks);
-
-const uint32_t segment_len = q - p + 1;
-
-const uint32_t workspace_size_per_block = block_len * sizeof(OutputT);
-
-sync::SyncGroup<sync::GroupSyncDirection::FULL>();
-
-if (false) {
-  run_seg_sum_single_core_aligned<T, true >(
-      vec_in, upper, segm_ind_in + p * sizeof(int32_t),
-      vec_out + p * sizeof(OutputT),
-      workspace + id * workspace_size_per_block, block_len, segment_len,
-      tile_len);
-} else {
-  run_seg_sum_single_core_aligned<T, true
-      > (vec_in, upper, segm_ind_in, vec_out, workspace, block_len, segment_len,
-         tile_len);
-}
-*/
+  if (false) {
+    run_seg_sum_single_core_aligned<T, true >(
+        vec_in, upper, segm_ind_in + p * sizeof(int32_t),
+        vec_out + p * sizeof(OutputT),
+        workspace + id * workspace_size_per_block, block_len, segment_len,
+        tile_len);
+  } else {
+    run_seg_sum_single_core_aligned<T, true
+        > (vec_in, upper, segm_ind_in, vec_out, workspace, block_len,
+  segment_len, tile_len);
+  }
+  */
 }
 
 /**
