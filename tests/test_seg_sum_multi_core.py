@@ -29,8 +29,6 @@ torch.npu.set_device(NPU_DEVICE)
 
 NUM_SEGMENTS = [131]
 MAX_SEGMENT_LEN = [5000]
-NUM_BLOCKS = 4
-VEC_LENS = [ 4 * 128 * 128]
 
 
 def uniform_rvs(shape):
@@ -45,7 +43,7 @@ def random_csr(rows: int, cols: int, nnz: int, dtype: np.dtype) -> csr_matrix:
 
 
 def _test_tcuscan_seg_sum_multi_core(
-    vec_len: int, num_segments: int, max_seg_len: int, s: int, dtype: torch.dtype
+    vec_len: int, num_segments: int, max_seg_len: int, s: int, num_blocks: int, dtype: torch.dtype
 ):
     sp_dtype = np.float32 if dtype == torch.float16 else np.int32
 
@@ -72,7 +70,7 @@ def _test_tcuscan_seg_sum_multi_core(
 
     assert nnz % (s*s) == 0, "Number of non-zeros must be aligned"
 
-    sstart = torch.arange(0, nnz, nnz // NUM_BLOCKS, dtype=torch.int32).npu()
+    sstart = torch.arange(0, nnz, nnz // num_blocks, dtype=torch.int32).npu()
     bstart = torch.searchsorted(indices_npu, sstart, right=False)
     segm_len_per_block = torch.diff(bstart).npu()
     print(f"sstart (len: {len(sstart)}): {sstart}")
@@ -80,7 +78,7 @@ def _test_tcuscan_seg_sum_multi_core(
     print(f"segm_len_per_block (len:{len(segm_len_per_block)}): {segm_len_per_block}")
 
     torch.npu.synchronize()
-    actual = tcuscan_ops.run_seg_sum_multi_core(values_npu, indices_npu, bstart, segm_len_per_block, s, NUM_BLOCKS).cpu()
+    actual = tcuscan_ops.run_seg_sum_multi_core(values_npu, indices_npu, bstart, segm_len_per_block, s, num_blocks).cpu()
     torch.npu.synchronize()
 
     print(f"# of segments : {num_segments}")
@@ -104,13 +102,13 @@ def _test_tcuscan_seg_sum_multi_core(
     ), f"Error seg_sum ({expected.dtype}). Abs-error: {abs_error} / {rel_error}, s={s}, max_seg_len={max_seg_len}"
 
 
-@pytest.mark.parametrize("vec_len", VEC_LENS)
 @pytest.mark.parametrize("num_segments", NUM_SEGMENTS)
 @pytest.mark.parametrize("max_seg_len", MAX_SEGMENT_LEN)
 @pytest.mark.parametrize("s", [128])
+@pytest.mark.parametrize("num_blocks", [4])
 @pytest.mark.parametrize("dtype", [torch.float16], ids=str)
 def test_tcuscan_seg_sum_multi_core(
-    vec_len: int, num_segments: int, max_seg_len: int, s: int, dtype: torch.dtype
+    num_segments: int, max_seg_len: int, s: int, num_blocks: int, dtype: torch.dtype
 ):
-    density = 0.01
-    _test_tcuscan_seg_sum_multi_core(vec_len, num_segments, max_seg_len, s, dtype)
+    vec_len = num_blocks * s * s
+    _test_tcuscan_seg_sum_multi_core(vec_len, num_segments, max_seg_len, s, num_blocks, dtype)
