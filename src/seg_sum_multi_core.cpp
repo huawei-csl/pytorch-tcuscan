@@ -7,7 +7,8 @@
 
 #include "kernels/constants.h"
 #include "kernels/kernel_pad.h"
-#include "kernels/kernel_seg_sum_single_core.h"
+#include "kernels/kernel_row_scan.h"
+#include "kernels/kernel_seg_sum_vec_revert.h"
 #include "kernels/tcuscan_utils.h"
 #include "tiling/tiling_seg_sum_multi_core.h"
 
@@ -39,35 +40,35 @@ __aicore__ inline void run_seg_sum_multi_core(
     uint32_t block_len) {
   using OutputT = tcuscan::cube_unit::CubeOutType_t<T>;
 
-  const uint32_t num_blocks = AscendC::GetBlockNum();
-
-  const auto id = AscendC::GetBlockIdx();
-  const int32_t segment_block_offset =
-      scalar::GetGMValue<int32_t>(bstart_in, id, num_blocks);
-  const int32_t segment_block_len =
-      scalar::GetGMValue<int32_t>(segm_len_per_block_in, id, num_blocks);
-
   if ASCEND_IS_AIC {
     KernelRowScan<T> op_cube(tile_len, tile_len, vec_len);
-    op_cube.Init(vec_in, upper, vec_out);
+    op_cube.Init(vec_in, upper, workspace);
     op_cube.Process();
   }
 
-  scalar::SetGMValue<int32_t>(workspace, id, segment_block_len, num_segments);
+  tcuscan::sync::SyncAllCores();
 
-  /*
-    if (false) {
-      run_seg_sum_single_core_aligned<T, true>(
-          vec_in, upper, segm_ind_in + p * sizeof(int32_t),
-          vec_out + p * sizeof(OutputT),
-          workspace + id * workspace_size_per_block, block_len, segment_len,
-          tile_len);
-    } else {
-      run_seg_sum_single_core_aligned<T, true>(vec_in, upper, segm_ind_in,
-                                               vec_out, workspace, block_len,
-                                               segment_len, tile_len);
+  if ASCEND_IS_AIV {
+    const uint32_t num_blocks = AscendC::GetBlockNum();
+
+    if (AscendC::GetSubBlockIdx() > 0) {
+      return;
     }
-                                               */
+
+    const auto id = AscendC::GetBlockIdx();
+    const int32_t segment_block_offset =
+        scalar::GetGMValue<int32_t>(bstart_in, id, num_blocks);
+    const int32_t segment_block_len =
+        scalar::GetGMValue<int32_t>(segm_len_per_block_in, id, num_blocks);
+
+    const uint32_t block_vec_offset = id * block_len;
+
+    KernelSegSumVecRevert<OutputT, false, true> op(vec_len, num_segments,
+                                                   tile_len, block_vec_offset);
+    op.Init(workspace, segm_ind_in + segment_block_offset * sizeof(int32_t),
+            vec_out + segment_block_offset * sizeof(OutputT));
+    op.Process();
+  }
 }
 
 /**
