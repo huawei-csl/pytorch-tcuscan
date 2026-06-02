@@ -323,12 +323,15 @@ at::Tensor run_seg_sum_single_cube(const at::Tensor& x, const at::Tensor& upper,
  *
  * @param [in] x Input data vector.
  * @param [in] indptr Input segment starts vector.
+ * @param [in] bstart Block start indices for each segment. Length is `block_dim
+ * +
  * @param [in] s Tiling parameter. Typical values: 32, 64, 128.
  * @param [in] block_dim Number of blocks.
- * @return Segmented sum of (x, indptr).
+ * @return Segmented sum vector of (x, indptr).
  */
 at::Tensor run_seg_sum_multi_core(const at::Tensor& x, const at::Tensor& indptr,
-                                  int s, int block_dim) {
+                                  const at::Tensor& bstart, int s,
+                                  int block_dim) {
   const at::Device device = x.options().device();
   const auto dtype = x.options().dtype();
   const auto dtype_out =
@@ -341,26 +344,19 @@ at::Tensor run_seg_sum_multi_core(const at::Tensor& x, const at::Tensor& indptr,
   // Hence, the number of segments are -1.
   const uint32_t num_segments = indptr.numel() - 1;
 
-  const uint32_t ell = matmul_size * matmul_size;
-
-  const at::Tensor sstart =
-      ell *
-      torch::arange(0, block_dim + 1, 1,
-                    at::TensorOptions().dtype(torch::kInt32).device(device));
-  const at::Tensor bstart =
-      torch::searchsorted(indptr, sstart, /*right=*/false);
+  const uint32_t block_len = host_utils::CeilDiv(total_length, block_dim);
 
   const at::Tensor z = at::empty(
       {num_segments}, at::TensorOptions().dtype(dtype_out).device(device));
 
-  const tcuscan::SegSumSingleCoreTiling single_core_tiling{ell, num_segments,
-                                                           matmul_size};
+  const tcuscan::SegSumSingleCoreTiling single_core_tiling{
+      block_len, num_segments, matmul_size};
 
   const uint32_t singe_core_ws_size =
       tcuscan::get_workspace_size<int16_t /* half */>(single_core_tiling);
 
   const tcuscan::SegSumMultiCoreTiling tiling{total_length, num_segments,
-                                              matmul_size, ell};
+                                              matmul_size, block_len};
   uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
 
   // Offset indptr by one element, since first element is always zero.

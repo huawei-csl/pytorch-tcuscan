@@ -78,7 +78,7 @@ def _test_tcuscan_seg_sum_multi_core(
     print(f"bstart: {bstart}")
 
     torch.npu.synchronize()
-    actual = tcuscan_ops.run_seg_sum_multi_core(values_npu, indices_npu, s, NUM_BLOCKS).cpu()
+    actual = tcuscan_ops.run_seg_sum_multi_core(values_npu, indices_npu, bstart, s, NUM_BLOCKS).cpu()
     torch.npu.synchronize()
 
     print(f"# of segments : {num_segments}")
