@@ -113,7 +113,7 @@ class KernelSegSumVecRevert {
       out_q_.template EnQue<T>(vec_out_lt);
       if constexpr (UseAtomicWrite) {
         AscendC::PipeBarrier<PIPE_ALL>();
-        AscendC::SetAtomicAdd<int32_t>();
+        AscendC::SetAtomicAdd<T>();
       }
       copy::CopyVecToGm(global_out_[out_offset_], out_q_, tile_len_);
       if constexpr (UseAtomicWrite) {
