@@ -367,7 +367,7 @@ at::Tensor run_seg_sum_multi_core(const at::Tensor& x, const at::Tensor& indptr,
 
   // Workspace is duplicated across AI cores, hence multiplied by block_dim
   const at::Tensor workspace_tensor =
-      tcuscan::alloc_workspace(block_dim * 2 * 4, device);
+      tcuscan::alloc_workspace(total_length * 2 * z.element_size(), device);
 
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
