@@ -40,13 +40,24 @@ __aicore__ inline void run_seg_sum_multi_core(
     uint32_t block_len) {
   using OutputT = tcuscan::cube_unit::CubeOutType_t<T>;
 
+  const uint32_t align_size = tile_len * tile_len;
+  const uint32_t padded_vec_len = scalar::AlignUp(vec_len, align_size);
+  const uint32_t pad_size = padded_vec_len * sizeof(T);
+
+  GM_ADDR const padded_input = workspace;
+  GM_ADDR const spec_block_scan = workspace + pad_size;
+
+  run_pad_kernel<T, false>(vec_in, padded_input, vec_len, align_size);
+
+  sync::SyncGroup<sync::GroupSyncDirection::FULL>();
+
   if ASCEND_IS_AIC {
-    KernelRowScan<T> op_cube(tile_len, tile_len, vec_len);
-    op_cube.Init(vec_in, upper, workspace);
+    KernelRowScan<T> op_cube(tile_len, tile_len, padded_vec_len);
+    op_cube.Init(padded_input, upper, spec_block_scan);
     op_cube.Process();
   }
 
-  tcuscan::sync::SyncAllCores();
+  sync::SyncGroup<sync::GroupSyncDirection::FULL>();
 
   if ASCEND_IS_AIV {
     const uint32_t num_blocks = AscendC::GetBlockNum();
@@ -65,7 +76,8 @@ __aicore__ inline void run_seg_sum_multi_core(
 
     KernelSegSumVecRevert<OutputT, false, true> op(vec_len, num_segments,
                                                    tile_len, block_vec_offset);
-    op.Init(workspace, segm_ind_in + segment_block_offset * sizeof(int32_t),
+    op.Init(spec_block_scan,
+            segm_ind_in + segment_block_offset * sizeof(int32_t),
             vec_out + segment_block_offset * sizeof(OutputT));
     op.Process();
   }

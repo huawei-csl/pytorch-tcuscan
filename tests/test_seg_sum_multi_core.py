@@ -28,7 +28,7 @@ torch.npu.config.allow_internal_format = False
 torch.npu.set_device(NPU_DEVICE)
 
 NUM_SEGMENTS = [131]
-MAX_SEGMENT_LEN = [3000, 5000]
+MAX_SEGMENT_LEN = [3000, 4000, 5000]
 
 
 def uniform_rvs(shape):
@@ -63,6 +63,7 @@ def _test_tcuscan_seg_sum_multi_core(
 
     values_npu = torch.from_numpy(values).to(dtype).npu()
     indices_npu = torch.from_numpy(indices).to(torch.int32).npu()
+    torch.npu.synchronize()
 
     print(f"nnz: {nnz} | sqrt(nnz): {nnz**0.5}")
     print(f"values: {values[:10]} ...")
@@ -70,9 +71,14 @@ def _test_tcuscan_seg_sum_multi_core(
 
     assert nnz % (s*s) == 0, "Number of non-zeros must be aligned"
 
+    torch.npu.synchronize()
     sstart = torch.arange(0, nnz, nnz // num_blocks, dtype=torch.int32).npu()
+    torch.npu.synchronize()
     bstart = torch.searchsorted(indices_npu, sstart, right=False)
-    segm_len_per_block = torch.diff(bstart).npu()
+    torch.npu.synchronize()
+    segm_len_per_block = torch.diff(bstart)
+    torch.npu.synchronize()
+
     print(f"sstart (len: {len(sstart)}): {sstart}")
     print(f"bstart (len:{len(bstart)}): {bstart}")
     print(f"segm_len_per_block (len:{len(segm_len_per_block)}): {segm_len_per_block}")
@@ -87,6 +93,7 @@ def _test_tcuscan_seg_sum_multi_core(
     print(f"indices       : {indices}")
     print(f"expected      : {expected}")
     print(f"actual        : {actual}")
+    print(f"diff          : {torch.abs(actual - expected) < 1e-2}")
 
     abs_error = torch.max(torch.abs(actual - expected))
     rel_error = torch.max(torch.abs((actual - expected) / expected))
