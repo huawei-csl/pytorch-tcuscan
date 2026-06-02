@@ -22,7 +22,7 @@ _SIZES = [
     20 * 1024,
     30 * 1024,
     40 * 1024,
-    80 * 1024,
+    80 * 1024 + 13,
     80 * 1024 - 10,
     1024 * 1024 + 13,
     2 * 1024 * 1024 - 113,
@@ -38,18 +38,17 @@ def hist_range(x, num_bins: int):
     return torch.linspace(x_min.float(), x_max.float(), num_bins + 1)
 
 
-def _test_tcuscan_histogram(length: int, dtype: torch.dtype):
+def _test_tcuscan_histogram(length: int, hist_bins: int, dtype: torch.dtype):
     # x = 10 * torch.rand(length, dtype=dtype, device=NPU_DEVICE)
-    x = torch.randint(0, 2**7 - 1, (length,), dtype=dtype, device=NPU_DEVICE)
-    num_bins = 32
+    x = torch.randint(-2**7 +1, 2**7 - 1, (length,), dtype=dtype, device=NPU_DEVICE)
 
     torch.npu.synchronize()
-    actual = tcuscan_ops.run_histogram(x, num_bins)
+    actual = tcuscan_ops.run_histogram(x, hist_bins)
     torch.npu.synchronize()
     total_counts = torch.sum(actual, dtype=torch.int32)
     torch.npu.synchronize()
     # RuntimeError: "histogramdd" not implemented for 'Half'
-    expected = torch.histogram(x.to(torch.float), num_bins).hist.to(torch.int32)
+    expected = torch.histogram(x.to(torch.float), hist_bins).hist.to(torch.int32)
 
     assert (
         total_counts == length
@@ -59,6 +58,7 @@ def _test_tcuscan_histogram(length: int, dtype: torch.dtype):
     assert torch.equal(expected, actual), f"Diff {expected - actual}"
 
 
-@pytest.mark.parametrize("length", _SIZES)
-def test_tcuscan_histogram_fp16(length: int):
-    _test_tcuscan_histogram(length, torch.float16)
+@pytest.mark.parametrize("length", _SIZES, ids=lambda x: f"length:{x:,}")
+@pytest.mark.parametrize("hist_bins", [5, 8, 16, 32, 24], ids=lambda x: f"hist_bins:{x}")
+def test_tcuscan_histogram_fp16(length: int, hist_bins: int):
+    _test_tcuscan_histogram(length, hist_bins, torch.float16)
