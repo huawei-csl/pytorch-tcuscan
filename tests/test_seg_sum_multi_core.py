@@ -27,8 +27,7 @@ NPU_DEVICE = os.environ.get("NPU_DEVICE", "npu:1")
 torch.npu.config.allow_internal_format = False
 torch.npu.set_device(NPU_DEVICE)
 
-NUM_SEGMENTS = [131]
-MAX_SEGMENT_LEN = [3000, 4000, 5000]
+MAX_SEGMENT_LEN = [2000, 3000, 4000, 5000]
 
 
 def uniform_rvs(shape):
@@ -72,7 +71,7 @@ def _test_tcuscan_seg_sum_multi_core(
     assert nnz % (s*s) == 0, "Number of non-zeros must be aligned"
 
     torch.npu.synchronize()
-    sstart = torch.arange(0, nnz, nnz // num_blocks, dtype=torch.int32).npu()
+    sstart = torch.arange(0, nnz+1, nnz // num_blocks, dtype=torch.int32).npu()
     torch.npu.synchronize()
     bstart = torch.searchsorted(indices_npu, sstart, right=False)
     torch.npu.synchronize()
@@ -109,13 +108,13 @@ def _test_tcuscan_seg_sum_multi_core(
     ), f"Error seg_sum ({expected.dtype}). Abs-error: {abs_error} / {rel_error}, s={s}, max_seg_len={max_seg_len}"
 
 
-@pytest.mark.parametrize("num_segments", NUM_SEGMENTS)
 @pytest.mark.parametrize("max_seg_len", MAX_SEGMENT_LEN)
 @pytest.mark.parametrize("s", [128])
-@pytest.mark.parametrize("num_blocks", [4])
+@pytest.mark.parametrize("num_blocks", [4, 8])
 @pytest.mark.parametrize("dtype", [torch.float16], ids=str)
 def test_tcuscan_seg_sum_multi_core(
-    num_segments: int, max_seg_len: int, s: int, num_blocks: int, dtype: torch.dtype
+    max_seg_len: int, s: int, num_blocks: int, dtype: torch.dtype
 ):
+    num_segments = 1234
     vec_len = num_blocks * s * s
     _test_tcuscan_seg_sum_multi_core(vec_len, num_segments, max_seg_len, s, num_blocks, dtype)

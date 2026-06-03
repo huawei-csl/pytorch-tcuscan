@@ -58,6 +58,7 @@ __aicore__ inline void run_seg_sum_multi_core(
   }
 
   sync::SyncGroup<sync::GroupSyncDirection::FULL>();
+  sync::SyncAllCores();
 
   if ASCEND_IS_AIV {
     const uint32_t num_blocks = AscendC::GetBlockNum();
@@ -74,6 +75,8 @@ __aicore__ inline void run_seg_sum_multi_core(
 
     const uint32_t block_vec_offset = id * block_len;
 
+    // TODO(anastasios): `num_segments` -> `num_segments - segment_block_offset
+    // + 1`
     KernelSegSumVecRevert<OutputT, false, true> op(vec_len, num_segments,
                                                    tile_len, block_vec_offset);
     op.Init(spec_block_scan,
