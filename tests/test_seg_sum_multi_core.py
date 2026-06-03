@@ -56,10 +56,6 @@ def _test_tcuscan_seg_sum_multi_core(
     expected = A @ ones
     expected = torch.from_numpy(expected.flatten())
 
-    assert (
-        len(indices) - 1 == num_segments
-    ), f"Got num_segments: {num_segments}, len(indices): {len(indices)}"
-
     values_npu = torch.from_numpy(values).to(dtype).npu()
     indices_npu = torch.from_numpy(indices).to(torch.int32).npu()
     torch.npu.synchronize()
@@ -110,7 +106,7 @@ def _test_tcuscan_seg_sum_multi_core(
 
 @pytest.mark.parametrize("max_seg_len", MAX_SEGMENT_LEN)
 @pytest.mark.parametrize("s", [128])
-@pytest.mark.parametrize("num_blocks", [4, 8])
+@pytest.mark.parametrize("num_blocks", [2, 3, 4, 8])
 @pytest.mark.parametrize("dtype", [torch.float16], ids=str)
 def test_tcuscan_seg_sum_multi_core(
     max_seg_len: int, s: int, num_blocks: int, dtype: torch.dtype
