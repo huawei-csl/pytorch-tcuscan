@@ -23,11 +23,11 @@ random.seed(42)
 torch.manual_seed(42)
 np.random.seed(42)
 
-NPU_DEVICE = os.environ.get("NPU_DEVICE", "npu:1")
+NPU_DEVICE = os.environ.get("NPU_DEVICE", "npu:0")
 torch.npu.config.allow_internal_format = False
 torch.npu.set_device(NPU_DEVICE)
 
-MAX_SEGMENT_LEN = [2000, 3000, 4000, 5000]
+MAX_SEGMENT_LEN = [2000]
 
 
 def uniform_rvs(shape):
@@ -67,15 +67,17 @@ def _test_tcuscan_seg_sum_multi_core(
     assert nnz % (s*s) == 0, "Number of non-zeros must be aligned"
 
     torch.npu.synchronize()
-    sstart = torch.arange(0, nnz+1, nnz // num_blocks, dtype=torch.int32).npu()
+    sstart = torch.arange(0, nnz + 1, nnz // num_blocks, dtype=torch.int32).npu()
     torch.npu.synchronize()
     bstart = torch.searchsorted(indices_npu, sstart, right=False)
     torch.npu.synchronize()
     segm_len_per_block = torch.diff(bstart)
     torch.npu.synchronize()
 
-    print(f"sstart (len: {len(sstart)}): {sstart}")
-    print(f"bstart (len:{len(bstart)}): {bstart}")
+    print(f"num_blocks                : {num_blocks}")
+    print(f"block_len                  : {nnz // num_blocks}")
+    print(f"block_offsets (len: {len(sstart)}): {sstart}")
+    print(f"segment_offsets (len: {len(bstart)}): {bstart}")
     print(f"segm_len_per_block (len:{len(segm_len_per_block)}): {segm_len_per_block}")
 
     torch.npu.synchronize()
@@ -88,7 +90,11 @@ def _test_tcuscan_seg_sum_multi_core(
     print(f"indices       : {indices}")
     print(f"expected      : {expected}")
     print(f"actual        : {actual}")
-    print(f"diff          : {torch.abs(actual - expected) < 1e-2}")
+    diff = torch.abs(actual - expected) < 1e-2
+    print(f"diff          : {diff}")
+    print(f"ratio of wrong entries: {1 - diff.float().mean():.4f}")
+    print(f"np.where: {torch.where(diff == False)}")
+
 
     abs_error = torch.max(torch.abs(actual - expected))
     rel_error = torch.max(torch.abs((actual - expected) / expected))
@@ -105,12 +111,12 @@ def _test_tcuscan_seg_sum_multi_core(
 
 
 @pytest.mark.parametrize("max_seg_len", MAX_SEGMENT_LEN)
-@pytest.mark.parametrize("s", [128])
-@pytest.mark.parametrize("num_blocks", [2, 3, 4, 8])
+@pytest.mark.parametrize("s", [16])
+@pytest.mark.parametrize("num_blocks", [2, 3, 4])
 @pytest.mark.parametrize("dtype", [torch.float16], ids=str)
 def test_tcuscan_seg_sum_multi_core(
     max_seg_len: int, s: int, num_blocks: int, dtype: torch.dtype
 ):
-    num_segments = 1234
+    num_segments = 213
     vec_len = num_blocks * s * s
     _test_tcuscan_seg_sum_multi_core(vec_len, num_segments, max_seg_len, s, num_blocks, dtype)

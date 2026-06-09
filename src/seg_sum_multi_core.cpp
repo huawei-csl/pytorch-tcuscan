@@ -63,10 +63,6 @@ __aicore__ inline void run_seg_sum_multi_core(
   if ASCEND_IS_AIV {
     const uint32_t num_blocks = AscendC::GetBlockNum();
 
-    if (AscendC::GetSubBlockIdx() > 0) {
-      return;
-    }
-
     const auto id = AscendC::GetBlockIdx();
     const int32_t segment_block_offset =
         scalar::GetGMValue<int32_t>(bstart_in, id, num_blocks);
@@ -75,13 +71,10 @@ __aicore__ inline void run_seg_sum_multi_core(
 
     const uint32_t block_vec_offset = id * block_len;
 
-    // TODO(anastasios): `num_segments` -> `num_segments - segment_block_offset
-    // + 1`
     KernelSegSumVecRevert<OutputT, false, true> op(vec_len, num_segments,
                                                    tile_len, block_vec_offset);
     op.Init(spec_block_scan,
-            segm_ind_in + segment_block_offset * sizeof(int32_t),
-            vec_out + segment_block_offset * sizeof(OutputT));
+            segm_ind_in + segment_block_offset * sizeof(int32_t), vec_out);
     op.Process();
   }
 }
