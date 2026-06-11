@@ -61,7 +61,7 @@ __aicore__ inline void run_seg_sum_single_core(
   if ASCEND_IS_AIV {
     KernelSegSumVecRevert<OutputT, true, UseAtomicWrite> op(
         vec_len, num_segments, tile_len, vec_start_offset);
-    op.Init(spec_block_scan, segm_ind_in, nullptr, vec_out);
+    op.Init(spec_block_scan, segm_ind_in, vec_out);
     op.Process();
   }
 }
@@ -109,7 +109,7 @@ __aicore__ inline void run_seg_sum_single_core_aligned(
   if ASCEND_IS_AIV {
     KernelSegSumVecRevert<OutputT, AIC_AIV_SYNC, UseAtomicWrite> op(
         vec_len, num_segments, tile_len, vec_start_offset);
-    op.Init(workspace, segm_ind_in, nullptr, vec_out);
+    op.Init(workspace, segm_ind_in, vec_out);
     op.Process();
   }
 }

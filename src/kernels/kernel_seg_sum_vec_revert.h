@@ -33,7 +33,6 @@ namespace tcuscan {
 template <typename T, bool SyncBefore = false, bool UseAtomicWrite = false>
 class KernelSegSumVecRevert {
   constexpr static uint32_t BUFFER_NUM = 2;
-  constexpr static int32_t MIN_VEC_SIZE = UB_ALIGNMENT / sizeof(int32_t);
 
  public:
   /**
@@ -49,10 +48,10 @@ class KernelSegSumVecRevert {
                                           uint32_t num_segments,
                                           uint32_t tile_len,
                                           uint32_t vec_start_offset = 0)
-      : num_segments_(num_segments),
+      : vec_len_(vec_len),
+        num_segments_(num_segments),
         tile_len_(tile_len),
         matrix_tile_len_(tile_len * tile_len),
-        vec_len_(matrix_tile_len_),
         num_tiles_(scalar::CeilDiv(vec_len_, matrix_tile_len_)),
         vec_start_offset_(vec_start_offset) {
     constexpr bool IS_DT_SUPPORTED =
@@ -66,41 +65,15 @@ class KernelSegSumVecRevert {
    * @param [in] vec_in Pointer to the input vector in global memory.
    * @param [in] segm_ind_in Pointer to the segment indices vector in global
    * memory.
-   * @param [in] bstart_in Pointer to the segment bstart vector in global
-   * memory.
    * @param [in] vec_out Pointer to the output vector in global memory.
    */
   __aicore__ inline void Init(GM_ADDR vec_in, GM_ADDR segm_ind_in,
-                              GM_ADDR bstart_in, GM_ADDR vec_out) {
-    const uint32_t num_blocks_aligned =
-        AlignUp(GetBlockNum() + 1, MIN_VEC_SIZE);
-    const uint32_t idx = GetBlockIdx() / 2;
-    global_bstart_in_.SetGlobalBuffer((__gm__ int32_t*)bstart_in,
-                                      num_blocks_aligned);
-    pipe_.InitBuffer(bstart_q_, 1, num_blocks_aligned * sizeof(uint32_t));
-
-    copy::CopyGmToVec(bstart_q_, global_bstart_in_, GetBlockNum() + 1);
-
-    LocalTensor<int32_t> bstart_lt = bstart_q_.template DeQue<int32_t>();
-    AscendC::PipeBarrier<PIPE_ALL>();
-    const int32_t segment_block_offset = bstart_lt.GetValue(idx);
-    AscendC::PipeBarrier<PIPE_ALL>();
-    num_segments_ = bstart_lt.GetValue(idx + 1) - bstart_lt.GetValue(idx);
-    AscendC::PipeBarrier<PIPE_ALL>();
-
-    printf("[%d]segment_block_offset: %d, num_segments: %d\n", idx,
-           segment_block_offset, num_segments_);
-    if (idx < 2) {
-      AscendC::DumpTensor(bstart_lt, 666, num_blocks_aligned);
-    }
-    bstart_q_.FreeTensor(bstart_lt);
-
-    global_in_.SetGlobalBuffer((__gm__ T*)vec_in + idx * matrix_tile_len_,
-                               vec_len_);
-    global_segm_in_.SetGlobalBuffer(
-        (__gm__ uint32_t*)segm_ind_in + segment_block_offset, num_segments_);
-    global_out_.SetGlobalBuffer((__gm__ T*)vec_out + segment_block_offset,
-                                num_segments_);
+                              GM_ADDR vec_out) {
+    global_in_.SetGlobalBuffer(
+        (__gm__ T*)vec_in + vec_start_offset_ * sizeof(T), vec_len_);
+    global_segm_in_.SetGlobalBuffer((__gm__ uint32_t*)segm_ind_in,
+                                    num_segments_);
+    global_out_.SetGlobalBuffer((__gm__ T*)vec_out, num_segments_);
 
     pipe_.InitBuffer(in_q_, BUFFER_NUM, matrix_tile_len_ * sizeof(T));
     pipe_.InitBuffer(segm_q_, BUFFER_NUM, tile_len_ * sizeof(uint32_t));
@@ -291,18 +264,16 @@ class KernelSegSumVecRevert {
 
   TQue<QuePosition::VECIN, BUFFER_NUM> in_q_;
   TQue<QuePosition::VECIN, BUFFER_NUM> segm_q_;
-  TQue<QuePosition::VECIN, 1> bstart_q_;
   TQue<QuePosition::VECOUT, 1> out_q_;
 
-  GlobalTensor<int32_t> global_bstart_in_;
   GlobalTensor<T> global_in_;
   GlobalTensor<uint32_t> global_segm_in_;
   GlobalTensor<T> global_out_;
 
-  uint32_t num_segments_;
+  const uint32_t vec_len_;
+  const uint32_t num_segments_;
   const uint32_t tile_len_;
   const uint32_t matrix_tile_len_;
-  const uint32_t vec_len_;
   const uint32_t num_tiles_;
   const uint32_t vec_start_offset_;
 
