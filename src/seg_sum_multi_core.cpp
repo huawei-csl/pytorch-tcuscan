@@ -63,18 +63,32 @@ __aicore__ inline void run_seg_sum_multi_core(
   if ASCEND_IS_AIV {
     const uint32_t num_blocks = AscendC::GetBlockNum();
 
-    const auto id = AscendC::GetBlockIdx();
-    const int32_t segment_block_offset =
+    if (GetBlockIdx() % 2 == 1) {
+      return;
+    }
+
+    const auto id = AscendC::GetBlockIdx() / 2;
+    int32_t segment_block_offset =
         scalar::GetGMValue<int32_t>(bstart_in, id, num_blocks);
     const int32_t segment_block_len =
         scalar::GetGMValue<int32_t>(segm_len_per_block_in, id, num_blocks);
 
-    const uint32_t block_vec_offset = id * block_len;
+    if (id > 0) {
+      segment_block_offset--;
+    }
 
-    KernelSegSumVecRevert<OutputT, false, true> op(vec_len, num_segments,
-                                                   tile_len, block_vec_offset);
+    const uint32_t block_vec_offset = id * tile_len * tile_len;
+
+    // printf("[%u] vec_offset / vec_len : %u, %u\n", id, block_vec_offset,
+    //        tile_len * tile_len);
+    // printf("[%u] offset / len / block_vec_offset: %u, %u\n", id,
+    //        segment_block_offset, segment_block_len);
+
+    KernelSegSumVecRevert<OutputT, false, true> op(
+        tile_len * tile_len, segment_block_len, tile_len, block_vec_offset);
     op.Init(spec_block_scan,
-            segm_ind_in + segment_block_offset * sizeof(int32_t), vec_out);
+            segm_ind_in + segment_block_offset * sizeof(int32_t),
+            vec_out + segment_block_offset * sizeof(OutputT));
     op.Process();
   }
 }

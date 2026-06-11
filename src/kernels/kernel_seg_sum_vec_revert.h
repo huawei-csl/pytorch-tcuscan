@@ -69,8 +69,7 @@ class KernelSegSumVecRevert {
    */
   __aicore__ inline void Init(GM_ADDR vec_in, GM_ADDR segm_ind_in,
                               GM_ADDR vec_out) {
-    global_in_.SetGlobalBuffer(
-        (__gm__ T*)vec_in + vec_start_offset_ * sizeof(T), vec_len_);
+    global_in_.SetGlobalBuffer((__gm__ T*)vec_in + vec_start_offset_, vec_len_);
     global_segm_in_.SetGlobalBuffer((__gm__ uint32_t*)segm_ind_in,
                                     num_segments_);
     global_out_.SetGlobalBuffer((__gm__ T*)vec_out, num_segments_);
