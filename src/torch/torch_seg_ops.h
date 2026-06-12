@@ -323,16 +323,14 @@ at::Tensor run_seg_sum_single_cube(const at::Tensor& x, const at::Tensor& upper,
  *
  * @param [in] x Input data vector.
  * @param [in] indptr Input segment starts vector.
- * @param [in] bstart Block start indices for each segment.
- * @param [in] segm_len_per_block Segment lengths per block.
- * @param [in] s Tiling parameter. Typical values: 32, 64, 128.
- * @param [in] block_dim Number of blocks.
+ * @param [in] segm_offsets Segment start index offset per block.
+ * @param [in] s Tiling parameter. Typical values: 16, 32, 64, 128.
  * @return Segmented sum vector of (x, indptr).
  */
 at::Tensor run_seg_sum_multi_core(const at::Tensor& x, const at::Tensor& indptr,
-                                  const at::Tensor& bstart,
-                                  const at::Tensor& segm_len_per_block, int s,
-                                  int block_dim) {
+                                  const at::Tensor& segm_offsets, int s) {
+  const auto ascendc_platform =
+      platform_ascendc::PlatformAscendCManager::GetInstance();
   const at::Device device = x.options().device();
   const auto dtype = x.options().dtype();
   const auto dtype_out =
@@ -345,7 +343,15 @@ at::Tensor run_seg_sum_multi_core(const at::Tensor& x, const at::Tensor& indptr,
   // Hence, the number of segments are -1.
   const uint32_t num_segments = indptr.numel() - 1;
 
-  const uint32_t block_len = host_utils::CeilDiv(total_length, block_dim);
+  const uint32_t num_tiles =
+      host_utils::CeilDiv(total_length, matmul_size * matmul_size);
+
+  uint32_t block_dim = ascendc_platform->GetCoreNumAic();
+  if (num_tiles < block_dim) {
+    block_dim = num_tiles;
+  }
+
+  const uint32_t block_len = total_length / block_dim;
 
   const at::Tensor z = at::zeros(
       {num_segments}, at::TensorOptions().dtype(dtype_out).device(device));
@@ -373,8 +379,8 @@ at::Tensor run_seg_sum_multi_core(const at::Tensor& x, const at::Tensor& indptr,
   if (dtype == torch::kHalf) {
     ACLRT_LAUNCH_KERNEL(seg_sum_multi_core_fp16)
     (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
-     const_cast<void*>(indptr_data), const_cast<void*>(bstart.storage().data()),
-     const_cast<void*>(segm_len_per_block.storage().data()),
+     const_cast<void*>(indptr_data),
+     const_cast<void*>(segm_offsets.storage().data()),
      const_cast<void*>(z.storage().data()),
      const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   }

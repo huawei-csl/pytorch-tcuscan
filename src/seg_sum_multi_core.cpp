@@ -24,8 +24,7 @@ using namespace tcuscan;
  * @param [in] upper Pointer to an upper-triangular all-ones square matrix of
  * size \f$\textit{matmul_size}\f$.
  * @param [in] segm_ind_in Pointer to the segment indices vector.
- * @param [in] bstart_in Pointer to start indices per block.
- * @param [in] segm_len_per_block_in Pointer to segment lengths per block.
+ * @param [in] segm_offset_per_block Pointer to segment index offset per block.
  * @param [in] vec_out Pointer ot the output vector.
  * @param [in] workspace Pointer to a memory region used as workspace.
  * @param [in] vec_len Input vector length.
@@ -34,8 +33,8 @@ using namespace tcuscan;
  */
 template <typename T>
 __aicore__ inline void run_seg_sum_multi_core(
-    GM_ADDR vec_in, GM_ADDR upper, GM_ADDR segm_ind_in, GM_ADDR bstart_in,
-    GM_ADDR segm_len_per_block_in, GM_ADDR vec_out, GM_ADDR workspace,
+    GM_ADDR vec_in, GM_ADDR upper, GM_ADDR segm_ind_in,
+    GM_ADDR segm_offset_per_block, GM_ADDR vec_out, GM_ADDR workspace,
     uint32_t vec_len, uint32_t num_segments, uint32_t tile_len,
     uint32_t block_len) {
   using OutputT = tcuscan::cube_unit::CubeOutType_t<T>;
@@ -67,28 +66,31 @@ __aicore__ inline void run_seg_sum_multi_core(
       return;
     }
 
-    const auto id = AscendC::GetBlockIdx() / 2;
-    int32_t segment_block_offset =
-        scalar::GetGMValue<int32_t>(bstart_in, id, num_blocks);
-    const int32_t segment_block_len =
-        scalar::GetGMValue<int32_t>(segm_len_per_block_in, id, num_blocks);
+    // id is the id of each AI Core (2 AIVs and 1 AIC core)
+    const auto id = GetBlockIdx() / GetTaskRation();
+    int32_t segm_ind_offset =
+        scalar::GetGMValue<int32_t>(segm_offset_per_block, id, num_blocks + 1);
+    const int32_t next_offset = scalar::GetGMValue<int32_t>(
+        segm_offset_per_block, id + 1, num_blocks + 1);
+    const int32_t num_segments_per_block = next_offset - segm_ind_offset;
 
     if (id > 0) {
-      segment_block_offset--;
+      segm_ind_offset--;
     }
 
-    const uint32_t block_vec_offset = id * tile_len * tile_len;
+    // Each AI Core group is responsible (offsets) starting from `block_len`
+    const uint32_t block_vec_offset = id * block_len;
 
+    // printf("[%u] block_len : %u, %u\n", id, block_len);
     // printf("[%u] vec_offset / vec_len : %u, %u\n", id, block_vec_offset,
     //        tile_len * tile_len);
     // printf("[%u] offset / len / block_vec_offset: %u, %u\n", id,
-    //        segment_block_offset, segment_block_len);
+    //       segment_block_offset, num_segments_per_block);
 
     KernelSegSumVecRevert<OutputT, false, true> op(
-        tile_len * tile_len, segment_block_len, tile_len, block_vec_offset);
-    op.Init(spec_block_scan,
-            segm_ind_in + segment_block_offset * sizeof(int32_t),
-            vec_out + segment_block_offset * sizeof(OutputT));
+        block_len, num_segments_per_block, tile_len, block_vec_offset);
+    op.Init(spec_block_scan, segm_ind_in + segm_ind_offset * sizeof(int32_t),
+            vec_out + segm_ind_offset * sizeof(OutputT));
     op.Process();
   }
 }
@@ -102,16 +104,14 @@ __aicore__ inline void run_seg_sum_multi_core(
  *
  * @param [in] vec_in Pointer to the input vector.
  * @param [in] indptr Pointer to the segment indices vector.
- * @param [in] bstart Pointer to the segment bstart vector.
- * @param [in] segm_len_per_block Pointer to the segment length per block
- * vector.
+ * @param [in] segment_offsets Pointer to the segment offset per block.
  * @param [in] vec_out Pointer to the output vector.
  * @param [in] workspace Pointer to workspace.
  * @param [in] tiling_gm Pointer to the tiling buffer.
  */
 extern "C" __global__ __aicore__ void seg_sum_multi_core_fp16(
-    GM_ADDR vec_in, GM_ADDR indptr, GM_ADDR bstart, GM_ADDR segm_len_per_block,
-    GM_ADDR vec_out, GM_ADDR workspace, GM_ADDR tiling_gm) {
+    GM_ADDR vec_in, GM_ADDR indptr, GM_ADDR segment_offsets, GM_ADDR vec_out,
+    GM_ADDR workspace, GM_ADDR tiling_gm) {
   tcuscan::SegSumMultiCoreTiling tiling;
   GetTilingData(&tiling, tiling_gm);
 
@@ -122,7 +122,7 @@ extern "C" __global__ __aicore__ void seg_sum_multi_core_fp16(
 
   GM_ADDR const lower = load_tril_matrix<half>(matmul_size);
 
-  run_seg_sum_multi_core<half>(vec_in, lower, indptr, bstart,
-                               segm_len_per_block, vec_out, workspace, vec_len,
-                               num_segments, matmul_size, block_len);
+  run_seg_sum_multi_core<half>(vec_in, lower, indptr, segment_offsets, vec_out,
+                               workspace, vec_len, num_segments, matmul_size,
+                               block_len);
 }

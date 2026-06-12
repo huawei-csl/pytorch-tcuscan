@@ -70,19 +70,15 @@ def _test_tcuscan_seg_sum_multi_core(
     torch.npu.synchronize()
     sstart = torch.arange(0, nnz + 1, nnz // num_blocks, dtype=torch.int32).npu()
     torch.npu.synchronize()
-    bstart = torch.searchsorted(indices_npu, sstart, right=False).to(torch.int32)
-    torch.npu.synchronize()
-    segm_len_per_block = torch.diff(bstart)
+    segm_offsets = torch.searchsorted(indices_npu, sstart, right=False).to(torch.int32)
     torch.npu.synchronize()
 
-    print(f"num_blocks                : {num_blocks}")
     print(f"block_len                  : {nnz // num_blocks}")
     print(f"block_offsets (len: {len(sstart)}): {sstart}")
-    print(f"bstart (len: {len(bstart)}): {bstart}")
-    print(f"segm_len_per_block (len:{len(segm_len_per_block)}): {segm_len_per_block}")
+    print(f"segm_offsets (len: {len(segm_offsets)}): {segm_offsets}")
 
     torch.npu.synchronize()
-    actual = tcuscan_ops.run_seg_sum_multi_core(values_npu, indices_npu, bstart, segm_len_per_block, s, num_blocks).cpu()
+    actual = tcuscan_ops.run_seg_sum_multi_core(values_npu, indices_npu, segm_offsets, s).cpu()
     torch.npu.synchronize()
 
     print(f"# of segments : {num_segments}")
@@ -115,7 +111,7 @@ def _test_tcuscan_seg_sum_multi_core(
 
 
 @pytest.mark.parametrize("max_seg_len", MAX_SEGMENT_LEN)
-@pytest.mark.parametrize("s", [128])
+@pytest.mark.parametrize("s", [16, 128])
 @pytest.mark.parametrize("num_blocks", [2, 4, 8, 16, 20])
 @pytest.mark.parametrize("dtype", [torch.float16], ids=str)
 def test_tcuscan_seg_sum_multi_core(
