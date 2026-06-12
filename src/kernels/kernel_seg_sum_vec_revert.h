@@ -72,7 +72,7 @@ class KernelSegSumVecRevert {
     global_in_.SetGlobalBuffer((__gm__ T*)vec_in + vec_start_offset_, vec_len_);
     global_segm_in_.SetGlobalBuffer((__gm__ uint32_t*)segm_ind_in,
                                     num_segments_);
-    global_out_.SetGlobalBuffer((__gm__ T*)vec_out, num_segments_);
+    global_out_.SetGlobalBuffer((__gm__ T*)vec_out, num_segments_ + 1);
 
     pipe_.InitBuffer(in_q_, BUFFER_NUM, matrix_tile_len_ * sizeof(T));
     pipe_.InitBuffer(segm_q_, BUFFER_NUM, tile_len_ * sizeof(uint32_t));

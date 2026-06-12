@@ -350,8 +350,9 @@ at::Tensor run_seg_sum_multi_core(const at::Tensor& x, const at::Tensor& indptr,
   if (num_tiles < block_dim) {
     block_dim = num_tiles;
   }
+  const uint32_t num_tiles_per_block = num_tiles / block_dim;
 
-  const uint32_t block_len = total_length / block_dim;
+  const uint32_t block_len = num_tiles_per_block * matmul_size * matmul_size;
 
   const at::Tensor z = at::zeros(
       {num_segments}, at::TensorOptions().dtype(dtype_out).device(device));
