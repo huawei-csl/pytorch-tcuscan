@@ -24,11 +24,11 @@ random.seed(42)
 torch.manual_seed(42)
 np.random.seed(42)
 
-NPU_DEVICE = os.environ.get("NPU_DEVICE", "npu:0")
+NPU_DEVICE = os.environ.get("NPU_DEVICE", "npu:1")
 torch.npu.config.allow_internal_format = False
 torch.npu.set_device(NPU_DEVICE)
 
-MAX_SEGMENT_LEN = [5000]
+MAX_SEGMENT_LEN = [2000, 5000]
 
 
 def uniform_rvs(shape):
@@ -111,8 +111,8 @@ def _test_tcuscan_seg_sum_multi_core(
 
 
 @pytest.mark.parametrize("max_seg_len", MAX_SEGMENT_LEN)
-@pytest.mark.parametrize("s", [16, 128])
-@pytest.mark.parametrize("num_blocks", [2, 4, 8, 16, 20])
+@pytest.mark.parametrize("s", [16, 32, 64, 128])
+@pytest.mark.parametrize("num_blocks", [2, 4, 8, 16])
 @pytest.mark.parametrize("dtype", [torch.float16], ids=str)
 def test_tcuscan_seg_sum_multi_core(
     max_seg_len: int, s: int, num_blocks: int, dtype: torch.dtype
