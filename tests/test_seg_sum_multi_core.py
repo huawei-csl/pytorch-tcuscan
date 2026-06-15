@@ -131,7 +131,7 @@ def _test_tcuscan_seg_sum_multi_core(
 @pytest.mark.parametrize("s", [16, 32, 64, 128])
 @pytest.mark.parametrize("num_blocks", [20, 40, 60, 80, 120])
 @pytest.mark.parametrize("dtype", [torch.float16], ids=str)
-@pytest.mark.parametrize("offset", [-3, -13, 3, 15]) # Fails for positive offsets: 3, 15. Also for '-23'
+@pytest.mark.parametrize("offset", [-3, -13, -23, 3, 15])
 def test_tcuscan_seg_sum_multi_core(
     max_seg_len: int, s: int, num_blocks: int, dtype: torch.dtype, offset: int
 ):
