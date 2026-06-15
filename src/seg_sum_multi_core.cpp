@@ -77,12 +77,18 @@ __aicore__ inline void run_seg_sum_multi_core(
         segm_offset_per_block, id + 1, num_blocks + 1);
     const int32_t num_segments_per_block = next_offset - segm_ind_offset;
 
+    // The boundaries of each segment must overlap
     if (id > 0) {
       segm_ind_offset--;
     }
 
     // Each AI Core group is responsible (offsets) starting from `block_len`
     const uint32_t block_vec_offset = id * block_len;
+    const bool is_overflow_block =
+        block_vec_offset + block_len > padded_vec_len;
+    if (is_overflow_block) {
+      block_len = padded_vec_len - block_vec_offset;
+    }
 
     // printf("[%u] block_len : %u, %u\n", id, block_len);
     // printf("[%u] vec_offset / vec_len : %u, %u\n", id, block_vec_offset,

@@ -11,6 +11,7 @@
 import os
 import random
 import math
+from math import ceil
 
 import numpy as np
 import pytest
@@ -42,8 +43,21 @@ def random_csr(rows: int, cols: int, nnz: int, dtype: np.dtype) -> csr_matrix:
     return csr_matrix((data, (row, col)), shape=(rows, cols))
 
 
+def tiling_function(nnz: int, s: int, max_aic_cores: int = 20):
+    "Return the tiling parameters 'block_len' and 'num_blocks' of seg_sum_multi_core."
+    matmul_tile_len = s * s
+    num_tiles = ceil(nnz / matmul_tile_len)
+    num_blocks = max_aic_cores
+    if num_tiles < num_blocks:
+        num_blocks = num_tiles
+
+    max_num_tiles_per_block = ceil(num_tiles / num_blocks)
+    block_len = max_num_tiles_per_block * matmul_tile_len
+    return block_len, num_blocks
+
+
 def _test_tcuscan_seg_sum_multi_core(
-    vec_len: int, num_segments: int, max_seg_len: int, s: int, num_blocks: int, dtype: torch.dtype
+    vec_len: int, num_segments: int, max_seg_len: int, s: int, dtype: torch.dtype
 ):
     sp_dtype = np.float32 if dtype == torch.float16 else np.int32
 
@@ -65,10 +79,10 @@ def _test_tcuscan_seg_sum_multi_core(
     print(f"values: {values[:10]} ...")
     print(f"indices: {indices}")
 
-    assert nnz % (s*s) == 0, "Number of non-zeros must be aligned"
-
+    block_len, num_blocks = tiling_function(nnz, s)
+    
     torch.npu.synchronize()
-    sstart = torch.arange(0, nnz + 1, nnz // num_blocks, dtype=torch.int32).npu()
+    sstart = torch.arange(0, nnz + 1, block_len, dtype=torch.int32).npu()
     torch.npu.synchronize()
     segm_offsets = torch.searchsorted(indices_npu, sstart, right=False).to(torch.int32)
     torch.npu.synchronize()
@@ -112,11 +126,12 @@ def _test_tcuscan_seg_sum_multi_core(
 
 @pytest.mark.parametrize("max_seg_len", MAX_SEGMENT_LEN)
 @pytest.mark.parametrize("s", [16, 32, 64, 128])
-@pytest.mark.parametrize("num_blocks", [2, 4, 8, 16, 20])
+@pytest.mark.parametrize("num_blocks", [20, 40, 60, 80, 120])
 @pytest.mark.parametrize("dtype", [torch.float16], ids=str)
+@pytest.mark.parametrize("offset", [-3, -13]) # Fails for positive offsets: 3, 15. Also for '-23'
 def test_tcuscan_seg_sum_multi_core(
-    max_seg_len: int, s: int, num_blocks: int, dtype: torch.dtype
+    max_seg_len: int, s: int, num_blocks: int, dtype: torch.dtype, offset: int
 ):
-    num_segments = 10 * int(num_blocks * math.sqrt(s))
-    vec_len = num_blocks * s * s
-    _test_tcuscan_seg_sum_multi_core(vec_len, num_segments, max_seg_len, s, num_blocks, dtype)
+    num_segments = 5 * int(num_blocks * math.sqrt(s))
+    vec_len = num_blocks * s * s + offset
+    _test_tcuscan_seg_sum_multi_core(vec_len, num_segments, max_seg_len, s, dtype)

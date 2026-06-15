@@ -338,27 +338,25 @@ at::Tensor run_seg_sum_multi_core(const at::Tensor& x, const at::Tensor& indptr,
 
   const uint32_t matmul_size = static_cast<uint32_t>(s);
   const uint32_t total_length = x.numel();
-  // The indptr does not contain zero as first entry and does not contain
-  // 'len(x)' as last entry.
+  // The indptr does not contain zero as first entry.
   // Hence, the number of segments are -1.
   const uint32_t num_segments = indptr.numel() - 1;
 
-  const uint32_t num_tiles =
-      host_utils::CeilDiv(total_length, matmul_size * matmul_size);
+  // total_length must be a multiple of matmul_size * matmul_size * block_dim
+  const uint32_t matrix_tile_lem = matmul_size * matmul_size;
+  const uint32_t num_tiles = host_utils::CeilDiv(total_length, matrix_tile_lem);
 
   uint32_t block_dim = ascendc_platform->GetCoreNumAic();
   if (num_tiles < block_dim) {
     block_dim = num_tiles;
   }
-  const uint32_t num_tiles_per_block = num_tiles / block_dim;
+  const uint32_t max_num_tiles_per_block =
+      host_utils::CeilDiv(num_tiles, block_dim);
 
-  const uint32_t block_len = num_tiles_per_block * matmul_size * matmul_size;
+  const uint32_t block_len = max_num_tiles_per_block * matrix_tile_lem;
 
   const at::Tensor z = at::zeros(
       {num_segments}, at::TensorOptions().dtype(dtype_out).device(device));
-
-  const tcuscan::SegSumSingleCoreTiling single_core_tiling{
-      block_len, num_segments, matmul_size};
 
   const tcuscan::SegSumMultiCoreTiling tiling{total_length, num_segments,
                                               matmul_size, block_len};
@@ -370,7 +368,7 @@ at::Tensor run_seg_sum_multi_core(const at::Tensor& x, const at::Tensor& indptr,
       indptr.element_size());
 
   const uint32_t workspace_size =
-      tcuscan::get_workspace_size<int16_t /* half */>(single_core_tiling);
+      tcuscan::get_workspace_size<int16_t /* half */>(tiling);
 
   const at::Tensor workspace_tensor =
       tcuscan::alloc_workspace(workspace_size, device);
