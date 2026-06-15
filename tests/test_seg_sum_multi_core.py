@@ -80,9 +80,12 @@ def _test_tcuscan_seg_sum_multi_core(
     print(f"indices: {indices}")
 
     block_len, num_blocks = tiling_function(nnz, s)
-    
+
     torch.npu.synchronize()
-    sstart = torch.arange(0, nnz + 1, block_len, dtype=torch.int32).npu()
+    sstart = torch.clamp(
+        torch.arange(0, num_blocks + 1, dtype=torch.int32) * block_len,
+        max=nnz,
+    ).npu()
     torch.npu.synchronize()
     segm_offsets = torch.searchsorted(indices_npu, sstart, right=False).to(torch.int32)
     torch.npu.synchronize()
@@ -128,7 +131,7 @@ def _test_tcuscan_seg_sum_multi_core(
 @pytest.mark.parametrize("s", [16, 32, 64, 128])
 @pytest.mark.parametrize("num_blocks", [20, 40, 60, 80, 120])
 @pytest.mark.parametrize("dtype", [torch.float16], ids=str)
-@pytest.mark.parametrize("offset", [-3, -13]) # Fails for positive offsets: 3, 15. Also for '-23'
+@pytest.mark.parametrize("offset", [-3, -13, 3, 15]) # Fails for positive offsets: 3, 15. Also for '-23'
 def test_tcuscan_seg_sum_multi_core(
     max_seg_len: int, s: int, num_blocks: int, dtype: torch.dtype, offset: int
 ):
