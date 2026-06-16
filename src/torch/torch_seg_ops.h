@@ -324,12 +324,11 @@ at::Tensor run_seg_sum_single_cube(const at::Tensor& x, const at::Tensor& upper,
  *
  * @param [in] x Input data vector.
  * @param [in] indptr Input segment starts vector.
- * @param [in] segm_offsets Segment start index offset per block.
  * @param [in] s Tiling parameter. Typical values: 16, 32, 64, 128.
  * @return Segmented sum vector of (x, indptr).
  */
 at::Tensor run_seg_sum_multi_core(const at::Tensor& x, const at::Tensor& indptr,
-                                  const at::Tensor& segm_offsets, int s) {
+                                  int s) {
   const auto ascendc_platform =
       platform_ascendc::PlatformAscendCManager::GetInstance();
   const at::Device device = x.options().device();
@@ -355,6 +354,17 @@ at::Tensor run_seg_sum_multi_core(const at::Tensor& x, const at::Tensor& indptr,
       host_utils::CeilDiv(num_tiles, block_dim);
 
   const uint32_t block_len = max_num_tiles_per_block * matrix_tile_lem;
+
+  const at::Tensor sstart =
+      torch::clamp(torch::arange(0, block_dim + 1,
+                                 torch::TensorOptions().dtype(torch::kInt32)) *
+                       block_len,
+                   c10::nullopt, static_cast<int32_t>(total_length))
+          .to(device);
+
+  const at::Tensor segm_offsets =
+      torch::searchsorted(indptr.to(torch::kInt32), sstart, /*out_int32=*/true,
+                          /*right=*/false);
 
   const at::Tensor z = at::zeros(
       {num_segments}, at::TensorOptions().dtype(dtype_out).device(device));
@@ -387,7 +397,7 @@ at::Tensor run_seg_sum_multi_core(const at::Tensor& x, const at::Tensor& indptr,
     aclrtFree(tiling_device);
     aclrtSynchronizeStream(acl_stream);
 
-  } else if (dtype == torch::kInt32) {
+  } else if (dtype == torch::kInt8) {
     const uint32_t workspace_size = tcuscan::get_workspace_size<int8_t>(tiling);
 
     const at::Tensor workspace_tensor =

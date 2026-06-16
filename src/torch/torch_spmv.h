@@ -11,6 +11,7 @@
 
 #include "torch_gather.h"
 #include "torch_scan.h"
+#include "torch_seg_ops.h"
 
 namespace tcuscan {
 
@@ -73,9 +74,7 @@ at::Tensor run_spmv(const at::Tensor& vals, const at::Tensor& idx,
   } else {
     product = tcuscan::run_csr_gather(vals, cols, idx, x);
   }
-  const at::Tensor scanned = tcuscan::run_scan_multi_core(product, s);
-  const at::Tensor gathered = tcuscan::run_gather_spmv(scanned, idx, 128);
-  const at::Tensor z = torch::diff(gathered);
+  const at::Tensor z = tcuscan::run_seg_sum_multi_core(product, idx, s);
   aclrtSynchronizeStream(acl_stream);
 
   return z;

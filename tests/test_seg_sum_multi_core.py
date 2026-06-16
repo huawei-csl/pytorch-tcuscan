@@ -91,24 +91,9 @@ def _test_tcuscan_seg_sum_multi_core(
     indices_npu = torch.from_numpy(indices).npu().to(torch.int32)
     nnz = A.nnz
 
-    block_len, num_blocks = tiling_function(nnz, s)
-
-    torch.npu.synchronize()
-    sstart = torch.clamp(
-        torch.arange(0, num_blocks + 1, dtype=torch.int32) * block_len,
-        max=nnz,
-    ).npu()
-    torch.npu.synchronize()
-    segm_offsets = torch.searchsorted(indices_npu, sstart, right=False).to(torch.int32)
-    torch.npu.synchronize()
-
-    print(f"block_len                  : {nnz // num_blocks}")
-    print(f"block_offsets (len: {len(sstart)}): {sstart}")
-    print(f"segm_offsets (len: {len(segm_offsets)}): {segm_offsets}")
-
     torch.npu.synchronize()
     actual = tcuscan_ops.run_seg_sum_multi_core(
-        values_npu, indices_npu, segm_offsets, s
+        values_npu, indices_npu, s
     ).cpu()
     torch.npu.synchronize()
 
