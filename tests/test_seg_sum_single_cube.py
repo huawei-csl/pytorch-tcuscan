@@ -101,7 +101,7 @@ def _test_seg_sum_single_cube(
 
 @pytest.mark.parametrize("num_segments", _NUM_SEGMENTS)
 @pytest.mark.parametrize("num_cols", _NUM_COLUMNS)
-@pytest.mark.parametrize("s", [32, 64, 128])
+@pytest.mark.parametrize("s", [16, 32, 64, 128])
 @pytest.mark.parametrize("dtype", [torch.float16], ids=str)
 def test_seg_sum_single_cube(
     num_segments: int, num_cols: int, s: int, dtype: torch.dtype

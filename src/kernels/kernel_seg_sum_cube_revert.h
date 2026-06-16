@@ -77,7 +77,7 @@ class KernelSegSumCubeRevert {
 
     pipe_.InitBuffer(in_q_, BUFFER_NUM, matrix_tile_len_ * sizeof(T));
     pipe_.InitBuffer(segm_q_, BUFFER_NUM, tile_len_ * sizeof(uint32_t));
-    pipe_.InitBuffer(out_q_, BUFFER_NUM, tile_len_ * sizeof(T));
+    pipe_.InitBuffer(out_q_, 1, tile_len_ * sizeof(T));
   }
 
   /**
