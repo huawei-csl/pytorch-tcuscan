@@ -344,8 +344,8 @@ at::Tensor run_seg_sum_multi_core(const at::Tensor& x, const at::Tensor& indptr,
   const uint32_t num_segments = indptr.numel() - 1;
 
   // total_length must be a multiple of matmul_size * matmul_size * block_dim
-  const uint32_t matrix_tile_lem = matmul_size * matmul_size;
-  const uint32_t num_tiles = host_utils::CeilDiv(total_length, matrix_tile_lem);
+  const uint32_t matrix_tile_len = matmul_size * matmul_size;
+  const uint32_t num_tiles = host_utils::CeilDiv(total_length, matrix_tile_len);
 
   uint32_t block_dim = ascendc_platform->GetCoreNumAic();
   if (num_tiles < block_dim) {
@@ -354,7 +354,7 @@ at::Tensor run_seg_sum_multi_core(const at::Tensor& x, const at::Tensor& indptr,
   const uint32_t max_num_tiles_per_block =
       host_utils::CeilDiv(num_tiles, block_dim);
 
-  const uint32_t block_len = max_num_tiles_per_block * matrix_tile_lem;
+  const uint32_t block_len = max_num_tiles_per_block * matrix_tile_len;
 
   const at::Tensor z = at::zeros(
       {num_segments}, at::TensorOptions().dtype(dtype_out).device(device));
@@ -387,7 +387,7 @@ at::Tensor run_seg_sum_multi_core(const at::Tensor& x, const at::Tensor& indptr,
     aclrtFree(tiling_device);
     aclrtSynchronizeStream(acl_stream);
 
-  } else if (dtype == torch::kInt32) {
+  } else if (dtype == torch::kInt8) {
     const uint32_t workspace_size = tcuscan::get_workspace_size<int8_t>(tiling);
 
     const at::Tensor workspace_tensor =

@@ -18,6 +18,7 @@ import pytest
 import torch_npu  # noqa
 from scipy.sparse import csr_matrix
 from scipy.sparse import random as sp_random
+from functools import partial
 
 import tcuscan_ops
 import torch
@@ -34,7 +35,9 @@ _NUM_SEGMENTS = [513, 1025, 2011]  # 519, 2043 fails!
 _NUM_COLUMNS = [64 * 64 - 1, 128 * 128, 128 * 128 - 13, 128 * 128 + 13, 128 * 128 - 133]
 
 
-def uniform_rvs(shape):
+def uniform_rvs(shape, dtype: np.dtype):
+    if np.issubsctype(dtype, np.integer):
+        return np.random.randint(-2, 2, size=shape)
     return 0.5 * np.random.uniform(0, 1, size=shape) - 0.25
 
 
@@ -59,7 +62,7 @@ def tiling_function(nnz: int, s: int, max_aic_cores: int = 20):
     return block_len, num_blocks
 
 
-def _test_tcuscan_seg_sum_multi_core(
+def _test_seg_sum_multi_core(
     num_rows: int, num_cols: int, s: int, density: float, dtype: torch.dtype
 ):
     sp_dtype = np.float32 if dtype == torch.float16 else np.int32
@@ -72,7 +75,7 @@ def _test_tcuscan_seg_sum_multi_core(
         density=density,
         format="csr",
         dtype=sp_dtype,
-        data_rvs=uniform_rvs,
+        data_rvs=partial(uniform_rvs, dtype=sp_dtype),
     )
 
     ones = np.ones(num_cols).astype(sp_dtype)
@@ -135,9 +138,14 @@ def _test_tcuscan_seg_sum_multi_core(
     assert (
         actual.dtype == expected.dtype
     ), f"Output dtype mismatch. Got {actual.dtype}. Expected {expected.dtype}"
-    assert torch.allclose(
-        actual, expected, atol=1e-2
-    ), f"Error seg_sum ({expected.dtype}). Abs-error: {abs_error} / {rel_error}, s={s}, num_cols={num_cols}"
+    if dtype == torch.int8:
+        assert torch.equal(
+            actual, expected
+        ), f"Error seg_sum ({expected.dtype}). Abs-error: {abs_error} / {rel_error}, s={s}, num_cols={num_cols}"
+    elif dtype == torch.float16:
+        assert torch.allclose(
+            actual, expected, atol=1e-2
+        ), f"Error seg_sum ({expected.dtype}). Abs-error: {abs_error} / {rel_error}, s={s}, num_cols={num_cols}"
 
 
 @pytest.mark.parametrize(
@@ -146,8 +154,8 @@ def _test_tcuscan_seg_sum_multi_core(
 @pytest.mark.parametrize("num_cols", _NUM_COLUMNS, ids=lambda x: f"num_cols:({x})")
 @pytest.mark.parametrize("s", [32, 64, 128], ids=lambda s: f"s:({s})")
 @pytest.mark.parametrize("dtype", [torch.int8, torch.float16], ids=str)
-def test_tcuscan_seg_sum_multi_core(
+def test_seg_sum_multi_core(
     num_segments: int, num_cols: int, s: int, dtype: torch.dtype
 ):
     density = 0.01
-    _test_tcuscan_seg_sum_multi_core(num_segments, num_cols, s, density, dtype)
+    _test_seg_sum_multi_core(num_segments, num_cols, s, density, dtype)
