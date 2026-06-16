@@ -93,7 +93,7 @@ def _test_tcuscan_spmv(
 @pytest.mark.parametrize(
     ("dtype", "scale_factor"),
     [
-#        pytest.param(torch.int16, 6, id="torch.int16"),
+        pytest.param(torch.int16, 6, id="torch.int16"),
         pytest.param(torch.float16, 2, id="torch.float16"),
     ],
 )
