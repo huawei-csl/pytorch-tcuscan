@@ -140,7 +140,7 @@ extern "C" __global__ __aicore__ void seg_sum_multi_core_fp16(
 }
 
 /**
- * @brief Run the `seg_sum_multi_core` kernel with float32 dtype.
+ * @brief Run the `seg_sum_multi_core` kernel with int8 dtype.
  *
  * The segment indices format follows the scipy Compressed Sparse Row Matrix
  * convention
@@ -153,7 +153,7 @@ extern "C" __global__ __aicore__ void seg_sum_multi_core_fp16(
  * @param [in] workspace Pointer to workspace.
  * @param [in] tiling_gm Pointer to the tiling buffer.
  */
-extern "C" __global__ __aicore__ void seg_sum_multi_core_fp32(
+extern "C" __global__ __aicore__ void seg_sum_multi_core_int8(
     GM_ADDR vec_in, GM_ADDR indptr, GM_ADDR segment_offsets, GM_ADDR vec_out,
     GM_ADDR workspace, GM_ADDR tiling_gm) {
   tcuscan::SegSumMultiCoreTiling tiling;
@@ -164,9 +164,9 @@ extern "C" __global__ __aicore__ void seg_sum_multi_core_fp32(
   const uint32_t matmul_size = tiling.tile_len;
   const uint32_t block_len = tiling.block_len;
 
-  GM_ADDR const lower = load_tril_matrix<float>(matmul_size);
+  GM_ADDR const lower = load_tril_matrix<int8_t>(matmul_size);
 
-  run_seg_sum_multi_core<float>(vec_in, lower, indptr, segment_offsets, vec_out,
-                                workspace, vec_len, num_segments, matmul_size,
-                                block_len);
+  run_seg_sum_multi_core<int8_t>(vec_in, lower, indptr, segment_offsets,
+                                 vec_out, workspace, vec_len, num_segments,
+                                 matmul_size, block_len);
 }

@@ -17,6 +17,7 @@ import numpy as np
 import pytest
 import torch_npu  # noqa
 from scipy.sparse import csr_matrix
+from scipy.sparse import random as sp_random
 
 import tcuscan_ops
 import torch
@@ -29,11 +30,13 @@ NPU_DEVICE = os.environ.get("NPU_DEVICE", "npu:1")
 torch.npu.config.allow_internal_format = False
 torch.npu.set_device(NPU_DEVICE)
 
-MAX_SEGMENT_LEN = [2000, 3000, 4000, 5000]
+_NUM_SEGMENTS = [513, 1025, 2011]  # 519, 2043 fails!
+_NUM_COLUMNS = [64 * 64 - 1, 128 * 128, 128 * 128 - 13, 128 * 128 + 13, 128 * 128 - 133]
 
 
 def uniform_rvs(shape):
-    return 2 * np.random.uniform(0, 1, size=shape) - 1
+    return 0.5 * np.random.uniform(0, 1, size=shape) - 0.25
+
 
 def random_csr(rows: int, cols: int, nnz: int, dtype: np.dtype) -> csr_matrix:
     flat = np.random.choice(rows * cols, size=nnz, replace=False)
@@ -57,13 +60,22 @@ def tiling_function(nnz: int, s: int, max_aic_cores: int = 20):
 
 
 def _test_tcuscan_seg_sum_multi_core(
-    vec_len: int, num_segments: int, max_seg_len: int, s: int, dtype: torch.dtype
+    num_rows: int, num_cols: int, s: int, density: float, dtype: torch.dtype
 ):
     sp_dtype = np.float32 if dtype == torch.float16 else np.int32
 
-    A = random_csr(num_segments, max_seg_len, vec_len, sp_dtype)
+    num_segments = num_rows
 
-    ones = np.ones(max_seg_len).astype(sp_dtype)
+    A = sp_random(
+        num_rows,
+        num_cols,
+        density=density,
+        format="csr",
+        dtype=sp_dtype,
+        data_rvs=uniform_rvs,
+    )
+
+    ones = np.ones(num_cols).astype(sp_dtype)
     values = (A.data).astype(sp_dtype)
     indices = (A.indptr).astype(np.uint32)
     nnz = A.nnz
@@ -71,13 +83,13 @@ def _test_tcuscan_seg_sum_multi_core(
     expected = A @ ones
     expected = torch.from_numpy(expected.flatten())
 
-    values_npu = torch.from_numpy(values).to(dtype).npu()
-    indices_npu = torch.from_numpy(indices).to(torch.int32).npu()
-    torch.npu.synchronize()
+    # Drop first (always zero) and the last (always len(x)) entry of indices.
+    assert indices[0] == 0, "First entry must be zero."
+    assert indices[-1] == nnz, "Last entry equals to the nnzs."
 
-    print(f"nnz: {nnz} | sqrt(nnz): {nnz**0.5}")
-    print(f"values: {values[:10]} ...")
-    print(f"indices: {indices}")
+    values_npu = torch.from_numpy(values).npu().to(dtype)
+    indices_npu = torch.from_numpy(indices).npu().to(torch.int32)
+    nnz = A.nnz
 
     block_len, num_blocks = tiling_function(nnz, s)
 
@@ -95,11 +107,13 @@ def _test_tcuscan_seg_sum_multi_core(
     print(f"segm_offsets (len: {len(segm_offsets)}): {segm_offsets}")
 
     torch.npu.synchronize()
-    actual = tcuscan_ops.run_seg_sum_multi_core(values_npu, indices_npu, segm_offsets, s).cpu()
+    actual = tcuscan_ops.run_seg_sum_multi_core(
+        values_npu, indices_npu, segm_offsets, s
+    ).cpu()
     torch.npu.synchronize()
 
     print(f"# of segments : {num_segments}")
-    print(f"# of columns  : {max_seg_len}")
+    print(f"# of columns  : {num_cols}")
     print(f"nnz           : {nnz}")
     print(f"indices       : {indices}")
     print(f"expected      : {expected}")
@@ -112,7 +126,6 @@ def _test_tcuscan_seg_sum_multi_core(
     print(f"actual: {actual[np_where]}")
     print(f"expected: {expected[np_where]}")
 
-
     abs_error = torch.max(torch.abs(actual - expected))
     rel_error = torch.max(torch.abs((actual - expected) / expected))
 
@@ -124,17 +137,17 @@ def _test_tcuscan_seg_sum_multi_core(
     ), f"Output dtype mismatch. Got {actual.dtype}. Expected {expected.dtype}"
     assert torch.allclose(
         actual, expected, atol=1e-2
-    ), f"Error seg_sum ({expected.dtype}). Abs-error: {abs_error} / {rel_error}, s={s}, max_seg_len={max_seg_len}"
+    ), f"Error seg_sum ({expected.dtype}). Abs-error: {abs_error} / {rel_error}, s={s}, num_cols={num_cols}"
 
 
-@pytest.mark.parametrize("max_seg_len", MAX_SEGMENT_LEN)
-@pytest.mark.parametrize("s", [16, 32, 64, 128])
-@pytest.mark.parametrize("num_blocks", [20, 40, 60, 80, 120])
-@pytest.mark.parametrize("dtype", [torch.float16], ids=str)
-@pytest.mark.parametrize("offset", [-3, -13, -23, 3, 15])
+@pytest.mark.parametrize(
+    "num_segments", _NUM_SEGMENTS, ids=lambda x: f"num_segms:({x})"
+)
+@pytest.mark.parametrize("num_cols", _NUM_COLUMNS, ids=lambda x: f"num_cols:({x})")
+@pytest.mark.parametrize("s", [32, 64, 128], ids=lambda s: f"s:({s})")
+@pytest.mark.parametrize("dtype", [torch.int8, torch.float16], ids=str)
 def test_tcuscan_seg_sum_multi_core(
-    max_seg_len: int, s: int, num_blocks: int, dtype: torch.dtype, offset: int
+    num_segments: int, num_cols: int, s: int, dtype: torch.dtype
 ):
-    num_segments = 5 * int(num_blocks * math.sqrt(s))
-    vec_len = num_blocks * s * s + offset
-    _test_tcuscan_seg_sum_multi_core(vec_len, num_segments, max_seg_len, s, dtype)
+    density = 0.01
+    _test_tcuscan_seg_sum_multi_core(num_segments, num_cols, s, density, dtype)

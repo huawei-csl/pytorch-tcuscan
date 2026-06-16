@@ -3,7 +3,7 @@
  * @brief Torch wrapper for segmented operations.
  * @date 2025-03-27
  *
- * @copyright Copyright Huawei (c) 2025
+ * @copyright Copyright Huawei (c) 2025-2026
  */
 #pragma once
 
@@ -20,7 +20,7 @@
 #include "aclrtlaunch_seg_scan_single_core.h"
 #include "aclrtlaunch_seg_scan_vec_single_core.h"
 #include "aclrtlaunch_seg_sum_multi_core_fp16.h"
-#include "aclrtlaunch_seg_sum_multi_core_fp32.h"
+#include "aclrtlaunch_seg_sum_multi_core_int8.h"
 #include "aclrtlaunch_seg_sum_single_core_fp16.h"
 #include "aclrtlaunch_seg_sum_single_core_int8.h"
 #include "aclrtlaunch_seg_sum_single_cube_fp16.h"
@@ -387,14 +387,14 @@ at::Tensor run_seg_sum_multi_core(const at::Tensor& x, const at::Tensor& indptr,
     aclrtFree(tiling_device);
     aclrtSynchronizeStream(acl_stream);
 
-  } else if (dtype == torch::kFloat) {
-    const uint32_t workspace_size = tcuscan::get_workspace_size<float>(tiling);
+  } else if (dtype == torch::kInt32) {
+    const uint32_t workspace_size = tcuscan::get_workspace_size<int8_t>(tiling);
 
     const at::Tensor workspace_tensor =
         tcuscan::alloc_workspace(workspace_size, device);
 
     auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
-    ACLRT_LAUNCH_KERNEL(seg_sum_multi_core_fp32)
+    ACLRT_LAUNCH_KERNEL(seg_sum_multi_core_int8)
     (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
      const_cast<void*>(indptr_data),
      const_cast<void*>(segm_offsets.storage().data()),
