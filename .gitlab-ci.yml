@@ -1,10 +1,6 @@
 default:
-  image: registry-eu.inhuawei.com:5050/zrc-von-neumann-lab/tcuscan/docker-cann:20.04-x86-8.0.0.beta1
+  image: quay.io/ascend/cann:9.0.0-910b-ubuntu22.04-py3.11
   tags: [cpu]
-  before_script:
-    - pip3 config --exists-action i --user set global.index http://cmc-cd-mirror.rnd.huawei.com/pypi
-    - pip3 config --exists-action i --user set global.index-url http://cmc-cd-mirror.rnd.huawei.com/pypi/simple/
-    - pip3 config --exists-action i --user set global.trusted-host cmc-cd-mirror.rnd.huawei.com
 
 stages:
    - linter
@@ -27,7 +23,7 @@ workflow:
     - when: never
 
 shell_check:
-  image: registry-eu.inhuawei.com:5050/zrc-von-neumann-lab/tcuscan/koalaman/shellcheck-alpine:stable
+  image: koalaman/shellcheck-alpine:stable
   stage: linter
   dependencies: []
   before_script:
@@ -37,7 +33,7 @@ shell_check:
 
 black:
   stage: linter
-  image: registry-eu.inhuawei.com:5050/zrc-von-neumann-lab/tcuscan/python:3.9
+  image: python:3.9
   script:
     - pip3 install -U pip
     - pip3 install black==25.1.0 # The version here should be the same as in .pre-commit-config.yaml
@@ -45,14 +41,14 @@ black:
 
 cmake_linter:
   stage: linter
-  image: registry-eu.inhuawei.com:5050/zrc-von-neumann-lab/tcuscan/python:3.9
+  image: python:3.9
   script:
     - pip3 install -U pip cmakelang
     - cmake-lint CMakeLists.txt
 
 prospector:
   stage: linter
-  image: registry-eu.inhuawei.com:5050/zrc-von-neumann-lab/tcuscan/python:3.9
+  image: python:3.9
   script:
     - pip install prospector==1.14.0
     - prospector
@@ -83,13 +79,13 @@ secret_detection:
   dependencies: []
   before_script: []
   image:
-    name: registry-eu.inhuawei.com:5050/zrc-von-neumann-lab/tcuscan/zricethezav/gitleaks:v8.18.2
+    name: zricethezav/gitleaks:v8.18.2
     entrypoint: [""]
   script:
     - gitleaks detect -v --source .
 
-pages:
-  image: registry-eu.inhuawei.com:5050/zrc-von-neumann-lab/tcuscan/doxygen-alpine:latest
+.pages:
+  image: tcuscan/doxygen-alpine:latest
   stage: linter
   dependencies: []
   before_script: []
@@ -113,7 +109,7 @@ build_spmv_eigen:
 
 build:
   tags:
-    - baremetal
+    - docker_npu
   stage: build
   before_script:
     - echo "Override script. Do not mutate pip config."
@@ -412,7 +408,7 @@ test_histogram:
 # Uncomment to run all tests in a single run
 unit_test:
   tags:
-    - baremetal
+    - docker_npu
   stage: test_all
   dependencies: []
   before_script:
