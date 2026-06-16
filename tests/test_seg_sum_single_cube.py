@@ -15,6 +15,7 @@ import numpy as np
 import pytest
 import torch_npu  # noqa
 from scipy.sparse import random as sp_random
+from functools import partial
 
 import tcuscan_ops
 import torch
@@ -35,7 +36,7 @@ def uniform_rvs(shape):
     return 2 * np.random.uniform(0, 1, size=shape) - 1
 
 
-def _test_tcuscan_seg_sum_single_cube(
+def _test_seg_sum_single_cube(
     num_segments: int, num_cols: int, s: int, density: float, dtype: torch.dtype
 ):
     sp_dtype = np.float32 if dtype == torch.float16 else np.int32
@@ -100,10 +101,10 @@ def _test_tcuscan_seg_sum_single_cube(
 
 @pytest.mark.parametrize("num_segments", _NUM_SEGMENTS)
 @pytest.mark.parametrize("num_cols", _NUM_COLUMNS)
-@pytest.mark.parametrize("s", [32, 64, 128])  # 32, 64,
+@pytest.mark.parametrize("s", [32, 64, 128])
 @pytest.mark.parametrize("dtype", [torch.float16], ids=str)
-def test_tcuscan_segmented_sum(
+def test_seg_sum_single_cube(
     num_segments: int, num_cols: int, s: int, dtype: torch.dtype
 ):
     density = 0.01
-    _test_tcuscan_seg_sum_single_cube(num_segments, num_cols, s, density, dtype)
+    _test_seg_sum_single_cube(num_segments, num_cols, s, density, dtype)
