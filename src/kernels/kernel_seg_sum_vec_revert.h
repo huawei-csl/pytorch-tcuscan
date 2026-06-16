@@ -164,13 +164,7 @@ class KernelSegSumVecRevert {
   /**
    * @brief Run the kernel.
    */
-  __aicore__ inline void Process() {
-    if (GetSubBlockIdx() == 0) {
-      PipelineProcessWithCube();
-    } else {
-      SyncWithCubeNoop();
-    }
-  }
+  __aicore__ inline void Process() { PipelineProcessWithCube(); }
 
  private:
   __aicore__ inline void SyncWithCubeNoop() {
