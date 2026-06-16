@@ -90,7 +90,7 @@ at::Tensor run_cube_reduce(const at::Tensor& x, uint32_t num_blocks) {
 
   const uint32_t vec_len = x.numel();
 
-  const at::Tensor z = at::empty(
+  const at::Tensor z = at::zeros(
       {num_blocks}, at::TensorOptions().dtype(dtype_out).device(device));
 
   const tcuscan::CubeReduceTiling tiling =
