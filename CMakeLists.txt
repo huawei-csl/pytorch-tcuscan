@@ -45,6 +45,17 @@ endif()
 
 include(${ASCENDC_CMAKE_DIR}/ascendc.cmake)
 
+include(FetchContent)
+
+# certain operations need newer pto-isa header, not CANN default
+# to use default CANN headers set GIT_TAG to the matching CANN version
+FetchContent_Declare(
+  libpto_isa_headers
+  GIT_REPOSITORY https://gitcode.com/cann/pto-isa.git
+  GIT_TAG v9.0.0)
+
+FetchContent_Populate(libpto_isa_headers)
+
 # TORCH_NPU_PATH is the location where PyTorch Ascend Adapter (torch_npu) is
 # installed.
 execute_process(
@@ -90,8 +101,10 @@ ascendc_library(
 
 ascendc_compile_definitions(scan_kernels PRIVATE -DHAVE_WORKSPACE -DHAVE_TILING)
 
-ascendc_include_directories(scan_kernels PRIVATE
-                            ${CMAKE_CURRENT_SOURCE_DIR}/src)
+ascendc_include_directories(
+  scan_kernels PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
+  ${libpto_isa_headers_SOURCE_DIR}/include
+  ${libpto_isa_headers_SOURCE_DIR}/include/pto/common)
 
 target_link_libraries(scan_kernels PRIVATE ascendcl c_sec tiling_api register
                                            platform ascendalog)
@@ -118,8 +131,10 @@ ascendc_library(
 ascendc_compile_definitions(vector_kernels PRIVATE -DHAVE_WORKSPACE
                             -DHAVE_TILING)
 
-ascendc_include_directories(vector_kernels PRIVATE
-                            ${CMAKE_CURRENT_SOURCE_DIR}/src)
+ascendc_include_directories(
+  vector_kernels PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
+  ${libpto_isa_headers_SOURCE_DIR}/include
+  ${libpto_isa_headers_SOURCE_DIR}/include/pto/common)
 
 target_link_libraries(vector_kernels PRIVATE ascendcl c_sec tiling_api register
                                              platform ascendalog)
@@ -132,8 +147,10 @@ ascendc_library(split_kernels SHARED src/radix_sort.cpp src/compress.cpp
 ascendc_compile_definitions(split_kernels PRIVATE -DHAVE_WORKSPACE
                             -DHAVE_TILING)
 
-ascendc_include_directories(split_kernels PRIVATE
-                            ${CMAKE_CURRENT_SOURCE_DIR}/src)
+ascendc_include_directories(
+  split_kernels PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
+  ${libpto_isa_headers_SOURCE_DIR}/include
+  ${libpto_isa_headers_SOURCE_DIR}/include/pto/common)
 
 target_link_libraries(split_kernels PRIVATE ascendcl c_sec tiling_api register
                                             platform ascendalog)
