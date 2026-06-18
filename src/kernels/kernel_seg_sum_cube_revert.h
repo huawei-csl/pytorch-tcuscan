@@ -27,8 +27,10 @@ namespace tcuscan {
  * @tparam SyncBefore If true, the `KernelSegSumCubeRevert` (this kernel) waits
  * for the cube unit to send a synchronization signal after each matrix tile is
  * ready. Matrix tile has length `tile_len * tile_len`.
+ * @tparam UseAtomicWrite If true, the output is written using atomic-add
+ * semantics.
  */
-template <typename T, bool SyncBefore = false>
+template <typename T, bool SyncBefore = false, bool UseAtomicWrite = false>
 class KernelSegSumCubeRevert {
   constexpr static uint32_t BUFFER_NUM = 2;
 
@@ -39,17 +41,20 @@ class KernelSegSumCubeRevert {
    * @param [in] vec_len Input vector length.
    * @param [in] num_segments Number of segments.
    * @param [in] tile_len Tile length.
+   * @param [in] vec_start_offset Start offset of input data vector. Segment
+   * values will be offset accordindly. Default value is `0`.
    */
   __aicore__ inline KernelSegSumCubeRevert(uint32_t vec_len,
                                            uint32_t num_segments,
-                                           uint32_t tile_len)
+                                           uint32_t tile_len,
+                                           uint32_t vec_start_offset = 0)
       : num_blocks_(GetBlockNum() * GetTaskRation()),
         vec_len_(vec_len),
         num_segments_(num_segments),
         tile_len_(tile_len),
         matrix_tile_len_(tile_len * tile_len),
         num_tiles_(scalar::CeilDiv(vec_len_, matrix_tile_len_)),
-        max_num_tiles_per_block_(scalar::CeilDiv(num_tiles_, num_blocks_)) {
+        vec_start_offset_(vec_start_offset) {
     constexpr bool IS_DT_SUPPORTED =
         std::is_same_v<T, float> || std::is_same_v<T, int32_t>;
     static_assert(IS_DT_SUPPORTED, "Unsupported data type.");
@@ -65,14 +70,14 @@ class KernelSegSumCubeRevert {
    */
   __aicore__ inline void Init(GM_ADDR vec_in, GM_ADDR segm_ind_in,
                               GM_ADDR vec_out) {
-    global_in_.SetGlobalBuffer((__gm__ T*)vec_in, vec_len_);
+    global_in_.SetGlobalBuffer((__gm__ T*)vec_in + vec_start_offset_, vec_len_);
     global_segm_in_.SetGlobalBuffer((__gm__ uint32_t*)segm_ind_in,
                                     num_segments_);
     global_out_.SetGlobalBuffer((__gm__ T*)vec_out, num_segments_);
 
     pipe_.InitBuffer(in_q_, BUFFER_NUM, matrix_tile_len_ * sizeof(T));
     pipe_.InitBuffer(segm_q_, BUFFER_NUM, tile_len_ * sizeof(uint32_t));
-    pipe_.InitBuffer(out_q_, BUFFER_NUM, tile_len_ * sizeof(T));
+    pipe_.InitBuffer(out_q_, 1, tile_len_ * sizeof(T));
   }
 
   /**
@@ -105,7 +110,15 @@ class KernelSegSumCubeRevert {
     // Write tile to GM and "re-allocate" the output tile.
     if (index >= tile_len_) {
       out_q_.template EnQue<T>(vec_out_lt);
+      if constexpr (UseAtomicWrite) {
+        AscendC::PipeBarrier<PIPE_ALL>();
+        AscendC::SetAtomicAdd<T>();
+      }
       copy::CopyVecToGm(global_out_[out_offset_], out_q_, tile_len_);
+      if constexpr (UseAtomicWrite) {
+        AscendC::SetAtomicNone();
+        AscendC::DisableDmaAtomic();
+      }
       out_offset_ += tile_len_;
       vec_out_lt = out_q_.template AllocTensor<T>();
 
@@ -141,10 +154,10 @@ class KernelSegSumCubeRevert {
       // "Local-coordinates" segment index must be zeroed and keep
       // track of the output vector location.
       index = 0;
-      return segm_ind_lt.GetValue(0);
+      return segm_ind_lt.GetValue(0) - vec_start_offset_;
     } else {
       // Read next segment
-      return segm_ind_lt.GetValue(index);
+      return segm_ind_lt.GetValue(index) - vec_start_offset_;
     }
   }
 
@@ -175,7 +188,7 @@ class KernelSegSumCubeRevert {
     uint32_t in_offset = 0;
     uint32_t out_idx = 0;
     uint32_t segm_idx = 1;
-    uint32_t segm_end = segm_ind_lt.GetValue(segm_idx);
+    uint32_t segm_end = segm_ind_lt.GetValue(segm_idx) - vec_start_offset_;
 
     for (uint32_t tile_idx = 0; tile_idx < num_tiles_; tile_idx++) {
       if constexpr (SyncBefore) {
@@ -218,14 +231,23 @@ class KernelSegSumCubeRevert {
 
     const uint32_t tail_len = out_idx + 1;
     out_q_.template EnQue<T>(vec_out_lt);
+    if constexpr (UseAtomicWrite) {
+      AscendC::PipeBarrier<PIPE_ALL>();
+      AscendC::SetAtomicAdd<T>();
+    }
     copy::CopyVecToGm(global_out_[out_offset_], out_q_, tail_len);
+    if constexpr (UseAtomicWrite) {
+      AscendC::SetAtomicNone();
+      AscendC::DisableDmaAtomic();
+    }
   }
 
   TPipe pipe_;
 
   TQue<QuePosition::VECIN, BUFFER_NUM> in_q_;
   TQue<QuePosition::VECIN, BUFFER_NUM> segm_q_;
-  TQue<QuePosition::VECOUT, BUFFER_NUM> out_q_;
+  TQue<QuePosition::VECOUT, 1>
+      out_q_;  // TODO: double-buffering when atomics not used
 
   GlobalTensor<T> global_in_;
   GlobalTensor<uint32_t> global_segm_in_;
@@ -237,7 +259,7 @@ class KernelSegSumCubeRevert {
   const uint32_t tile_len_;
   const uint32_t matrix_tile_len_;
   const uint32_t num_tiles_;
-  const uint32_t max_num_tiles_per_block_;
+  const uint32_t vec_start_offset_;
 
   uint32_t segments_offset_ = 0;
   uint32_t out_offset_ = 0;
