@@ -48,8 +48,7 @@ class KernelSegSumCubeRevert {
                                            uint32_t num_segments,
                                            uint32_t tile_len,
                                            uint32_t vec_start_offset = 0)
-      : num_blocks_(GetBlockNum() * GetTaskRation()),
-        vec_len_(vec_len),
+      : vec_len_(vec_len),
         num_segments_(num_segments),
         tile_len_(tile_len),
         matrix_tile_len_(tile_len * tile_len),
@@ -253,7 +252,6 @@ class KernelSegSumCubeRevert {
   GlobalTensor<uint32_t> global_segm_in_;
   GlobalTensor<T> global_out_;
 
-  const uint32_t num_blocks_;
   const uint32_t vec_len_;
   const uint32_t num_segments_;
   const uint32_t tile_len_;
