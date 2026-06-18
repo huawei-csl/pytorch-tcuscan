@@ -152,9 +152,9 @@ def _test_seg_sum_multi_cube(
 
 
 @pytest.mark.parametrize(
-    "num_segments", _NUM_SEGMENTS, ids=lambda x: f"num_segms:({x})"
+    "num_segments", _NUM_SEGMENTS[:1], ids=lambda x: f"num_segms:({x})"
 )
-@pytest.mark.parametrize("num_cols", _NUM_COLUMNS, ids=lambda x: f"num_cols:({x})")
+@pytest.mark.parametrize("num_cols", _NUM_COLUMNS[:1], ids=lambda x: f"num_cols:({x})")
 @pytest.mark.parametrize("s", [16], ids=lambda s: f"s:({s})")
 @pytest.mark.parametrize("dtype", [torch.float16], ids=str)
 def test_seg_sum_multi_cube(

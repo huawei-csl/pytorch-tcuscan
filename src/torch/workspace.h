@@ -19,6 +19,7 @@
 #include "../tiling/tiling_scan_single_core.h"
 #include "../tiling/tiling_seg_scan_single_core.h"
 #include "../tiling/tiling_seg_sum_multi_core.h"
+#include "../tiling/tiling_seg_sum_multi_cube.h"
 #include "../tiling/tiling_seg_sum_single_core.h"
 #include "../tiling/tiling_seg_sum_single_cube.h"
 #include "../tiling/tiling_split.h"
@@ -323,6 +324,28 @@ constexpr uint32_t get_workspace_size(const SegSumMultiCoreTiling& tiling) {
   const uint32_t padded_vec_len =
       host_utils::AlignUp(vec_len, matmul_size * matmul_size);
   // Keep a copy of the input (padded) and the output.
+  const uint32_t total_size =
+      padded_vec_len * (sizeof(InputT) + sizeof(OutputT));
+
+  return total_size;
+}
+
+/**
+ * @brief Calculate the workspace size for `seg_sum_multi_cube`.
+ *
+ * @tparam InputT Element input data type
+ *
+ * @param [in] tiling Tiling parameters used in the kernel.
+ * @return Size of the workspace in bytes.
+ */
+template <typename InputT>
+constexpr uint32_t get_workspace_size(const SegSumMultiCubeTiling& tiling) {
+  using OutputT = host_utils::CubeOutType_t<InputT>;
+
+  const uint32_t vec_len = tiling.num_elems;
+  const uint32_t matmul_size = tiling.tile_len;
+  const uint32_t padded_vec_len =
+      host_utils::AlignUp(vec_len, matmul_size * matmul_size);
   const uint32_t total_size =
       padded_vec_len * (sizeof(InputT) + sizeof(OutputT));
 

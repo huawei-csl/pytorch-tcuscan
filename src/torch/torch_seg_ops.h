@@ -424,10 +424,10 @@ at::Tensor run_seg_sum_multi_core(const at::Tensor& x, const at::Tensor& indptr,
  * @param [in] s Tiling parameter. Typical values: 32, 64, 128.
  * @return Segmented sum vector. Output length equals `num_segments`.
  */
-at::Tensor run_seg_sum_multi_cube(const at::Tensor& x, const at::Tensor& indptr,
-                                  const at::Tensor& segm_offsets,
-                                  const at::Tensor& upper,
-                                  const at::Tensor& lower_strict, int s) {
+at::Tensor run_seg_sum_multi_cube(const at::Tensor& x, const at::Tensor& upper,
+                                  const at::Tensor& lower_strict,
+                                  const at::Tensor& indptr,
+                                  const at::Tensor& segm_offsets, int s) {
   const auto ascendc_platform =
       platform_ascendc::PlatformAscendCManager::GetInstance();
   const at::Device device = x.options().device();
@@ -458,7 +458,7 @@ at::Tensor run_seg_sum_multi_cube(const at::Tensor& x, const at::Tensor& indptr,
   const at::Tensor z = at::zeros(
       {num_segments}, at::TensorOptions().dtype(dtype_out).device(device));
 
-  const tcuscan::SegSumMultiCoreTiling tiling{total_length, num_segments,
+  const tcuscan::SegSumMultiCubeTiling tiling{total_length, num_segments,
                                               matmul_size, block_len};
   uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
 
@@ -477,9 +477,10 @@ at::Tensor run_seg_sum_multi_cube(const at::Tensor& x, const at::Tensor& indptr,
 
   ACLRT_LAUNCH_KERNEL(seg_sum_multi_cube_fp16)
   (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
+   const_cast<void*>(upper.storage().data()),
    const_cast<void*>(lower_strict.storage().data()),
+   const_cast<void*>(indptr_data),
    const_cast<void*>(segm_offsets.storage().data()),
-   const_cast<void*>(indptr_data), const_cast<void*>(upper.storage().data()),
    const_cast<void*>(z.storage().data()),
    const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
 
