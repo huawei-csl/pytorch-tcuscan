@@ -2,7 +2,7 @@
  * Copyright (c) Huawei Technologies Co., Ltd. 2026 All rights reserved.
  *
  * @file tiling_seg_sum_multi_cube.h
- * @brief Tiling structure for segmented sum single core.
+ * @brief Tiling structure for segmented sum multi cube.
  */
 
 #pragma once
