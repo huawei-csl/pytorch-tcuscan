@@ -89,10 +89,9 @@ __aicore__ inline void run_seg_sum_multi_cube(
     if (block_vec_offset >= padded_vec_len) {
       return;
     }
-    const bool is_overflow_block =
-        block_vec_offset + block_len > padded_vec_len;
+    const bool is_overflow_block = block_vec_offset + block_len > vec_len;
     if (is_overflow_block) {
-      block_len = padded_vec_len - block_vec_offset;
+      block_len = vec_len - block_vec_offset;
     }
 
     KernelSegSumCubeRevert<OutputT, false, true> op(
