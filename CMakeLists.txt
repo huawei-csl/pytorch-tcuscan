@@ -45,16 +45,13 @@ endif()
 
 include(${ASCENDC_CMAKE_DIR}/ascendc.cmake)
 
-include(FetchContent)
+add_compile_options(-D_FORTIFY_SOURCE=2 -O2 -std=c++17 -Wno-macro-redefined
+                    -Wno-ignored-attributes -fstack-protector-strong)
 
-# certain operations need newer pto-isa header, not CANN default
-# to use default CANN headers set GIT_TAG to the matching CANN version
-FetchContent_Declare(
-  libpto_isa_headers
-  GIT_REPOSITORY https://gitcode.com/cann/pto-isa.git
-  GIT_TAG v9.0.0)
+add_link_options(-s -Wl,-z,relro -Wl,-z,now)
 
-FetchContent_Populate(libpto_isa_headers)
+set(CMAKE_CPP_COMPILE_OPTIONS -xc++ "SHELL:-include stdint.h"
+                              "SHELL:-include stddef.h")
 
 # TORCH_NPU_PATH is the location where PyTorch Ascend Adapter (torch_npu) is
 # installed.
@@ -103,8 +100,8 @@ ascendc_compile_definitions(scan_kernels PRIVATE -DHAVE_WORKSPACE -DHAVE_TILING)
 
 ascendc_include_directories(
   scan_kernels PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
-  ${libpto_isa_headers_SOURCE_DIR}/include
-  ${libpto_isa_headers_SOURCE_DIR}/include/pto/common)
+  ${ASCEND_CANN_PACKAGE_PATH}/include
+  ${ASCEND_CANN_PACKAGE_PATH}/include/pto/common)
 
 target_link_libraries(scan_kernels PRIVATE ascendcl c_sec tiling_api register
                                            platform ascendalog)
@@ -133,8 +130,8 @@ ascendc_compile_definitions(vector_kernels PRIVATE -DHAVE_WORKSPACE
 
 ascendc_include_directories(
   vector_kernels PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
-  ${libpto_isa_headers_SOURCE_DIR}/include
-  ${libpto_isa_headers_SOURCE_DIR}/include/pto/common)
+  ${ASCEND_CANN_PACKAGE_PATH}/include
+  ${ASCEND_CANN_PACKAGE_PATH}/include/pto/common)
 
 target_link_libraries(vector_kernels PRIVATE ascendcl c_sec tiling_api register
                                              platform ascendalog)
@@ -149,8 +146,8 @@ ascendc_compile_definitions(split_kernels PRIVATE -DHAVE_WORKSPACE
 
 ascendc_include_directories(
   split_kernels PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
-  ${libpto_isa_headers_SOURCE_DIR}/include
-  ${libpto_isa_headers_SOURCE_DIR}/include/pto/common)
+  ${ASCEND_CANN_PACKAGE_PATH}/include
+  ${ASCEND_CANN_PACKAGE_PATH}/include/pto/common)
 
 target_link_libraries(split_kernels PRIVATE ascendcl c_sec tiling_api register
                                             platform ascendalog)
