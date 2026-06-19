@@ -325,10 +325,12 @@ at::Tensor run_seg_sum_single_cube(const at::Tensor& x, const at::Tensor& upper,
  * @param [in] x Input data vector.
  * @param [in] indptr Input segment starts vector.
  * @param [in] s Tiling parameter. Typical values: 16, 32, 64, 128.
+ * @param [in] segm_offsets Segment start index offset per block.
  * @return Segmented sum vector of (x, indptr).
  */
-at::Tensor run_seg_sum_multi_core(const at::Tensor& x, const at::Tensor& indptr,
-                                  int s) {
+at::Tensor run_seg_sum_multi_core(
+    const at::Tensor& x, const at::Tensor& indptr, int s,
+    c10::optional<at::Tensor> segm_offsets = c10::nullopt) {
   const auto ascendc_platform =
       platform_ascendc::PlatformAscendCManager::GetInstance();
   const at::Device device = x.options().device();
@@ -355,17 +357,20 @@ at::Tensor run_seg_sum_multi_core(const at::Tensor& x, const at::Tensor& indptr,
 
   const uint32_t block_len = max_num_tiles_per_block * matrix_tile_len;
 
-  const at::Tensor sstart =
-      torch::clamp(torch::arange(0, block_dim + 1,
-                                 torch::TensorOptions().dtype(torch::kInt32)) *
-                       block_len,
-                   c10::nullopt, static_cast<int32_t>(total_length))
-          .to(device);
+  at::Tensor segm_offsets_;
+  if (segm_offsets.has_value()) {
+    segm_offsets_ = segm_offsets.value();
+  } else {
+    const at::Tensor sstart = torch::clamp(
+        torch::arange(
+            0, block_dim + 1,
+            torch::TensorOptions().dtype(torch::kInt32).device(device)) *
+            block_len,
+        c10::nullopt, static_cast<int32_t>(total_length));
 
-  const at::Tensor segm_offsets =
-      torch::searchsorted(indptr.to(torch::kInt32), sstart, /*out_int32=*/true,
-                          /*right=*/false);
-
+    segm_offsets_ = torch::searchsorted(indptr.to(torch::kInt32), sstart,
+                                        /*out_int32=*/true);
+  }
   const at::Tensor z = at::zeros(
       {num_segments}, at::TensorOptions().dtype(dtype_out).device(device));
 
@@ -390,7 +395,7 @@ at::Tensor run_seg_sum_multi_core(const at::Tensor& x, const at::Tensor& indptr,
     ACLRT_LAUNCH_KERNEL(seg_sum_multi_core_fp16)
     (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
      const_cast<void*>(indptr_data),
-     const_cast<void*>(segm_offsets.storage().data()),
+     const_cast<void*>(segm_offsets_.storage().data()),
      const_cast<void*>(z.storage().data()),
      const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
 
@@ -407,7 +412,7 @@ at::Tensor run_seg_sum_multi_core(const at::Tensor& x, const at::Tensor& indptr,
     ACLRT_LAUNCH_KERNEL(seg_sum_multi_core_int8)
     (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
      const_cast<void*>(indptr_data),
-     const_cast<void*>(segm_offsets.storage().data()),
+     const_cast<void*>(segm_offsets_.storage().data()),
      const_cast<void*>(z.storage().data()),
      const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
 
