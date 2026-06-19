@@ -421,13 +421,12 @@ at::Tensor run_seg_sum_multi_core(const at::Tensor& x, const at::Tensor& indptr,
  * @param [in] segm_offsets Segment start index offset per block.
  * @param [in] upper Upper triangular all-ones matrix of size S.
  * @param [in] lower_strict Strict lower triangular all-ones matrix of size S.
- * @param [in] s Tiling parameter. Typical values: 32, 64, 128.
  * @return Segmented sum vector. Output length equals `num_segments`.
  */
 at::Tensor run_seg_sum_multi_cube(const at::Tensor& x, const at::Tensor& upper,
                                   const at::Tensor& lower_strict,
                                   const at::Tensor& indptr,
-                                  const at::Tensor& segm_offsets, int s) {
+                                  const at::Tensor& segm_offsets) {
   const auto ascendc_platform =
       platform_ascendc::PlatformAscendCManager::GetInstance();
   const at::Device device = x.options().device();
@@ -436,7 +435,7 @@ at::Tensor run_seg_sum_multi_cube(const at::Tensor& x, const at::Tensor& upper,
   TORCH_CHECK(dtype == torch::kHalf,
               "run_seg_sum_multi_cube: x must be fp16, got ", dtype);
 
-  const uint32_t matmul_size = static_cast<uint32_t>(s);
+  const uint32_t matmul_size = static_cast<uint32_t>(upper.size(0));
   const uint32_t total_length = x.numel();
   // The indptr does not contain zero as first entry.
   // Hence, the number of segments are -1.

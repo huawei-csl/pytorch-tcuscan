@@ -114,7 +114,7 @@ def _test_seg_sum_multi_cube(
 
     torch.npu.synchronize()
     actual = tcuscan_ops.run_seg_sum_multi_cube(
-        values_npu, upper_npu, lower_strict_npu, indices_npu, segm_offsets, s
+        values_npu, upper_npu, lower_strict_npu, indices_npu, segm_offsets
     ).cpu()
     torch.npu.synchronize()
 
