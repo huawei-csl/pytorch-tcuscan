@@ -86,12 +86,11 @@ at::Tensor run_mc_gather(const at::Tensor& values, const at::Tensor& idxs,
  *
  * @param values Input values of CSR matrix.
  * @param cols Input columns of CSR matrix.
- * @param rows Input row pointers `row_ptr` of CSR matrix.
  * @param x Input vector
  * @return z[i] = values[i] * x[cols[i]] for i in range(len(cols)).
  */
 at::Tensor run_csr_gather(const at::Tensor& values, const at::Tensor& cols,
-                          const at::Tensor& rows, const at::Tensor& x) {
+                          const at::Tensor& x) {
   const auto ascendc_platform =
       platform_ascendc::PlatformAscendCManager::GetInstance();
   const uint32_t max_aiv_cores = ascendc_platform->GetCoreNumAiv();
@@ -102,12 +101,11 @@ at::Tensor run_csr_gather(const at::Tensor& values, const at::Tensor& cols,
   const at::Tensor workspace_tensor = alloc_workspace(0, device);
 
   const uint32_t values_len = values.numel();
-  const uint32_t rows_len = rows.numel();
   const uint32_t x_len = x.numel();
 
   constexpr uint32_t TILE_LEN = 1024;
 
-  const CSRGatherTiling tiling{values_len, rows_len, x_len, TILE_LEN};
+  const CSRGatherTiling tiling{values_len, x_len, TILE_LEN};
   uint8_t* tiling_device = alloc_copy_tiling(tiling);
 
   uint32_t block_dim = host_utils::CeilDiv(values_len, TILE_LEN);
@@ -123,7 +121,6 @@ at::Tensor run_csr_gather(const at::Tensor& values, const at::Tensor& cols,
     ACLRT_LAUNCH_KERNEL(csr_gather_fp16)
     (block_dim, acl_stream, const_cast<void*>(values.storage().data()),
      const_cast<void*>(cols.storage().data()),
-     const_cast<void*>(rows.storage().data()),
      const_cast<void*>(x.storage().data()),
      const_cast<void*>(z.storage().data()),
      const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
@@ -131,7 +128,6 @@ at::Tensor run_csr_gather(const at::Tensor& values, const at::Tensor& cols,
     ACLRT_LAUNCH_KERNEL(csr_gather_int16)
     (block_dim, acl_stream, const_cast<void*>(values.storage().data()),
      const_cast<void*>(cols.storage().data()),
-     const_cast<void*>(rows.storage().data()),
      const_cast<void*>(x.storage().data()),
      const_cast<void*>(z.storage().data()),
      const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
@@ -139,7 +135,6 @@ at::Tensor run_csr_gather(const at::Tensor& values, const at::Tensor& cols,
     ACLRT_LAUNCH_KERNEL(csr_gather_fp32)
     (block_dim, acl_stream, const_cast<void*>(values.storage().data()),
      const_cast<void*>(cols.storage().data()),
-     const_cast<void*>(rows.storage().data()),
      const_cast<void*>(x.storage().data()),
      const_cast<void*>(z.storage().data()),
      const_cast<void*>(workspace_tensor.storage().data()), tiling_device);

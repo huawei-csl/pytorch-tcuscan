@@ -50,8 +50,8 @@ def get_profiling_lengths():
     return [i * num_cores * s * s for i in range(1, max_iters, 16 * 128 // s)]
 
 
-def ref_csr_gather(input_values, input_cols, input_x):
-    return input_values * input_x[input_cols]
+def ref_csr_gather(values, cols, input_x):
+    return values * input_x[cols]
 
 
 def _test_tcuscan_csr_gather(col_len, x_len: int, in_dtype: torch.dtype):
@@ -59,15 +59,11 @@ def _test_tcuscan_csr_gather(col_len, x_len: int, in_dtype: torch.dtype):
     input_cols = torch.randint(
         low=0, high=x_len, size=(col_len,), dtype=torch.int32, device=NPU_DEVICE
     )
-    input_rows = torch.randint(
-        low=0, high=x_len, size=(x_len,), dtype=torch.int32, device=NPU_DEVICE
-    )
-    input_rows = torch.cumsum(input_rows, dim=-1)
     input_x = torch.randn(x_len, dtype=in_dtype, device=NPU_DEVICE)
 
     expected = ref_csr_gather(input_values, input_cols, input_x)
     torch.npu.synchronize()
-    actual = tcuscan_ops.run_csr_gather(input_values, input_cols, input_rows, input_x)
+    actual = tcuscan_ops.run_csr_gather(input_values, input_cols, input_x)
     torch.npu.synchronize()
 
     assert actual.shape == expected.shape, "Output shape does not match expected shape."

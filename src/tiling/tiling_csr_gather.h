@@ -18,8 +18,6 @@ namespace tcuscan {
 struct CSRGatherTiling {
   /// @brief Total number of input value elements.
   uint32_t num_elems;
-  /// @brief Length of row_ptr array.
-  uint32_t num_row_ptr;
   /// @brief Total number of input x vector elements.
   uint32_t num_x_elems;
   /// @brief Width of the tile: length of the vectors processed by CumSum
