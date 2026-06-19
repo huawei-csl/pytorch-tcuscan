@@ -64,7 +64,7 @@ def _test_tcuscan_spmv(
 
     torch_values = torch.from_numpy(values).to(dtype).npu()
     torch_indexes = torch.from_numpy(indexes).npu()
-    torch_cols = torch.from_numpy(cols).npu()
+    torch_cols = torch.from_numpy(cols).to(torch.int32).npu()
 
     torch_vector = torch.from_numpy(vector).to(dtype).npu()
 
