@@ -147,11 +147,18 @@ If the resolved path falls outside the current repository, tell the user and sto
    ## Output requirements
 
    - Complete, compilable PTO-ISA C++ (`#include "kernel_utils.h"`, `using namespace pto;`).
+   - **No C++ classes.** Express the kernel as a plain `extern "C"` function (or a
+     free function under the `#if defined(__DAV_VEC__)` guard), not as a class or
+     struct with member functions. Tile descriptors and UB addresses are local
+     variables or `constexpr` constants, not class members.
    - Same algorithmic logic as the source (tiling strategy, loop bounds, work split).
    - No pseudocode, no TODO stubs.
    - Annotate any non-obvious AscendC → PTO-ISA mapping with a one-line comment.
    - If an AscendC API has no direct PTO-ISA equivalent, decompose it into
      available primitives and document the decomposition.
+   - The output filename must contain `_pto_` (e.g. `kernel_cube_reduce.h` →
+     `kernel_pto_cube_reduce.h`). Reject any output path that does not match this
+     pattern.
    - Write the completed kernel to <OUTPUT_PATH>.
    ```
 
