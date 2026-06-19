@@ -86,28 +86,53 @@ at::Tensor run_mc_gather(const at::Tensor& values, const at::Tensor& idxs,
  *
  * @param values Input values of CSR matrix.
  * @param cols Input columns of CSR matrix.
- * @param rows Input row pointers `row_ptr` of CSR matrix.
  * @param x Input vector
  * @return z[i] = values[i] * x[cols[i]] for i in range(len(cols)).
  */
 at::Tensor run_csr_gather(const at::Tensor& values, const at::Tensor& cols,
-                          const at::Tensor& rows, const at::Tensor& x) {
+                          const at::Tensor& x) {
+  TORCH_CHECK(values.dim() == 1, "run_csr_gather: values must be 1D, got ",
+              values.dim(), "D");
+  TORCH_CHECK(cols.dim() == 1, "run_csr_gather: cols must be 1D, got ",
+              cols.dim(), "D");
+  TORCH_CHECK(x.dim() == 1, "run_csr_gather: x must be 1D, got ", x.dim(),
+              "D");
+  TORCH_CHECK(cols.numel() == values.numel(),
+              "run_csr_gather: cols length (", cols.numel(),
+              ") must match values length (", values.numel(), ")");
+  const auto dtype = values.options().dtype();
+  TORCH_CHECK(dtype == torch::kHalf || dtype == torch::kInt16 ||
+                  dtype == torch::kFloat,
+              "run_csr_gather: values dtype must be fp16, int16, or fp32, got ",
+              dtype);
+  TORCH_CHECK(x.options().dtype() == dtype,
+              "run_csr_gather: x dtype (", x.options().dtype(),
+              ") must match values dtype (", dtype, ")");
+  TORCH_CHECK(cols.options().dtype() == torch::kInt32,
+              "run_csr_gather: cols dtype must be int32, got ",
+              cols.options().dtype());
+  TORCH_CHECK(values.is_contiguous(), "run_csr_gather: values must be contiguous");
+  TORCH_CHECK(cols.is_contiguous(), "run_csr_gather: cols must be contiguous");
+  TORCH_CHECK(x.is_contiguous(), "run_csr_gather: x must be contiguous");
+  TORCH_CHECK(values.device() == cols.device(),
+              "run_csr_gather: values and cols must be on the same device");
+  TORCH_CHECK(values.device() == x.device(),
+              "run_csr_gather: values and x must be on the same device");
+
   const auto ascendc_platform =
       platform_ascendc::PlatformAscendCManager::GetInstance();
   const uint32_t max_aiv_cores = ascendc_platform->GetCoreNumAiv();
   const at::Device device = x.options().device();
-  const auto dtype = values.options().dtype();
 
   const at::Tensor z = at::empty_like(values);
   const at::Tensor workspace_tensor = alloc_workspace(0, device);
 
   const uint32_t values_len = values.numel();
-  const uint32_t rows_len = rows.numel();
   const uint32_t x_len = x.numel();
 
   constexpr uint32_t TILE_LEN = 1024;
 
-  const CSRGatherTiling tiling{values_len, rows_len, x_len, TILE_LEN};
+  const CSRGatherTiling tiling{values_len, x_len, TILE_LEN};
   uint8_t* tiling_device = alloc_copy_tiling(tiling);
 
   uint32_t block_dim = host_utils::CeilDiv(values_len, TILE_LEN);
@@ -123,7 +148,6 @@ at::Tensor run_csr_gather(const at::Tensor& values, const at::Tensor& cols,
     ACLRT_LAUNCH_KERNEL(csr_gather_fp16)
     (block_dim, acl_stream, const_cast<void*>(values.storage().data()),
      const_cast<void*>(cols.storage().data()),
-     const_cast<void*>(rows.storage().data()),
      const_cast<void*>(x.storage().data()),
      const_cast<void*>(z.storage().data()),
      const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
@@ -131,7 +155,6 @@ at::Tensor run_csr_gather(const at::Tensor& values, const at::Tensor& cols,
     ACLRT_LAUNCH_KERNEL(csr_gather_int16)
     (block_dim, acl_stream, const_cast<void*>(values.storage().data()),
      const_cast<void*>(cols.storage().data()),
-     const_cast<void*>(rows.storage().data()),
      const_cast<void*>(x.storage().data()),
      const_cast<void*>(z.storage().data()),
      const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
@@ -139,7 +162,6 @@ at::Tensor run_csr_gather(const at::Tensor& values, const at::Tensor& cols,
     ACLRT_LAUNCH_KERNEL(csr_gather_fp32)
     (block_dim, acl_stream, const_cast<void*>(values.storage().data()),
      const_cast<void*>(cols.storage().data()),
-     const_cast<void*>(rows.storage().data()),
      const_cast<void*>(x.storage().data()),
      const_cast<void*>(z.storage().data()),
      const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
