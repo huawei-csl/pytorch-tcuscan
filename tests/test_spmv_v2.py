@@ -76,11 +76,10 @@ def _test_tcuscan_spmv_v2(
         torch_values, torch_indexes, torch_cols, torch_vector, s
     )
     torch.npu.synchronize()
+
     actual_cpu = actual.cpu()
     expected = torch.from_numpy(result)
-    assert (
-        actual.shape == expected.shape
-    ), f"Output shape mismatch. Got {actual.shape}. Expected {expected.shape}"
+    assert actual.shape == expected.shape
 
     expected_dtype = torch.float32 if dtype == torch.float16 else torch.int32
     assert actual.dtype == expected_dtype
