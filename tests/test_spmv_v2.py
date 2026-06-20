@@ -14,6 +14,7 @@ import numpy as np
 import pytest
 import torch_npu  # noqa
 from scipy.sparse import random
+from functools import partial
 
 import tcuscan_ops
 import torch
@@ -36,7 +37,9 @@ _NROW = [
 ]
 
 
-def uniform_rvs(shape, scale: int = 6):
+def uniform_rvs(shape, dtype: np.dtype, scale: int = 6):
+    if np.issubsctype(dtype, np.integer):
+        return np.random.randint(-scale, scale, size=shape)
     return scale * np.random.uniform(0, 1, size=shape) - (scale // 2)
 
 
@@ -52,7 +55,7 @@ def _test_tcuscan_spmv_v2(
         density=density,
         format="csr",
         dtype=out_dtype,
-        data_rvs=lambda shape: uniform_rvs(shape, scale_factor),
+        data_rvs=partial(uniform_rvs, dtype=out_dtype, scale=scale_factor),
     )
 
     values = (B.data).astype(out_dtype)
