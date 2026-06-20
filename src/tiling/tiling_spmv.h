@@ -1,8 +1,8 @@
 /**
  * Copyright (c) Huawei Technologies Co., Ltd. 2026 All rights reserved.
  *
- * @file tiling_seg_sum_multi_core.h
- * @brief Tiling structure for segmented sum single core.
+ * @file tiling_spmv.h
+ * @brief Tiling structure for SpMV multi core.
  */
 
 #pragma once
@@ -13,7 +13,7 @@ namespace tcuscan {
 
 #pragma pack(push, 8)
 /**
- * @brief `seg_sum_multi_core` kernel tiling parameter structure.
+ * @brief `spmv` kernel tiling parameter structure.
  */
 struct SpMVTiling {
   /// @brief Total number of input elements (non-zeros).
