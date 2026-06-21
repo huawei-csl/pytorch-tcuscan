@@ -106,9 +106,7 @@ def _test_seg_sum_multi_core(
             max=nnz,
         ).npu()
         torch.npu.synchronize()
-        segm_offsets = torch.searchsorted(indices_npu, sstart, right=False).to(
-            torch.int32
-        )
+        segm_offsets = torch.searchsorted(indices_npu, sstart, out_int32=True, right=False)
         torch.npu.synchronize()
 
         actual = tcuscan_ops.run_seg_sum_multi_core(
