@@ -59,7 +59,9 @@ PYBIND11_MODULE(tcuscan_ops, m) {
   m.def("run_seg_sum_single_core", &tcuscan::run_seg_sum_single_core,
         "Segmented Sum (single-core)");
   m.def("run_seg_sum_multi_core", &tcuscan::run_seg_sum_multi_core,
-        "Segmented Sum (multi-core)");
+		          pybind11::arg("x"), pybind11::arg("indptr"), pybind11::arg("s"),
+			          pybind11::arg("segm_offsets") = pybind11::none(),
+				          "Segmented Sum (multi-core)");
   m.def("run_seg_sum_single_cube", &tcuscan::run_seg_sum_single_cube,
         "Segmented Sum (single-cube)");
   m.def("run_spmv", &tcuscan::run_spmv, "Sparse Matrix-Vector Multiplication");

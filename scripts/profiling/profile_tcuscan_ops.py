@@ -653,15 +653,6 @@ def seg_sum_multi_core_benchmark(
     nnz = vec_len
     sp_dtype = np.float32 if dtype == torch.float16 else np.int32
 
-    matmul_tile_len = s * s
-    num_tiles = nnz // matmul_tile_len
-    num_blocks = 20
-    if num_tiles < num_blocks:
-        num_blocks = num_tiles
-
-    block_len = nnz // num_blocks
-
-
     num_segments = 10 * int(num_blocks * math.sqrt(s))
     # num_segments = 10 * int(num_blocks * s)
     A = random_csr(num_segments, MAX_SEG_LEN, vec_len, sp_dtype)
@@ -678,20 +669,12 @@ def seg_sum_multi_core_benchmark(
     indices_npu = torch.from_numpy(indices).to(torch.int32).npu()
     torch.npu.synchronize()
 
-    assert nnz % (s*s) == 0, "Number of non-zeros must be aligned"
-
-    torch.npu.synchronize()
-    sstart = torch.arange(0, nnz + 1, block_len, dtype=torch.int32).npu()
-    torch.npu.synchronize()
-    segm_offsets = torch.searchsorted(indices_npu, sstart, right=False).to(torch.int32)
-    torch.npu.synchronize()
-
     num_segments = A.shape[0]
 
     assert nnz % (s * s) == 0, "Input must be a multiple of matrix tile length"
 
     def run_seg_sum_multi_core() -> None:
-        _ = tcuscan_ops.run_seg_sum_multi_core(values_npu, indices_npu, segm_offsets, s)
+        _ = tcuscan_ops.run_seg_sum_multi_core(values_npu, indices_npu, s)
 
     return _run_benchmark(device, run_seg_sum_multi_core), num_segments
 
