@@ -43,7 +43,7 @@ def uniform_rvs(shape, dtype: np.dtype, scale: int = 6):
     return scale * np.random.uniform(0, 1, size=shape) - (scale // 2)
 
 
-def _test_tcuscan_spmv(
+def _test_tcuscan_spmv_v2(
     nnr: int, s: int, density: float, dtype: torch.dtype, scale_factor: int
 ):
     rng = np.random.default_rng(seed=42)
@@ -72,10 +72,11 @@ def _test_tcuscan_spmv(
     torch_vector = torch.from_numpy(vector).to(dtype).npu()
 
     torch.npu.synchronize()
-    actual = tcuscan_ops.run_spmv(
+    actual = tcuscan_ops.run_spmv_v2(
         torch_values, torch_indexes, torch_cols, torch_vector, s
     )
     torch.npu.synchronize()
+
     actual_cpu = actual.cpu()
     expected = torch.from_numpy(result)
     assert actual.shape == expected.shape
@@ -98,7 +99,7 @@ def _test_tcuscan_spmv(
         pytest.param(torch.float16, 2, id="torch.float16"),
     ],
 )
-def test_tcuscan_spmv(
+def test_tcuscan_spmv_v2(
     s: int, density: float, nrow: int, dtype: torch.dtype, scale_factor: int
 ):
-    _test_tcuscan_spmv(nrow, s, density, dtype, scale_factor)
+    _test_tcuscan_spmv_v2(nrow, s, density, dtype, scale_factor)

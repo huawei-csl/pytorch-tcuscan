@@ -1,6 +1,6 @@
 /**
  * @file torch_spmv.h
- * @brief Torch wrapper for gather kernels.
+ * @brief Torch C++ wrappers for SpMV (sparse matrix-vector multiplication).
  * @date 2025-03-27
  *
  * @copyright Copyright Huawei (c) 2025
@@ -11,27 +11,32 @@
 
 #include "torch_gather.h"
 #include "torch_scan.h"
+#include "torch_seg_ops.h"
 
 namespace tcuscan {
 
 /**
- * @brief
+ * @brief CSR sparse matrix - dense vector multiplication using the multi-cube
+ * scan algorithm. See Segmented Operations using Matrix Multiplications
+ * (https://arxiv.org/pdf/2506.23906)
  *
- * @param vals: input values from CSR format
- * @param idx: row_ptr array from CSR format
- * @param cols: column array from CSR format
- * @param x: Vector to be multiplied to a matrix, A*x
- * @param upper: upper triangular matrix SxS of float16
- * @param lower_strict: lower triangular matrix SxS of float16
+ * Computes A @ x where A is given in CSR format. The prefix scan is
+ * accelerated by the cube unit using pre-computed triangular scan matrices.
  *
+ * @param vals input non-zero values of the CSR matrix
+ * @param indptr row pointer array of the CSR matrix (length rows + 1)
+ * @param cols column index array of the CSR matrix
+ * @param x dense vector to multiply: computes A @ x
+ * @param upper pre-computed upper triangular scan matrix (SxS, float16)
+ * @param lower_strict pre-computed strict lower triangular scan matrix (SxS,
+ * float16)
  *
- * Note: gather_spmv also takes as input its own tiling size, i.e., 128. It can
- * be hardcoded in the run_gather_spmv as it happens for the run_csr_gather. No
- * performance improvements with scaling that param. Failures for >512
- * @return Returns the sparse (CSR) matrix product with vector
+ * @note The gather_spmv tiling size is fixed at 128. Values above 512 cause
+ * failures; no performance benefit was observed from tuning this parameter.
  *
+ * @return Dense result vector of the SpMV product A @ x
  */
-at::Tensor run_spmv_multi_cube(const at::Tensor& vals, const at::Tensor& idx,
+at::Tensor run_spmv_multi_cube(const at::Tensor& vals, const at::Tensor& indptr,
                                const at::Tensor& cols, const at::Tensor& x,
                                const at::Tensor& upper,
                                const at::Tensor& lower_strict) {
@@ -40,7 +45,7 @@ at::Tensor run_spmv_multi_cube(const at::Tensor& vals, const at::Tensor& idx,
   const at::Tensor product = tcuscan::run_csr_gather(vals, cols, x);
   const at::Tensor scanned =
       tcuscan::run_scan_multi_cube(product, upper, lower_strict);
-  const at::Tensor gathered = tcuscan::run_gather_spmv(scanned, idx, 128);
+  const at::Tensor gathered = tcuscan::run_gather_spmv(scanned, indptr, 128);
   const at::Tensor z = torch::diff(gathered);
   aclrtSynchronizeStream(acl_stream);
 
@@ -48,24 +53,27 @@ at::Tensor run_spmv_multi_cube(const at::Tensor& vals, const at::Tensor& idx,
 }
 
 /**
- * @brief CSR sparse matrix - dense vector multiplication, i.e., SpMV, with
- * multi-core scan and gather.
- *
- * @param vals: input values from CSR format
- * @param idx: row_ptr array from CSR format
- * @param cols: column array from CSR format
- * @param x: Vector to be multiplied to a matrix: A @ x
- * @param s: tile size parameter for cube unit
- *
- * Note: gather_spmv also takes as input its own tiling size, i.e., 128. It can
- * be hardcoded in the run_gather_spmv as it happens for the run_csr_gather. No
- * performance improvements with scaling that param. Failures for >512
- * @return Returns the sparse (CSR) matrix product with vector
- */
-at::Tensor run_spmv(const at::Tensor& vals, const at::Tensor& idx,
-                    const at::Tensor& cols, const at::Tensor& x, int s) {
-  auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
+ * @brief CSR sparse matrix - dense vector multiplication using the multi-core
+ * scan algorithm. See Segmented Operations using Matrix Multiplications
+ * (https://arxiv.org/pdf/2506.23906)
 
+ *
+ * Computes A @ x where A is given in CSR format. The prefix scan is performed
+ * on vector cores using the provided tile size @p s.
+ *
+ * @param vals input non-zero values of the CSR matrix
+ * @param indptr row pointer array of the CSR matrix (length rows + 1)
+ * @param cols column index array of the CSR matrix
+ * @param x dense vector to multiply: computes A @ x
+ * @param s tile size for the multi-core prefix scan
+ *
+ * @note The gather_spmv tiling size is fixed at 128. Values above 512 cause
+ * failures; no performance benefit was observed from tuning this parameter.
+ *
+ * @return Dense result vector of the SpMV product A @ x
+ */
+at::Tensor run_spmv(const at::Tensor& vals, const at::Tensor& indptr,
+                    const at::Tensor& cols, const at::Tensor& x, int s) {
   const auto dtype = vals.options().dtype();
   at::Tensor product;
   if (dtype == torch::kInt16) {
@@ -74,9 +82,39 @@ at::Tensor run_spmv(const at::Tensor& vals, const at::Tensor& idx,
     product = tcuscan::run_csr_gather(vals, cols, x);
   }
   const at::Tensor scanned = tcuscan::run_scan_multi_core(product, s);
-  const at::Tensor gathered = tcuscan::run_gather_spmv(scanned, idx, 128);
+  const at::Tensor gathered = tcuscan::run_gather_spmv(scanned, indptr, 128);
   const at::Tensor z = torch::diff(gathered);
-  aclrtSynchronizeStream(acl_stream);
+
+  return z;
+}
+
+/**
+ * @brief CSR sparse matrix - dense vector multiplication using the multi-core
+ * segmented sum algorithm. See Segmented Operations using Matrix
+ * Multiplications (https://arxiv.org/pdf/2506.23906)
+ *
+ * Computes A @ x where A is given in CSR format. Unlike run_spmv(), this
+ * variant fuses the prefix-scan and gather steps into a single segmented sum
+ * kernel (run_seg_sum_multi_core()), reducing intermediate tensor allocations.
+ *
+ * @param vals non-zero values of the CSR matrix
+ * @param indptr row pointer array of the CSR matrix (length rows + 1)
+ * @param cols column index array of the CSR matrix
+ * @param x dense vector to multiply
+ * @param s tile size for the multi-core segmented sum kernel
+ *
+ * @return Dense result vector of the SpMV product A @ x
+ */
+at::Tensor run_spmv_v2(const at::Tensor& vals, const at::Tensor& indptr,
+                       const at::Tensor& cols, const at::Tensor& x, int s) {
+  const auto dtype = vals.options().dtype();
+  at::Tensor product;
+  if (dtype == torch::kInt16) {
+    product = tcuscan::run_csr_gather(vals, cols, x).to(torch::kInt8);
+  } else {
+    product = tcuscan::run_csr_gather(vals, cols, x);
+  }
+  const at::Tensor z = tcuscan::run_seg_sum_multi_core(product, indptr, s);
 
   return z;
 }
