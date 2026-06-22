@@ -16,8 +16,8 @@ namespace tcuscan {
  * @brief `spmv` kernel tiling parameter structure.
  */
 struct SpMVTiling {
-  /// @brief Total number of input elements (non-zeros).
-  uint32_t num_elems;
+  /// @brief Number of non-zeros elements.
+  uint32_t nnz;
   /// @brief Total number of segments.
   uint32_t num_segments;
   /// @brief Length of the dense input vector.

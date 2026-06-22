@@ -129,7 +129,7 @@ extern "C" __global__ __aicore__ void spmv_v2_fp16(
   tcuscan::SpMVTiling tiling;
   GetTilingData(&tiling, tiling_gm);
 
-  const uint32_t vec_len = tiling.num_elems;
+  const uint32_t vec_len = tiling.nnz;
   const uint32_t num_segments = tiling.num_segments;
   const uint32_t x_len = tiling.x_len;
   const uint32_t tile_len = tiling.tile_len;
