@@ -51,8 +51,9 @@ __aicore__ inline void run_spmv_v2(
   GM_ADDR const csr_products_ws = workspace;
   GM_ADDR const spec_block_scan_ws = workspace + pad_size;
 
+  const uint32_t csr_gather_tile_len = align_size > 1024 ? 1024 : align_size;
   run_csr_gather<T, false>(vec_in, cols_in, x_in, csr_products_ws, vec_len,
-                           x_len, align_size);
+                           x_len, csr_gather_tile_len);
 
   sync::SyncGroup<sync::GroupSyncDirection::FULL>();
   sync::SyncAllCores();
