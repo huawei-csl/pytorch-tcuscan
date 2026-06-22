@@ -109,6 +109,10 @@ at::Tensor run_spmv(const at::Tensor& vals, const at::Tensor& indptr,
  */
 at::Tensor run_spmv_v2(const at::Tensor& vals, const at::Tensor& indptr,
                        const at::Tensor& cols, const at::Tensor& x, int s) {
+  TORCH_CHECK(vals.options().dtype() == torch::kHalf &&
+                  x.options().dtype() == torch::kHalf,
+              "run_spmv_v2: vals and x must be fp16, got vals=",
+              vals.options().dtype(), " x=", x.options().dtype());
   const auto ascendc_platform =
       platform_ascendc::PlatformAscendCManager::GetInstance();
   const at::Device device = x.options().device();
