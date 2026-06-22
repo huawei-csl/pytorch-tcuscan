@@ -139,12 +139,12 @@ at::Tensor run_spmv_v2(const at::Tensor& vals, const at::Tensor& indptr,
           torch::TensorOptions().dtype(torch::kInt32).device(device)) *
           block_len,
       c10::nullopt, static_cast<int32_t>(nnz));
-  const at::Tensor segm_offsets_ = torch::searchsorted(
-      indptr.to(torch::kInt32), sstart, /*out_int32=*/true);
+  const at::Tensor segm_offsets_ =
+      torch::searchsorted(indptr.to(torch::kInt32), sstart, /*out_int32=*/true);
 
-  const at::Tensor z = at::zeros(
-      {num_segments},
-      at::TensorOptions().dtype(torch::kFloat32).device(device));
+  const at::Tensor z =
+      at::zeros({num_segments},
+                at::TensorOptions().dtype(torch::kFloat32).device(device));
 
   const tcuscan::SpMVTiling tiling{nnz, num_segments, x_len, tile_len,
                                    block_len};
@@ -166,10 +166,8 @@ at::Tensor run_spmv_v2(const at::Tensor& vals, const at::Tensor& indptr,
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
   ACLRT_LAUNCH_KERNEL(spmv_v2_fp16)
-  (block_dim, acl_stream,
-   const_cast<void*>(vals.storage().data()),
-   const_cast<void*>(cols.storage().data()),
-   const_cast<void*>(indptr_data),
+  (block_dim, acl_stream, const_cast<void*>(vals.storage().data()),
+   const_cast<void*>(cols.storage().data()), const_cast<void*>(indptr_data),
    const_cast<void*>(x.storage().data()),
    const_cast<void*>(segm_offsets_.storage().data()),
    const_cast<void*>(z.storage().data()),
