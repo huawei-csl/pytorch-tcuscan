@@ -2,7 +2,7 @@
  * Copyright (c) Huawei Technologies Co., Ltd. 2026 All rights reserved.
  *
  * @file tiling_spmv.h
- * @brief Tiling structure for SpMV multi core.
+ * @brief Tiling structure for CSR SpMV.
  */
 
 #pragma once
