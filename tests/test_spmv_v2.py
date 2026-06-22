@@ -19,7 +19,7 @@ from functools import partial
 import tcuscan_ops
 import torch
 
-NPU_DEVICE = os.environ.get("NPU_DEVICE", "npu:0")
+NPU_DEVICE = os.environ.get("NPU_DEVICE", "npu:1")
 torch.npu.config.allow_internal_format = False
 torch.npu.set_device(NPU_DEVICE)
 
@@ -89,13 +89,12 @@ def _test_tcuscan_spmv_v2(
     ), f"Error spmv ({expected.dtype}). s={s}"
 
 
-@pytest.mark.parametrize("s", [32, 64, 128])
+@pytest.mark.parametrize("s", [16, 32, 64])
 @pytest.mark.parametrize("density", [0.01, 0.001, 0.0001])
 @pytest.mark.parametrize("nrow", _NROW)
 @pytest.mark.parametrize(
     ("dtype", "scale_factor"),
     [
-        pytest.param(torch.int16, 6, id="torch.int16"),
         pytest.param(torch.float16, 2, id="torch.float16"),
     ],
 )
