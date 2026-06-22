@@ -156,7 +156,7 @@ at::Tensor run_spmv_v2(const at::Tensor& vals, const at::Tensor& indptr,
   const uint32_t workspace_size =
       padded_nnz * (sizeof(int16_t) + sizeof(float));
   const at::Tensor workspace_tensor =
-      tcuscan::alloc_workspace(workspace_size, device);
+      tcuscan::alloc_zeros_workspace(workspace_size, device);
 
   // Offset indptr by one element, since first element is always zero.
   void* indptr_data = static_cast<void*>(
