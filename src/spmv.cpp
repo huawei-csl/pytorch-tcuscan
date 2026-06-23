@@ -91,7 +91,7 @@ __aicore__ inline void run_spmv_v2(
 
     // Each AI Core group is responsible (offsets) starting from `block_len`
     const uint32_t block_vec_offset = id * block_len;
-    if (block_vec_offset >= padded_vec_len) {
+    if (block_vec_offset >= vec_len) {
       return;
     }
     const bool is_overflow_block = block_vec_offset + block_len > vec_len;

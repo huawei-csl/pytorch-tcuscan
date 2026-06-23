@@ -104,19 +104,20 @@ at::Tensor run_spmv(const at::Tensor& vals, const at::Tensor& indptr,
  * @param cols column index array of the CSR matrix
  * @param x dense vector to multiply
  * @param s tile size for the multi-core segmented sum kernel
- *
+ * @param [in] segm_offsets Segment start index offset per block.
  * @return Dense result vector of the SpMV product A @ x
  */
 at::Tensor run_spmv_v2(const at::Tensor& vals, const at::Tensor& indptr,
-                       const at::Tensor& cols, const at::Tensor& x, int s) {
+                       const at::Tensor& cols, const at::Tensor& x, int s,
+                       c10::optional<at::Tensor> segm_offsets = c10::nullopt) {
   TORCH_CHECK(vals.options().dtype() == torch::kHalf &&
                   x.options().dtype() == torch::kHalf,
               "run_spmv_v2: vals and x must be fp16, got vals=",
               vals.options().dtype(), " x=", x.options().dtype());
-  TORCH_CHECK(indptr.scalar_type() == at::kInt ||
-                  indptr.scalar_type() == at::kUInt32,
-              "run_spmv_v2: indptr must be int32 or uint32, got ",
-              indptr.scalar_type());
+  TORCH_CHECK(
+      indptr.scalar_type() == at::kInt || indptr.scalar_type() == at::kUInt32,
+      "run_spmv_v2: indptr must be int32 or uint32, got ",
+      indptr.scalar_type());
   const auto ascendc_platform =
       platform_ascendc::PlatformAscendCManager::GetInstance();
   const at::Device device = x.options().device();
@@ -137,14 +138,20 @@ at::Tensor run_spmv_v2(const at::Tensor& vals, const at::Tensor& indptr,
       host_utils::CeilDiv(num_tiles, block_dim);
   const uint32_t block_len = max_num_tiles_per_block * align_size;
 
-  const at::Tensor sstart = torch::clamp(
-      torch::arange(
-          0, block_dim + 1,
-          torch::TensorOptions().dtype(torch::kInt32).device(device)) *
-          block_len,
-      c10::nullopt, static_cast<int32_t>(nnz));
-  const at::Tensor segm_offsets_ =
-      torch::searchsorted(indptr, sstart, /*out_int32=*/true);
+  at::Tensor segm_offsets_;
+  if (segm_offsets.has_value()) {
+    segm_offsets_ = segm_offsets.value();
+  } else {
+    const at::Tensor sstart = torch::clamp(
+        torch::arange(
+            0, block_dim + 1,
+            torch::TensorOptions().dtype(torch::kInt32).device(device)) *
+            block_len,
+        c10::nullopt, static_cast<int32_t>(nnz));
+
+    segm_offsets_ = torch::searchsorted(indptr.to(torch::kInt32), sstart,
+                                        /*out_int32=*/true);
+  }
 
   const at::Tensor z =
       at::zeros({num_segments},
