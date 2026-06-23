@@ -47,7 +47,7 @@ jobs:
     name: Prospector
     if: |
       github.event.issue.pull_request &&
-      github.event.comment.body == '/run-ci'  
+      github.event.comment.body == '/run-ci'
     runs-on: ubuntu-latest
     container:
       image: python:3.10
