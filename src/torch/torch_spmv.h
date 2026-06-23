@@ -113,6 +113,10 @@ at::Tensor run_spmv_v2(const at::Tensor& vals, const at::Tensor& indptr,
                   x.options().dtype() == torch::kHalf,
               "run_spmv_v2: vals and x must be fp16, got vals=",
               vals.options().dtype(), " x=", x.options().dtype());
+  TORCH_CHECK(indptr.scalar_type() == at::kInt ||
+                  indptr.scalar_type() == at::kUInt32,
+              "run_spmv_v2: indptr must be int32 or uint32, got ",
+              indptr.scalar_type());
   const auto ascendc_platform =
       platform_ascendc::PlatformAscendCManager::GetInstance();
   const at::Device device = x.options().device();
@@ -140,7 +144,7 @@ at::Tensor run_spmv_v2(const at::Tensor& vals, const at::Tensor& indptr,
           block_len,
       c10::nullopt, static_cast<int32_t>(nnz));
   const at::Tensor segm_offsets_ =
-      torch::searchsorted(indptr.to(torch::kInt32), sstart, /*out_int32=*/true);
+      torch::searchsorted(indptr, sstart, /*out_int32=*/true);
 
   const at::Tensor z =
       at::zeros({num_segments},
