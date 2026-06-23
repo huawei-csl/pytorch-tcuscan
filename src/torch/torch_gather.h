@@ -95,23 +95,21 @@ at::Tensor run_csr_gather(const at::Tensor& values, const at::Tensor& cols,
               values.dim(), "D");
   TORCH_CHECK(cols.dim() == 1, "run_csr_gather: cols must be 1D, got ",
               cols.dim(), "D");
-  TORCH_CHECK(x.dim() == 1, "run_csr_gather: x must be 1D, got ", x.dim(),
-              "D");
-  TORCH_CHECK(cols.numel() == values.numel(),
-              "run_csr_gather: cols length (", cols.numel(),
-              ") must match values length (", values.numel(), ")");
+  TORCH_CHECK(x.dim() == 1, "run_csr_gather: x must be 1D, got ", x.dim(), "D");
+  TORCH_CHECK(cols.numel() == values.numel(), "run_csr_gather: cols length (",
+              cols.numel(), ") must match values length (", values.numel(),
+              ")");
   const auto dtype = values.options().dtype();
-  TORCH_CHECK(dtype == torch::kHalf || dtype == torch::kInt16 ||
-                  dtype == torch::kFloat,
-              "run_csr_gather: values dtype must be fp16, int16, or fp32, got ",
-              dtype);
-  TORCH_CHECK(x.options().dtype() == dtype,
-              "run_csr_gather: x dtype (", x.options().dtype(),
-              ") must match values dtype (", dtype, ")");
+  TORCH_CHECK(
+      dtype == torch::kHalf || dtype == torch::kInt16 || dtype == torch::kFloat,
+      "run_csr_gather: values dtype must be fp16, int16, or fp32, got ", dtype);
+  TORCH_CHECK(x.options().dtype() == dtype, "run_csr_gather: x dtype (",
+              x.options().dtype(), ") must match values dtype (", dtype, ")");
   TORCH_CHECK(cols.options().dtype() == torch::kInt32,
               "run_csr_gather: cols dtype must be int32, got ",
               cols.options().dtype());
-  TORCH_CHECK(values.is_contiguous(), "run_csr_gather: values must be contiguous");
+  TORCH_CHECK(values.is_contiguous(),
+              "run_csr_gather: values must be contiguous");
   TORCH_CHECK(cols.is_contiguous(), "run_csr_gather: cols must be contiguous");
   TORCH_CHECK(x.is_contiguous(), "run_csr_gather: x must be contiguous");
   TORCH_CHECK(values.device() == cols.device(),
