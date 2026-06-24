@@ -58,6 +58,8 @@ rm -rf build
 mkdir -p build
 cmake -B build \
     -DSOC_VERSION="${SOC_VERSION}" \
+    -DBASE_MODE=MEMORY \
+    -DCMAKE_PREFIX_PATH="${CMAKE_PREFIX_PATH}" \
     -DASCEND_CANN_PACKAGE_PATH="${_ASCEND_INSTALL_PATH}"
 
 cmake --build build -j
