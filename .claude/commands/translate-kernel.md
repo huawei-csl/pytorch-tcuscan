@@ -8,7 +8,7 @@ You are implementing the `/translate-kernel` skill for the pytorch-tcuscan proje
 
 ## What this skill does
 
-Translates an AscendC kernel header (`kernel_foo.h`) to its PTO-ISA equivalent (`kernel_pto_foo.h`), placed alongside the source file — matching the existing pattern in this repo (e.g. `src/kernels/kernel_pto_cube_reduce.h` is the PTO port of `src/kernels/kernel_cube_reduce.h`).
+Translates an AscendC kernel header (`kernel_foo.h`) to its PTO-ISA equivalent (`kernel_pto_foo.h`), placed alongside the source file — matching the existing pattern in this repo (e.g. `src/kernels/kernel_pto_foo.h` is the PTO port of `src/kernels/kernel_foot.h`).
 
 ## Input
 
@@ -25,18 +25,18 @@ If the resolved path falls outside the current repository, tell the user and sto
 
 1. **Resolve paths.** Given `$ARGUMENTS`:
    - If it doesn't end in `.h`, tell the user and stop.
-   - Compute the absolute source path. If the path is relative, resolve it against the repo root (`/home/zouzias/github-repos/pytorch-tcuscan`).
+   - Compute the absolute source path. If the path is relative, resolve it against the repo root (`/home/${USER}/github-repos/pytorch-tcuscan`).
    - Verify the resolved path is inside the current repository. If it falls outside the repo root, tell the user and stop.
    - Derive the output filename: replace the leading `kernel_` prefix in the basename with `kernel_pto_` (e.g. `kernel_histogram.h` → `kernel_pto_histogram.h`). Place the output in the same directory as the source.
    - If the output file already exists, warn the user and ask for confirmation before overwriting.
 
 2. **Read the reference translation** to ground the agent's style:
-   - Read `src/kernels/kernel_pto_cube_reduce.h` as a concrete reference for how PTO-ISA kernels look in this repo (PTO tile types, `TLOAD`/`TSTORE`/`TMATMUL`/`TSYNC` patterns, `pto::GlobalTensor` descriptors, namespace structure, etc.).
+   - Read `src/kernels/kernel_pto_foo.h` as a concrete reference for how PTO-ISA kernels look in this repo (PTO tile types, `TLOAD`/`TSTORE`/`TMATMUL`/`TSYNC` patterns, `pto::GlobalTensor` descriptors, namespace structure, etc.).
 
 3. **Delegate to the translation agent.** Spawn the `translate-ascendc-to-pto-isa` subagent with a prompt that includes:
    - The absolute path of the source file (so the agent reads it).
    - The absolute path of the output file (so the agent writes it).
-   - The path of the reference file (`src/kernels/kernel_pto_cube_reduce.h`) for style reference.
+   - The path of the reference file (`src/kernels/kernel_pto_foo.h`) for style reference.
    - Explicit instructions for using the `npu-coding` MCP tools at each stage (see the **MCP tool usage** section below).
    - Instruction to write the final PTO-ISA kernel to the output file when done.
 
@@ -151,6 +151,10 @@ If the resolved path falls outside the current repository, tell the user and sto
      free function under the `#if defined(__DAV_VEC__)` guard), not as a class or
      struct with member functions. Tile descriptors and UB addresses are local
      variables or `constexpr` constants, not class members.
+   - **No host-side C wrappers.** Do NOT write a `call_<name>(uint32_t blockDim,
+     void* stream, ...)` function. That launcher belongs in the host layer
+     (`torch_<name>.h`) and is NOT part of the device kernel file. The output
+     file should end after the last `extern "C" __global__` entry point.
    - Same algorithmic logic as the source (tiling strategy, loop bounds, work split).
    - No pseudocode, no TODO stubs.
    - Annotate any non-obvious AscendC → PTO-ISA mapping with a one-line comment.
