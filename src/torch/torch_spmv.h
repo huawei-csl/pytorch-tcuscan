@@ -9,6 +9,8 @@
 
 #include <pybind11/pybind11.h>
 
+#include "../tiling/tiling_spmv.h"
+#include "aclrtlaunch_spmv_v2_fp16.h"
 #include "torch_gather.h"
 #include "torch_scan.h"
 #include "torch_seg_ops.h"
@@ -102,19 +104,88 @@ at::Tensor run_spmv(const at::Tensor& vals, const at::Tensor& indptr,
  * @param cols column index array of the CSR matrix
  * @param x dense vector to multiply
  * @param s tile size for the multi-core segmented sum kernel
- *
+ * @param [in] segm_offsets Segment start index offset per block.
  * @return Dense result vector of the SpMV product A @ x
  */
 at::Tensor run_spmv_v2(const at::Tensor& vals, const at::Tensor& indptr,
-                       const at::Tensor& cols, const at::Tensor& x, int s) {
-  const auto dtype = vals.options().dtype();
-  at::Tensor product;
-  if (dtype == torch::kInt16) {
-    product = tcuscan::run_csr_gather(vals, cols, x).to(torch::kInt8);
-  } else {
-    product = tcuscan::run_csr_gather(vals, cols, x);
+                       const at::Tensor& cols, const at::Tensor& x, int s,
+                       c10::optional<at::Tensor> segm_offsets = c10::nullopt) {
+  TORCH_CHECK(vals.options().dtype() == torch::kHalf &&
+                  x.options().dtype() == torch::kHalf,
+              "run_spmv_v2: vals and x must be fp16, got vals=",
+              vals.options().dtype(), " x=", x.options().dtype());
+  TORCH_CHECK(
+      indptr.scalar_type() == at::kInt || indptr.scalar_type() == at::kUInt32,
+      "run_spmv_v2: indptr must be int32 or uint32, got ",
+      indptr.scalar_type());
+  const auto ascendc_platform =
+      platform_ascendc::PlatformAscendCManager::GetInstance();
+  const at::Device device = x.options().device();
+
+  const uint32_t tile_len = static_cast<uint32_t>(s);
+  const uint32_t nnz = static_cast<uint32_t>(vals.numel());
+  const uint32_t x_len = static_cast<uint32_t>(x.numel());
+  const uint32_t num_segments = static_cast<uint32_t>(indptr.numel() - 1);
+
+  const uint32_t align_size = tile_len * tile_len;
+  const uint32_t num_tiles = host_utils::CeilDiv(nnz, align_size);
+
+  uint32_t block_dim = ascendc_platform->GetCoreNumAic();
+  if (num_tiles < block_dim) {
+    block_dim = num_tiles;
   }
-  const at::Tensor z = tcuscan::run_seg_sum_multi_core(product, indptr, s);
+  const uint32_t max_num_tiles_per_block =
+      host_utils::CeilDiv(num_tiles, block_dim);
+  const uint32_t block_len = max_num_tiles_per_block * align_size;
+
+  at::Tensor segm_offsets_;
+  if (segm_offsets.has_value()) {
+    segm_offsets_ = segm_offsets.value();
+  } else {
+    const at::Tensor sstart = torch::clamp(
+        torch::arange(
+            0, block_dim + 1,
+            torch::TensorOptions().dtype(torch::kInt32).device(device)) *
+            block_len,
+        c10::nullopt, static_cast<int32_t>(nnz));
+
+    segm_offsets_ = torch::searchsorted(indptr.to(torch::kInt32), sstart,
+                                        /*out_int32=*/true);
+  }
+
+  const at::Tensor z =
+      at::zeros({num_segments},
+                at::TensorOptions().dtype(torch::kFloat32).device(device));
+
+  const tcuscan::SpMVTiling tiling{nnz, num_segments, x_len, tile_len,
+                                   block_len};
+  uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
+
+  // workspace: padded_nnz * sizeof(half) for CSR products
+  //          + padded_nnz * sizeof(float) for cube scan output
+  const uint32_t padded_nnz = host_utils::AlignUp(nnz, align_size);
+  const uint32_t workspace_size =
+      padded_nnz * (sizeof(int16_t) + sizeof(float));
+  const at::Tensor workspace_tensor =
+      tcuscan::alloc_zeros_workspace(workspace_size, device);
+
+  // Offset indptr by one element, since first element is always zero.
+  void* indptr_data = static_cast<void*>(
+      static_cast<uint8_t*>(const_cast<void*>(indptr.storage().data())) +
+      indptr.element_size());
+
+  auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
+
+  ACLRT_LAUNCH_KERNEL(spmv_v2_fp16)
+  (block_dim, acl_stream, const_cast<void*>(vals.storage().data()),
+   const_cast<void*>(cols.storage().data()), const_cast<void*>(indptr_data),
+   const_cast<void*>(x.storage().data()),
+   const_cast<void*>(segm_offsets_.storage().data()),
+   const_cast<void*>(z.storage().data()),
+   const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+
+  aclrtFree(tiling_device);
+  aclrtSynchronizeStream(acl_stream);
 
   return z;
 }

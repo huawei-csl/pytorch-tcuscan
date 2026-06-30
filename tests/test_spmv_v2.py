@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 # coding=utf-8
 #
-# Copyright (C) 2023-2024. Huawei Technologies Co., Ltd. All rights reserved.
+# Copyright (C) 2023-2026. Huawei Technologies Co., Ltd. All rights reserved.
 #
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -89,13 +89,12 @@ def _test_tcuscan_spmv_v2(
     ), f"Error spmv ({expected.dtype}). s={s}"
 
 
-@pytest.mark.parametrize("s", [32, 64, 128])
+@pytest.mark.parametrize("s", [16, 32, 64, 128])
 @pytest.mark.parametrize("density", [0.01, 0.001, 0.0001])
 @pytest.mark.parametrize("nrow", _NROW)
 @pytest.mark.parametrize(
     ("dtype", "scale_factor"),
     [
-        pytest.param(torch.int16, 6, id="torch.int16"),
         pytest.param(torch.float16, 2, id="torch.float16"),
     ],
 )
