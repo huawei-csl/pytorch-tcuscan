@@ -5,10 +5,11 @@ from dataclasses import dataclass
 from math import ceil
 
 import numpy as np
-import torch
 from scipy.io import mmread
 from scipy.sparse import csr_matrix, random
 from torch_scatter import segment_sum_csr
+
+import torch
 
 
 def uniform_rvs(shape):

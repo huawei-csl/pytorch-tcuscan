@@ -7,6 +7,7 @@
 
 import argparse
 import logging
+import math
 import os
 import sys
 import types
@@ -15,11 +16,11 @@ from dataclasses import dataclass
 from functools import partial
 from math import ceil, sqrt
 from typing import Optional, Tuple
-import math
 
 import numpy as np
 import torch.nn.functional as F
-from scipy.sparse import csr_matrix, random as sp_random
+from scipy.sparse import csr_matrix
+from scipy.sparse import random as sp_random
 
 import torch
 
@@ -94,8 +95,10 @@ def rand_triu_tensor(batch_size: int, n: int, dtype: np.dtype):
     A = A - torch.tril(A)
     return A
 
+
 def uniform_rvs(shape):
     return 2 * np.random.uniform(0, 1, size=shape) - 1
+
 
 def random_csr(rows: int, cols: int, nnz: int, dtype: np.dtype) -> csr_matrix:
     flat = np.random.choice(rows * cols, size=nnz, replace=False)
@@ -103,6 +106,7 @@ def random_csr(rows: int, cols: int, nnz: int, dtype: np.dtype) -> csr_matrix:
     col = flat % cols
     data = uniform_rvs(nnz).astype(dtype)
     return csr_matrix((data, (row, col)), shape=(rows, cols))
+
 
 def _run_benchmark(
     device: Device,
@@ -636,6 +640,7 @@ def sc_segmented_sum_benchmark(
 
     return _run_benchmark(device, run_seg_sum), outputsize
 
+
 def seg_sum_multi_core_benchmark(
     device: Device,
     vec_len: int,
@@ -644,7 +649,7 @@ def seg_sum_multi_core_benchmark(
     s: int,
     num_blocks: int,
 ) -> Tuple[float, int]:
-    
+
     MAX_SEG_LEN = 70000
 
     # Build a CSR matrix with exactly vec_len non-zeros so that the kernel

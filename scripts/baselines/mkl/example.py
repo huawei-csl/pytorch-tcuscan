@@ -1,7 +1,8 @@
-from sparse_dot_mkl import dot_product_mkl
+import time
+
 import numpy as np
 from scipy.sparse import random as sp_random
-import time
+from sparse_dot_mkl import dot_product_mkl
 
 if __name__ == "__main__":
     n = 4000

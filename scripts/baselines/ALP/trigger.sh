@@ -94,5 +94,3 @@ do
         ./tests/performance/driver_spmv_nonblocking "${file}" direct "${inner}" ${OUTERREPS} 2> "${dataset}".alp_spmv_nonblocking.vec
 done
 echo " "
-
-
