@@ -51,4 +51,3 @@ def _test_tcuscan_{{ kernel_cpp_name }}(length: int, dtype: torch.dtype, s: int)
 @pytest.mark.parametrize("length", _SIZES)
 def test_tcuscan_{{ kernel_cpp_name }}_fp16(length: int):
     _test_tcuscan_{{ kernel_cpp_name }}(length, torch.float16, 128)
-

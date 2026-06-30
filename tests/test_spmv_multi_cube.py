@@ -60,8 +60,8 @@ def _test_tcuscan_spmv_multi_cube(nnr: int, s: int, density: float):
     result = B @ vector
 
     torch_values = torch.from_numpy(values).npu()
-    torch_indexes = torch.from_numpy(indexes).npu()
-    torch_cols = torch.from_numpy(cols).npu()
+    torch_indexes = torch.from_numpy(indexes).to(torch.int32).npu()
+    torch_cols = torch.from_numpy(cols).to(torch.int32).npu()
     torch_vector = torch.from_numpy(vector).npu()
 
     ones = torch.ones((s, s), dtype=torch.float16, device=NPU_DEVICE)

@@ -21,7 +21,7 @@ Then, inside Python, type `import tcuscan`.
 Integrating TCUSCAN kernels to pytorch npu.
 
 ## Build, test, and install
-Currently there is no explicit "pythonic" installation of the package. 
+Currently there is no explicit "pythonic" installation of the package.
 All the artifacts are created using:
 ```bash
 make build

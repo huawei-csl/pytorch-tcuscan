@@ -9,12 +9,12 @@
 # ===============================================================================
 
 import os
+from functools import partial
 
 import numpy as np
 import pytest
 import torch_npu  # noqa
 from scipy.sparse import random
-from functools import partial
 
 import tcuscan_ops
 import torch

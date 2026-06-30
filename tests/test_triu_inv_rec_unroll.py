@@ -3,10 +3,10 @@ import random
 
 import numpy as np
 import pytest
-
-import torch
 import torch_npu  # noqa
+
 import tcuscan_ops
+import torch
 
 random.seed(42)
 torch.manual_seed(42)

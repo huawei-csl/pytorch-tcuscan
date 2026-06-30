@@ -13,5 +13,3 @@ conda run -n ${CONDA_ENV} python3 ${EXECUTABLE} ${BASE}/cant/cant.mtx
 conda run -n ${CONDA_ENV} python3 ${EXECUTABLE} ${BASE}/rma10/rma10.mtx
 # ID: 1385
 conda run -n ${CONDA_ENV} python3 ${EXECUTABLE} ${BASE}/mip1/mip1.mtx
-
-
