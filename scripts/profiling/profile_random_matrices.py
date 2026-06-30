@@ -42,7 +42,7 @@ DEVICE = os.environ.get("DEVICE_TYPE", "npu")
 if DEVICE == "npu":
     import torch_npu  # noqa
 
-    NPU_DEVICE = "npu:0"
+    NPU_DEVICE = "npu:1"
     torch.npu.config.allow_internal_format = False
     torch.npu.set_device(NPU_DEVICE)
     assert torch.npu.is_available()

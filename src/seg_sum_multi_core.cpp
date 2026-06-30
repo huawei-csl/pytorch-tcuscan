@@ -29,6 +29,7 @@ using namespace tcuscan;
  * @param [in] workspace Pointer to a memory region used as workspace.
  * @param [in] vec_len Input vector length.
  * @param [in] num_segments Number of segments.
+ * @param [in] tile_len Tile length for matrix operations (matmul size).
  * @param [in] block_len Block length.
  */
 template <typename T>
