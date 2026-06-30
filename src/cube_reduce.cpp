@@ -4,7 +4,7 @@
  * @file cube_reduce.cpp
  * @brief Kernel implementing a multi-core MIX block reducer.
  */
-#include "kernels/kernel_cube_reduce.h"
+#include "kernels/kernel_pto_cube_reduce.h"
 #include "kernels/tcuscan_utils.h"
 #include "tiling/tiling_cube_reduce.h"
 
@@ -27,8 +27,26 @@ extern "C" __global__ __aicore__ void cube_reduce_fp16(GM_ADDR vec_in,
   const uint32_t vec_len = tiling.vec_len;
   const uint32_t matmul_size = tiling.matmul_size;
 
-  tcuscan::run_cube_reduce<half>(vec_in, vec_out, workspace, vec_len,
-                                 matmul_size);
+  using OutputT = tcuscan::cube_unit::CubeOutType_t<half>;
+  [[maybe_unused]] auto* typed_in = reinterpret_cast<__gm__ half*>(vec_in);
+  [[maybe_unused]] auto* typed_out = reinterpret_cast<__gm__ OutputT*>(vec_out);
+
+  switch (matmul_size) {
+    case 32:
+      tcuscan::run_pto_cube_reduce<half, 32>(typed_in, typed_out, workspace,
+                                             vec_len);
+      break;
+    case 64:
+      tcuscan::run_pto_cube_reduce<half, 64>(typed_in, typed_out, workspace,
+                                             vec_len);
+      break;
+    case 128:
+      tcuscan::run_pto_cube_reduce<half, 128>(typed_in, typed_out, workspace,
+                                              vec_len);
+      break;
+    default:
+      break;
+  }
 }
 
 /**
