@@ -11,6 +11,7 @@
 
 #include "../tiling/tiling_spmv.h"
 #include "aclrtlaunch_spmv_v2_fp16.h"
+#include "aclrtlaunch_spmv_v2_fp32.h"
 #include "torch_gather.h"
 #include "torch_scan.h"
 #include "torch_seg_ops.h"
@@ -110,10 +111,13 @@ at::Tensor run_spmv(const at::Tensor& vals, const at::Tensor& indptr,
 at::Tensor run_spmv_v2(const at::Tensor& vals, const at::Tensor& indptr,
                        const at::Tensor& cols, const at::Tensor& x, int s,
                        c10::optional<at::Tensor> segm_offsets = c10::nullopt) {
-  TORCH_CHECK(vals.options().dtype() == torch::kHalf &&
-                  x.options().dtype() == torch::kHalf,
-              "run_spmv_v2: vals and x must be fp16, got vals=",
-              vals.options().dtype(), " x=", x.options().dtype());
+  const auto vals_dtype = vals.options().dtype();
+  const auto x_dtype = x.options().dtype();
+  TORCH_CHECK((vals_dtype == torch::kHalf && x_dtype == torch::kHalf) ||
+                  (vals_dtype == torch::kFloat && x_dtype == torch::kFloat),
+              "run_spmv_v2: vals and x must both be fp16 or both be fp32, "
+              "got vals=",
+              vals_dtype, " x=", x_dtype);
   TORCH_CHECK(
       indptr.scalar_type() == at::kInt || indptr.scalar_type() == at::kUInt32,
       "run_spmv_v2: indptr must be int32 or uint32, got ",
@@ -161,11 +165,14 @@ at::Tensor run_spmv_v2(const at::Tensor& vals, const at::Tensor& indptr,
                                    block_len};
   uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
 
-  // workspace: padded_nnz * sizeof(half) for CSR products
-  //          + padded_nnz * sizeof(float) for cube scan output
   const uint32_t padded_nnz = host_utils::AlignUp(nnz, align_size);
+  const bool is_fp32 = (vals_dtype == torch::kFloat);
+
+  // workspace: padded_nnz * sizeof(input_dtype) for CSR products
+  //          + padded_nnz * sizeof(float) for cube scan output
+  const uint32_t input_elem_size = is_fp32 ? sizeof(float) : sizeof(int16_t);
   const uint32_t workspace_size =
-      padded_nnz * (sizeof(int16_t) + sizeof(float));
+      padded_nnz * (input_elem_size + sizeof(float));
   const at::Tensor workspace_tensor =
       tcuscan::alloc_zeros_workspace(workspace_size, device);
 
@@ -176,13 +183,23 @@ at::Tensor run_spmv_v2(const at::Tensor& vals, const at::Tensor& indptr,
 
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
-  ACLRT_LAUNCH_KERNEL(spmv_v2_fp16)
-  (block_dim, acl_stream, const_cast<void*>(vals.storage().data()),
-   const_cast<void*>(cols.storage().data()), const_cast<void*>(indptr_data),
-   const_cast<void*>(x.storage().data()),
-   const_cast<void*>(segm_offsets_.storage().data()),
-   const_cast<void*>(z.storage().data()),
-   const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+  if (is_fp32) {
+    ACLRT_LAUNCH_KERNEL(spmv_v2_fp32)
+    (block_dim, acl_stream, const_cast<void*>(vals.storage().data()),
+     const_cast<void*>(cols.storage().data()), const_cast<void*>(indptr_data),
+     const_cast<void*>(x.storage().data()),
+     const_cast<void*>(segm_offsets_.storage().data()),
+     const_cast<void*>(z.storage().data()),
+     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+  } else {
+    ACLRT_LAUNCH_KERNEL(spmv_v2_fp16)
+    (block_dim, acl_stream, const_cast<void*>(vals.storage().data()),
+     const_cast<void*>(cols.storage().data()), const_cast<void*>(indptr_data),
+     const_cast<void*>(x.storage().data()),
+     const_cast<void*>(segm_offsets_.storage().data()),
+     const_cast<void*>(z.storage().data()),
+     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+  }
 
   aclrtFree(tiling_device);
   aclrtSynchronizeStream(acl_stream);

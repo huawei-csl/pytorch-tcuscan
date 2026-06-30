@@ -142,3 +142,39 @@ extern "C" __global__ __aicore__ void spmv_v2_fp16(
                     vec_out, workspace, vec_len, num_segments, x_len, tile_len,
                     block_len);
 }
+
+/**
+ * @brief Run the SpMV v2 kernel with float32 dtype.
+ *
+ * The segment indices format follows the scipy Compressed Sparse Row Matrix
+ * convention
+ * (https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.csr_matrix.html).
+ *
+ * @param [in] vec_in Pointer to the sparse matrix non-zero values.
+ * @param [in] cols_in Pointer to the CSR column indices array.
+ * @param [in] indptr Pointer to the segment indices vector (CSR row pointers).
+ * @param [in] x_in Pointer to the dense input vector.
+ * @param [in] segment_offsets Pointer to the segment offset per block.
+ * @param [out] vec_out Pointer to the output vector.
+ * @param [in,out] workspace Pointer to workspace.
+ * @param [in] tiling_gm Pointer to the tiling buffer.
+ */
+extern "C" __global__ __aicore__ void spmv_v2_fp32(
+    GM_ADDR vec_in, GM_ADDR cols_in, GM_ADDR indptr, GM_ADDR x_in,
+    GM_ADDR segment_offsets, GM_ADDR vec_out, GM_ADDR workspace,
+    GM_ADDR tiling_gm) {
+  tcuscan::SpMVTiling tiling;
+  GetTilingData(&tiling, tiling_gm);
+
+  const uint32_t vec_len = tiling.nnz;
+  const uint32_t num_segments = tiling.num_segments;
+  const uint32_t x_len = tiling.x_len;
+  const uint32_t tile_len = tiling.tile_len;
+  const uint32_t block_len = tiling.block_len;
+
+  GM_ADDR const upper = load_tril_matrix<float>(tile_len);
+
+  run_spmv_v2<float>(vec_in, cols_in, indptr, x_in, upper, segment_offsets,
+                     vec_out, workspace, vec_len, num_segments, x_len, tile_len,
+                     block_len);
+}
