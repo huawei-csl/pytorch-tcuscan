@@ -136,6 +136,7 @@ ascendc_library(
   src/scan_multi_cube.cpp
   src/simple_pad.cpp
   src/cube_reduce.cpp
+  src/spmv.cpp
   src/tri_inv_cube_col_sweep.cpp)
 
 #ascendc_compile_options(scan_kernels PRIVATE -Wall -Wextra -Werror)
