@@ -282,4 +282,7 @@ profile_histogram:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench tcuscan_hist --dtype fp16 --k 64 --num_cores 20
 
 
+profile_seg_sum_multi_core:
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench seg_sum_multi_core --s 128 --dtype fp16
+
 include Makefile.spaa.mk Makefile.spmv.mk Makefile.tri_inv.mk

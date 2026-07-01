@@ -48,8 +48,7 @@ class KernelSegSumVecRevert {
                                           uint32_t num_segments,
                                           uint32_t tile_len,
                                           uint32_t vec_start_offset = 0)
-      : num_blocks_(GetBlockNum() * GetTaskRation()),
-        vec_len_(vec_len),
+      : vec_len_(vec_len),
         num_segments_(num_segments),
         tile_len_(tile_len),
         matrix_tile_len_(tile_len * tile_len),
@@ -70,15 +69,14 @@ class KernelSegSumVecRevert {
    */
   __aicore__ inline void Init(GM_ADDR vec_in, GM_ADDR segm_ind_in,
                               GM_ADDR vec_out) {
-    global_in_.SetGlobalBuffer(
-        (__gm__ T*)vec_in + vec_start_offset_ * sizeof(T), vec_len_);
+    global_in_.SetGlobalBuffer((__gm__ T*)vec_in + vec_start_offset_, vec_len_);
     global_segm_in_.SetGlobalBuffer((__gm__ uint32_t*)segm_ind_in,
                                     num_segments_);
     global_out_.SetGlobalBuffer((__gm__ T*)vec_out, num_segments_ + 1);
 
     pipe_.InitBuffer(in_q_, BUFFER_NUM, matrix_tile_len_ * sizeof(T));
     pipe_.InitBuffer(segm_q_, BUFFER_NUM, tile_len_ * sizeof(uint32_t));
-    pipe_.InitBuffer(out_q_, BUFFER_NUM, tile_len_ * sizeof(T));
+    pipe_.InitBuffer(out_q_, 1, tile_len_ * sizeof(T));
   }
 
   /**
@@ -113,11 +111,12 @@ class KernelSegSumVecRevert {
       out_q_.template EnQue<T>(vec_out_lt);
       if constexpr (UseAtomicWrite) {
         AscendC::PipeBarrier<PIPE_ALL>();
-        AscendC::SetAtomicAdd<int32_t>();
+        AscendC::SetAtomicAdd<T>();
       }
       copy::CopyVecToGm(global_out_[out_offset_], out_q_, tile_len_);
       if constexpr (UseAtomicWrite) {
         AscendC::SetAtomicNone();
+        AscendC::DisableDmaAtomic();
       }
       out_offset_ += tile_len_;
       vec_out_lt = out_q_.template AllocTensor<T>();
@@ -251,11 +250,12 @@ class KernelSegSumVecRevert {
     out_q_.template EnQue<T>(vec_out_lt);
     if constexpr (UseAtomicWrite) {
       AscendC::PipeBarrier<PIPE_ALL>();
-      AscendC::SetAtomicAdd<int32_t>();
+      AscendC::SetAtomicAdd<T>();
     }
     copy::CopyVecToGm(global_out_[out_offset_], out_q_, tail_len);
     if constexpr (UseAtomicWrite) {
       AscendC::SetAtomicNone();
+      AscendC::DisableDmaAtomic();
     }
   }
 
@@ -263,13 +263,12 @@ class KernelSegSumVecRevert {
 
   TQue<QuePosition::VECIN, BUFFER_NUM> in_q_;
   TQue<QuePosition::VECIN, BUFFER_NUM> segm_q_;
-  TQue<QuePosition::VECOUT, BUFFER_NUM> out_q_;
+  TQue<QuePosition::VECOUT, 1> out_q_;
 
   GlobalTensor<T> global_in_;
   GlobalTensor<uint32_t> global_segm_in_;
   GlobalTensor<T> global_out_;
 
-  const uint32_t num_blocks_;
   const uint32_t vec_len_;
   const uint32_t num_segments_;
   const uint32_t tile_len_;

@@ -76,6 +76,7 @@ ascendc_library(
   src/seg_scan_vec_single_core.cpp
   src/seg_scan_mc_revert.cpp
   src/seg_sum_single_core.cpp
+  src/seg_sum_multi_core.cpp
   src/seg_sum_single_cube.cpp
   src/row_scan.cpp
   src/block_scan.cpp
@@ -83,6 +84,7 @@ ascendc_library(
   src/scan_multi_cube.cpp
   src/simple_pad.cpp
   src/cube_reduce.cpp
+  src/spmv.cpp
   src/tri_inv_cube_col_sweep.cpp)
 
 #ascendc_compile_options(scan_kernels PRIVATE -Wall -Wextra -Werror)

@@ -1,3 +1,4 @@
+venv/
 *.pdf
 *.log
 bench_results_*.csv

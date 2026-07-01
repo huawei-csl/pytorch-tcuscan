@@ -19,9 +19,8 @@
 namespace tcuscan {
 
 /**
- * @brief Histogram using AIVs.
+ * @brief Histogram using vector cores.
  *
- * EXPERIMENTAL
  *
  * @param [in] x Input data vector.
  * @param [in] num_bins Number of bins.

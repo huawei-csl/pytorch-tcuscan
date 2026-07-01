@@ -3,7 +3,7 @@
  * @brief Torch wrapper for segmented operations.
  * @date 2025-03-27
  *
- * @copyright Copyright Huawei (c) 2025
+ * @copyright Copyright Huawei (c) 2025-2026
  */
 #pragma once
 
@@ -13,11 +13,14 @@
 #include "../tiling/tiling_seg_scan_mc_revert.h"
 #include "../tiling/tiling_seg_scan_single_core.h"
 #include "../tiling/tiling_seg_scan_vec_single_core.h"
+#include "../tiling/tiling_seg_sum_multi_core.h"
 #include "../tiling/tiling_seg_sum_single_core.h"
 #include "../tiling/tiling_seg_sum_single_cube.h"
 #include "aclrtlaunch_seg_scan_mc_revert.h"
 #include "aclrtlaunch_seg_scan_single_core.h"
 #include "aclrtlaunch_seg_scan_vec_single_core.h"
+#include "aclrtlaunch_seg_sum_multi_core_fp16.h"
+#include "aclrtlaunch_seg_sum_multi_core_int8.h"
 #include "aclrtlaunch_seg_sum_single_core_fp16.h"
 #include "aclrtlaunch_seg_sum_single_core_int8.h"
 #include "aclrtlaunch_seg_sum_single_cube_fp16.h"
@@ -213,8 +216,8 @@ at::Tensor run_seg_sum_single_core(const at::Tensor& x,
   constexpr uint32_t BLOCK_DIM = 1;  // single core
   const uint32_t matmul_size = static_cast<uint32_t>(s);
   const uint32_t total_length = x.numel();
-  // The indptr does not contain zero as first entry and len(x) as last entry.
-  // Hence, the number of segments are +1.
+  // The indptr does not contain zero as first entry and does not contain
+  // 'len(x)' as last entry. Hence, the number of segments are -1.
   const uint32_t num_segments = indptr.numel() - 1;
 
   const at::Tensor z = at::empty(
@@ -312,6 +315,110 @@ at::Tensor run_seg_sum_single_cube(const at::Tensor& x, const at::Tensor& upper,
 
   aclrtFree(tiling_device);
   aclrtSynchronizeStream(acl_stream);
+
+  return z;
+}
+
+/**
+ * @brief Multi-core segmented sum
+ *
+ * @param [in] x Input data vector.
+ * @param [in] indptr Input segment starts vector.
+ * @param [in] s Tiling parameter. Typical values: 16, 32, 64, 128.
+ * @param [in] segm_offsets Segment start index offset per block.
+ * @return Segmented sum vector of (x, indptr).
+ */
+at::Tensor run_seg_sum_multi_core(
+    const at::Tensor& x, const at::Tensor& indptr, int s,
+    c10::optional<at::Tensor> segm_offsets = c10::nullopt) {
+  const auto ascendc_platform =
+      platform_ascendc::PlatformAscendCManager::GetInstance();
+  const at::Device device = x.options().device();
+  const auto dtype = x.options().dtype();
+  const auto dtype_out =
+      dtype == torch::kHalf ? torch::kFloat32 : torch::kInt32;
+
+  const uint32_t matmul_size = static_cast<uint32_t>(s);
+  const uint32_t total_length = x.numel();
+  // The indptr does not contain zero as first entry.
+  // Hence, the number of segments are -1.
+  const uint32_t num_segments = indptr.numel() - 1;
+
+  // total_length must be a multiple of matmul_size * matmul_size * block_dim
+  const uint32_t matrix_tile_len = matmul_size * matmul_size;
+  const uint32_t num_tiles = host_utils::CeilDiv(total_length, matrix_tile_len);
+
+  uint32_t block_dim = ascendc_platform->GetCoreNumAic();
+  if (num_tiles < block_dim) {
+    block_dim = num_tiles;
+  }
+  const uint32_t max_num_tiles_per_block =
+      host_utils::CeilDiv(num_tiles, block_dim);
+
+  const uint32_t block_len = max_num_tiles_per_block * matrix_tile_len;
+
+  at::Tensor segm_offsets_;
+  if (segm_offsets.has_value()) {
+    segm_offsets_ = segm_offsets.value();
+  } else {
+    const at::Tensor sstart = torch::clamp(
+        torch::arange(
+            0, block_dim + 1,
+            torch::TensorOptions().dtype(torch::kInt32).device(device)) *
+            block_len,
+        c10::nullopt, static_cast<int32_t>(total_length));
+
+    segm_offsets_ = torch::searchsorted(indptr.to(torch::kInt32), sstart,
+                                        /*out_int32=*/true);
+  }
+  const at::Tensor z = at::zeros(
+      {num_segments}, at::TensorOptions().dtype(dtype_out).device(device));
+
+  const tcuscan::SegSumMultiCoreTiling tiling{total_length, num_segments,
+                                              matmul_size, block_len};
+  uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
+
+  // Offset indptr by one element, since first element is always zero.
+  void* indptr_data = static_cast<void*>(
+      static_cast<uint8_t*>(const_cast<void*>(indptr.storage().data())) +
+      indptr.element_size());
+
+  if (dtype == torch::kHalf) {
+    const uint32_t workspace_size =
+        tcuscan::get_workspace_size<int16_t /* half */>(tiling);
+
+    const at::Tensor workspace_tensor =
+        tcuscan::alloc_workspace(workspace_size, device);
+
+    auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
+
+    ACLRT_LAUNCH_KERNEL(seg_sum_multi_core_fp16)
+    (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
+     const_cast<void*>(indptr_data),
+     const_cast<void*>(segm_offsets_.storage().data()),
+     const_cast<void*>(z.storage().data()),
+     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+
+    aclrtFree(tiling_device);
+    aclrtSynchronizeStream(acl_stream);
+
+  } else if (dtype == torch::kInt8) {
+    const uint32_t workspace_size = tcuscan::get_workspace_size<int8_t>(tiling);
+
+    const at::Tensor workspace_tensor =
+        tcuscan::alloc_workspace(workspace_size, device);
+
+    auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
+    ACLRT_LAUNCH_KERNEL(seg_sum_multi_core_int8)
+    (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
+     const_cast<void*>(indptr_data),
+     const_cast<void*>(segm_offsets_.storage().data()),
+     const_cast<void*>(z.storage().data()),
+     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+
+    aclrtFree(tiling_device);
+    aclrtSynchronizeStream(acl_stream);
+  }
 
   return z;
 }

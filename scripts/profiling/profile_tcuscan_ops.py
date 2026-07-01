@@ -15,10 +15,11 @@ from dataclasses import dataclass
 from functools import partial
 from math import ceil, sqrt
 from typing import Optional, Tuple
+import math
 
 import numpy as np
 import torch.nn.functional as F
-from scipy.sparse import random as sp_random
+from scipy.sparse import csr_matrix, random as sp_random
 
 import torch
 
@@ -93,6 +94,15 @@ def rand_triu_tensor(batch_size: int, n: int, dtype: np.dtype):
     A = A - torch.tril(A)
     return A
 
+def uniform_rvs(shape):
+    return 2 * np.random.uniform(0, 1, size=shape) - 1
+
+def random_csr(rows: int, cols: int, nnz: int, dtype: np.dtype) -> csr_matrix:
+    flat = np.random.choice(rows * cols, size=nnz, replace=False)
+    row = flat // cols
+    col = flat % cols
+    data = uniform_rvs(nnz).astype(dtype)
+    return csr_matrix((data, (row, col)), shape=(rows, cols))
 
 def _run_benchmark(
     device: Device,
@@ -626,6 +636,48 @@ def sc_segmented_sum_benchmark(
 
     return _run_benchmark(device, run_seg_sum), outputsize
 
+def seg_sum_multi_core_benchmark(
+    device: Device,
+    vec_len: int,
+    dtype: torch.dtype,
+    segm_density: float,
+    s: int,
+    num_blocks: int,
+) -> Tuple[float, int]:
+    
+    MAX_SEG_LEN = 70000
+
+    # Build a CSR matrix with exactly vec_len non-zeros so that the kernel
+    # alignment requirement (nnz % (s*s) == 0) is satisfied by construction
+    # (sizes in main are multiples of num_cores * s * s).
+    nnz = vec_len
+    sp_dtype = np.float32 if dtype == torch.float16 else np.int32
+
+    num_segments = 10 * int(num_blocks * math.sqrt(s))
+    # num_segments = 10 * int(num_blocks * s)
+    A = random_csr(num_segments, MAX_SEG_LEN, vec_len, sp_dtype)
+
+    ones = np.ones(MAX_SEG_LEN).astype(sp_dtype)
+    values = (A.data).astype(sp_dtype)
+    indices = (A.indptr).astype(np.uint32)
+    nnz = A.nnz
+
+    expected = A @ ones
+    expected = torch.from_numpy(expected.flatten())
+
+    values_npu = torch.from_numpy(values).to(dtype).npu()
+    indices_npu = torch.from_numpy(indices).to(torch.int32).npu()
+    torch.npu.synchronize()
+
+    num_segments = A.shape[0]
+
+    assert nnz % (s * s) == 0, "Input must be a multiple of matrix tile length"
+
+    def run_seg_sum_multi_core() -> None:
+        _ = tcuscan_ops.run_seg_sum_multi_core(values_npu, indices_npu, s)
+
+    return _run_benchmark(device, run_seg_sum_multi_core), num_segments
+
 
 def cube_segmented_sum_benchmark(
     device: Device, vec_len: int, dtype: torch.dtype, segm_density: float, s: int
@@ -1142,6 +1194,7 @@ if __name__ == "__main__":  # noqa
             "segmented_sum",
             "sc_segmented_sum",
             "cube_segmented_sum",
+            "seg_sum_multi_core",
             "custom_copy",
             "vec_seg_scan_sc",
             "scscan",
@@ -1381,6 +1434,22 @@ if __name__ == "__main__":  # noqa
             dtype,
             partial(
                 cube_segmented_sum_benchmark, dtype=tdtype, s=s, segm_density=density
+            ),
+            sizes,
+            density,
+        )
+    elif bench == "seg_sum_multi_core" and dtype in ["fp16"]:
+        tdtype = STR_TO_DTYPE[dtype]
+        benchmark(
+            device,
+            f"seg_sum_multi_core_{s}_{density}",
+            dtype,
+            partial(
+                seg_sum_multi_core_benchmark,
+                dtype=tdtype,
+                s=s,
+                segm_density=density,
+                num_blocks=num_cores,
             ),
             sizes,
             density,

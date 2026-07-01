@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 # coding=utf-8
 #
-# Copyright (C) 2023-2024. Huawei Technologies Co., Ltd. All rights reserved.
+# Copyright (C) 2023-2026. Huawei Technologies Co., Ltd. All rights reserved.
 #
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -43,7 +43,7 @@ def uniform_rvs(shape, dtype: np.dtype, scale: int = 6):
     return scale * np.random.uniform(0, 1, size=shape) - (scale // 2)
 
 
-def _test_tcuscan_spmv(
+def _test_tcuscan_spmv_v2(
     nnr: int, s: int, density: float, dtype: torch.dtype, scale_factor: int
 ):
     rng = np.random.default_rng(seed=42)
@@ -72,15 +72,18 @@ def _test_tcuscan_spmv(
     torch_vector = torch.from_numpy(vector).to(dtype).npu()
 
     torch.npu.synchronize()
-    actual = tcuscan_ops.run_spmv(
+    actual = tcuscan_ops.run_spmv_v2(
         torch_values, torch_indexes, torch_cols, torch_vector, s
     )
     torch.npu.synchronize()
+
     actual_cpu = actual.cpu()
     expected = torch.from_numpy(result)
     assert actual.shape == expected.shape
 
-    expected_dtype = torch.float32 if dtype == torch.float16 else torch.int32
+    expected_dtype = (
+        torch.float32 if dtype in (torch.float16, torch.float32) else torch.int32
+    )
     assert actual.dtype == expected_dtype
 
     assert torch.allclose(
@@ -94,11 +97,11 @@ def _test_tcuscan_spmv(
 @pytest.mark.parametrize(
     ("dtype", "scale_factor"),
     [
-        pytest.param(torch.int16, 6, id="torch.int16"),
+        pytest.param(torch.float32, 2, id="torch.float32"),
         pytest.param(torch.float16, 2, id="torch.float16"),
     ],
 )
-def test_tcuscan_spmv(
+def test_tcuscan_spmv_v2(
     s: int, density: float, nrow: int, dtype: torch.dtype, scale_factor: int
 ):
-    _test_tcuscan_spmv(nrow, s, density, dtype, scale_factor)
+    _test_tcuscan_spmv_v2(nrow, s, density, dtype, scale_factor)
