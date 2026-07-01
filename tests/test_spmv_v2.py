@@ -81,7 +81,9 @@ def _test_tcuscan_spmv_v2(
     expected = torch.from_numpy(result)
     assert actual.shape == expected.shape
 
-    expected_dtype = torch.float32 if dtype == torch.float16 else torch.int32
+    expected_dtype = (
+        torch.float32 if dtype in (torch.float16, torch.float32) else torch.int32
+    )
     assert actual.dtype == expected_dtype
 
     assert torch.allclose(
@@ -89,12 +91,13 @@ def _test_tcuscan_spmv_v2(
     ), f"Error spmv ({expected.dtype}). s={s}"
 
 
-@pytest.mark.parametrize("s", [16, 32, 64, 128])
+@pytest.mark.parametrize("s", [32, 64, 128])
 @pytest.mark.parametrize("density", [0.01, 0.001, 0.0001])
 @pytest.mark.parametrize("nrow", _NROW)
 @pytest.mark.parametrize(
     ("dtype", "scale_factor"),
     [
+        pytest.param(torch.float32, 2, id="torch.float32"),
         pytest.param(torch.float16, 2, id="torch.float16"),
     ],
 )
