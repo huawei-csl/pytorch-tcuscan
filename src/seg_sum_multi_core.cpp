@@ -29,6 +29,7 @@ using namespace tcuscan;
  * @param [in] workspace Pointer to a memory region used as workspace.
  * @param [in] vec_len Input vector length.
  * @param [in] num_segments Number of segments.
+ * @param [in] tile_len Tile length for matrix operations (matmul size).
  * @param [in] block_len Block length.
  */
 template <typename T>
@@ -87,17 +88,10 @@ __aicore__ inline void run_seg_sum_multi_core(
     if (block_vec_offset >= padded_vec_len) {
       return;
     }
-    const bool is_overflow_block =
-        block_vec_offset + block_len > padded_vec_len;
+    const bool is_overflow_block = block_vec_offset + block_len > vec_len;
     if (is_overflow_block) {
-      block_len = padded_vec_len - block_vec_offset;
+      block_len = vec_len - block_vec_offset;
     }
-
-    // printf("[%u] block_len : %u, %u\n", id, block_len);
-    // printf("[%u] vec_offset / vec_len : %u, %u\n", id, block_vec_offset,
-    //        tile_len * tile_len);
-    // printf("[%u] offset / len / block_vec_offset: %u, %u\n", id,
-    //       segment_block_offset, num_segments_per_block);
 
     KernelSegSumVecRevert<OutputT, false, true> op(
         block_len, num_segments_per_block, tile_len, block_vec_offset);

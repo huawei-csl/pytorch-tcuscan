@@ -8,7 +8,7 @@ import tcuscan_ops
 import torch
 
 _VEC_LENS = [5 * 1024, 10 * 1024, 10 * 1024 * 1024 - 1, 20 * 1024 * 1024 - 10]
-NPU_DEVICE = os.environ.get("NPU_DEVICE", "npu:0")
+NPU_DEVICE = os.environ.get("NPU_DEVICE", "npu:1")
 torch.npu.set_device(NPU_DEVICE)
 
 
