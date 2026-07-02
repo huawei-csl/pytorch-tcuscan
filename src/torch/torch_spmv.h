@@ -105,12 +105,17 @@ at::Tensor run_spmv(const at::Tensor& vals, const at::Tensor& indptr,
  * @param cols column index array of the CSR matrix
  * @param x dense vector to multiply
  * @param s tile size for the multi-core segmented sum kernel
+ * @param split_l2 If true, split the non-zeros into L2-cache-sized chunks
+ * processed serially so each chunk's workspace stays L2-resident across the
+ * gather / scan / segmented-sum stages. If false, process all non-zeros in a
+ * single chunk (num_l2 = 1).
  * @param [in] segm_offsets Segment start index offset per block.
  * @return Dense result vector of the SpMV product A @ x
  */
-at::Tensor run_spmv_v2(const at::Tensor& vals, const at::Tensor& indptr,
-                       const at::Tensor& cols, const at::Tensor& x, int s,
-                       c10::optional<at::Tensor> segm_offsets = c10::nullopt) {
+inline at::Tensor run_spmv_v2_impl(
+    const at::Tensor& vals, const at::Tensor& indptr, const at::Tensor& cols,
+    const at::Tensor& x, int s, bool split_l2,
+    c10::optional<at::Tensor> segm_offsets = c10::nullopt) {
   const auto vals_dtype = vals.options().dtype();
   const auto x_dtype = x.options().dtype();
   TORCH_CHECK((vals_dtype == torch::kHalf && x_dtype == torch::kHalf) ||
@@ -140,15 +145,50 @@ at::Tensor run_spmv_v2(const at::Tensor& vals, const at::Tensor& indptr,
   }
   const uint32_t max_num_tiles_per_block =
       host_utils::CeilDiv(num_tiles, block_dim);
-  const uint32_t block_len = max_num_tiles_per_block * align_size;
+
+  const bool is_fp32 = (vals_dtype == torch::kFloat);
+  const uint32_t input_elem_size = is_fp32 ? sizeof(float) : sizeof(int16_t);
+
+  // Default (no L2 splitting): a single chunk covers all non-zeros.
+  uint32_t block_len = max_num_tiles_per_block * align_size;
+  uint32_t num_l2 = 1;
+
+  if (split_l2) {
+    uint64_t l2_size = 0;
+    ascendc_platform->GetCoreMemSize(platform_ascendc::CoreMemType::L2,
+                                     l2_size);
+
+    // Per-element footprint that must stay L2-resident: the CSR products buffer
+    // (input dtype) plus the fp32 row-scan output. The dense vector `x` is
+    // excluded: it is accessed with random column indices and does not localize
+    // per chunk.
+    const uint64_t per_elem = input_elem_size + sizeof(float);
+    // Chunk granularity so that each chunk tiles evenly across all cores and
+    // block_len stays a multiple of align_size.
+    const uint32_t chunk_granularity = block_dim * align_size;
+    const uint64_t raw_fit = l2_size / per_elem;
+    uint32_t fitting_len = static_cast<uint32_t>(
+        (raw_fit / chunk_granularity) * chunk_granularity);
+    if (fitting_len < chunk_granularity) {
+      fitting_len = chunk_granularity;
+    }
+
+    const uint32_t candidate_num_l2 = host_utils::CeilDiv(nnz, fitting_len);
+    if (candidate_num_l2 > 1) {
+      num_l2 = candidate_num_l2;
+      block_len = fitting_len / block_dim;
+    }
+    // Otherwise everything fits in L2: keep the single-chunk defaults.
+  }
 
   at::Tensor segm_offsets_;
   if (segm_offsets.has_value()) {
     segm_offsets_ = segm_offsets.value();
   } else {
+    // One boundary per (L2 chunk x block); global block id g indexes entry g.
     const at::Tensor sstart = torch::clamp(
         torch::arange(
-            0, block_dim + 1,
+            0, num_l2 * block_dim + 1,
             torch::TensorOptions().dtype(torch::kInt32).device(device)) *
             block_len,
         c10::nullopt, static_cast<int32_t>(nnz));
@@ -161,16 +201,14 @@ at::Tensor run_spmv_v2(const at::Tensor& vals, const at::Tensor& indptr,
       at::zeros({num_segments},
                 at::TensorOptions().dtype(torch::kFloat32).device(device));
 
-  const tcuscan::SpMVTiling tiling{nnz, num_segments, x_len, tile_len,
-                                   block_len};
+  const tcuscan::SpMVTiling tiling{nnz,       num_segments, x_len,   tile_len,
+                                   block_len, num_l2,       block_dim};
   uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
 
   const uint32_t padded_nnz = host_utils::AlignUp(nnz, align_size);
-  const bool is_fp32 = (vals_dtype == torch::kFloat);
 
   // workspace: padded_nnz * sizeof(input_dtype) for CSR products
   //          + padded_nnz * sizeof(float) for cube scan output
-  const uint32_t input_elem_size = is_fp32 ? sizeof(float) : sizeof(int16_t);
   const uint32_t workspace_size =
       padded_nnz * (input_elem_size + sizeof(float));
   const at::Tensor workspace_tensor =
@@ -205,6 +243,35 @@ at::Tensor run_spmv_v2(const at::Tensor& vals, const at::Tensor& indptr,
   aclrtSynchronizeStream(acl_stream);
 
   return z;
+}
+
+/**
+ * @brief CSR SpMV (v2) with L2-cache splitting enabled.
+ *
+ * Splits the non-zeros into L2-cache-sized chunks (derived from the hardware L2
+ * size) and processes them serially so each chunk's workspace stays resident in
+ * L2 across the fused gather / scan / segmented-sum stages. Degrades to a single
+ * chunk (identical to run_spmv_v2_no_l2) when the whole problem already fits in
+ * L2. See run_spmv_v2_impl() for parameter details.
+ */
+inline at::Tensor run_spmv_v2(
+    const at::Tensor& vals, const at::Tensor& indptr, const at::Tensor& cols,
+    const at::Tensor& x, int s,
+    c10::optional<at::Tensor> segm_offsets = c10::nullopt) {
+  return run_spmv_v2_impl(vals, indptr, cols, x, s, /*split_l2=*/true,
+                          segm_offsets);
+}
+
+/**
+ * @brief CSR SpMV (v2) without L2-cache splitting (single chunk over all
+ * non-zeros). Provided for benchmarking against run_spmv_v2().
+ */
+inline at::Tensor run_spmv_v2_no_l2(
+    const at::Tensor& vals, const at::Tensor& indptr, const at::Tensor& cols,
+    const at::Tensor& x, int s,
+    c10::optional<at::Tensor> segm_offsets = c10::nullopt) {
+  return run_spmv_v2_impl(vals, indptr, cols, x, s, /*split_l2=*/false,
+                          segm_offsets);
 }
 
 }  // namespace tcuscan
