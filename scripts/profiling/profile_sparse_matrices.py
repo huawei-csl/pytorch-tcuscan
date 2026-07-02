@@ -341,6 +341,36 @@ def spmv_benchmark(device: Device, B: csr_matrix, s: int):
     return _run_benchmark(device, run_spmv), len(vals)
 
 
+def spmv_v2_benchmark(device: Device, B: csr_matrix, s: int):
+    """
+    Benchmark TCUSCAN SpMV v2 kernel (segmented-sum based).
+
+    Args:
+        device: Device to run benchmark on.
+        B: Input CSR Matrix
+        s: Matrix size tiling parameter.
+
+    Returns:
+        Average time in microseconds.
+    """
+    rng = np.random.default_rng(seed=42)
+    vals = torch.from_numpy((B.data).astype(np.float16))
+    idx = torch.from_numpy((B.indptr).astype(np.uint32))
+    cols = torch.from_numpy((B.indices).astype(np.uint32))
+    vector = torch.from_numpy(rng.uniform(1, 9, len(idx) - 1).astype(np.float16))
+    vals_npu = vals.npu()
+    idx_npu = idx.npu()
+    col_npu = cols.npu()
+    vec_npu = vector.npu()
+
+    torch.npu.synchronize()
+
+    def run_spmv_v2():
+        _ = tcuscan_ops.run_spmv_v2(vals_npu, idx_npu, col_npu, vec_npu, s)
+
+    return _run_benchmark(device, run_spmv_v2), len(vals)
+
+
 def csr_gather_benchmark(device: Device, B: csr_matrix):
     """
     Benchmark TCUSCAN multi-core csr_gather kernel.
@@ -441,6 +471,7 @@ if __name__ == "__main__":
             "diff",
             "vec_seg_scan_sc",
             "spmv",
+            "spmv_v2",
             "spmv_multi_cube",
             "csr_gather",
             "gather_spmv",
@@ -536,6 +567,19 @@ if __name__ == "__main__":
             dtype,
             partial(
                 spmv_benchmark,
+                B=B,
+                s=s,
+            ),
+            bench_name,
+        )
+    elif bench == "spmv_v2" and dtype in ["fp16"]:
+        bench_name = fullpath.split("/")[-1]
+        benchmark(
+            device,
+            f"spmv_v2_{s}",
+            dtype,
+            partial(
+                spmv_v2_benchmark,
                 B=B,
                 s=s,
             ),
