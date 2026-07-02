@@ -68,6 +68,24 @@ extern "C" __global__ __aicore__ void cube_reduce_int8(GM_ADDR vec_in,
   const uint32_t vec_len = tiling.vec_len;
   const uint32_t matmul_size = tiling.matmul_size;
 
-  tcuscan::run_cube_reduce<int8_t>(vec_in, vec_out, workspace, vec_len,
-                                   matmul_size);
+  using OutputT = tcuscan::cube_unit::CubeOutType_t<int8_t>;
+  [[maybe_unused]] auto* typed_in = reinterpret_cast<__gm__ int8_t*>(vec_in);
+  [[maybe_unused]] auto* typed_out = reinterpret_cast<__gm__ OutputT*>(vec_out);
+
+  switch (matmul_size) {
+    case 32:
+      tcuscan::run_pto_cube_reduce<int8_t, 32>(typed_in, typed_out, workspace,
+                                               vec_len);
+      break;
+    case 64:
+      tcuscan::run_pto_cube_reduce<int8_t, 64>(typed_in, typed_out, workspace,
+                                               vec_len);
+      break;
+    case 128:
+      tcuscan::run_pto_cube_reduce<int8_t, 128>(typed_in, typed_out, workspace,
+                                                vec_len);
+      break;
+    default:
+      break;
+  }
 }
