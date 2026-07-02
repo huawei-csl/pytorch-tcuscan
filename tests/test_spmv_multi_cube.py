@@ -18,7 +18,7 @@ from scipy.sparse import random
 import tcuscan_ops
 import torch
 
-NPU_DEVICE = os.environ.get("NPU_DEVICE", "npu:1")
+NPU_DEVICE = os.environ.get("NPU_DEVICE", "npu:3")
 torch.npu.config.allow_internal_format = False
 torch.npu.set_device(NPU_DEVICE)
 
@@ -54,7 +54,7 @@ def _test_tcuscan_spmv_multi_cube(nnr: int, s: int, density: float):
 
     values = (B.data).astype(np.float16)
     indexes = (B.indptr).astype(np.uint32)
-    cols = (B.indices).astype(np.uint32)
+    cols = (B.indices).astype(np.int32)
     vector = rng.uniform(1, 9, nnr - 1).astype(np.float16)
 
     result = B @ vector
