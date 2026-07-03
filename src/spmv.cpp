@@ -34,21 +34,19 @@ using namespace tcuscan;
  * @param [in] num_segments Number of segments.
  * @param [in] x_len Length of the dense input vector.
  * @param [in] tile_len Tile size used for the matrix multiplication step.
- * @param [in] block_len Block length assigned to each AI Core group (per L2
- * chunk).
- * @param [in] num_l2 Number of serial L2 chunks. The non-zeros are processed in
- * `num_l2` contiguous chunks, one chunk at a time across all cores, so that a
- * chunk's workspace stays L2-resident across the gather / row-scan / segmented
- * sum stages. A value of `1` disables L2 splitting.
  * @param [in] block_dim Launch grid size (number of AI Core groups).
+ * @param [in] l2_cache_size L2 cache size in bytes. The non-zeros are processed
+ * in serial L2 chunks (one chunk at a time across all cores) so that a chunk's
+ * workspace stays L2-resident across the gather / row-scan / segmented sum
+ * stages. The per-block slab length and chunk count are derived from this value
+ * exactly as on the host; a very large value disables L2 splitting.
  */
 template <typename T>
 __aicore__ inline void run_spmv_v2(
     GM_ADDR vec_in, GM_ADDR cols_in, GM_ADDR segm_ind_in, GM_ADDR x_in,
     GM_ADDR upper_in, GM_ADDR segm_offset_per_block, GM_ADDR vec_out,
     GM_ADDR workspace, uint32_t vec_len, uint32_t num_segments, uint32_t x_len,
-    uint32_t tile_len, uint32_t block_len, uint32_t num_l2,
-    uint32_t block_dim) {
+    uint32_t tile_len, uint32_t block_dim, uint64_t l2_cache_size) {
   using OutputT = tcuscan::cube_unit::CubeOutType_t<T>;
 
   const uint32_t align_size = tile_len * tile_len;
@@ -60,10 +58,29 @@ __aicore__ inline void run_spmv_v2(
 
   const uint32_t csr_gather_tile_len = align_size > 1024 ? 1024 : align_size;
 
-  // Number of AI Core groups (launch grid) — passed from host so it is
-  // identical on Cube and Vector cores.
+  // Per-block, per-L2-chunk slab length. Derived identically on the host (see
+  // spmv_l2_block_len() in torch_spmv.h) so the precomputed segment offsets line
+  // up with the chunks walked below. Working-set footprint per non-zero is the
+  // CSR products buffer plus the fp32 row-scan output. Falls back to a single
+  // full-width slab when everything fits in L2.
+  const uint64_t per_elem = sizeof(T) + sizeof(OutputT);
+  const uint32_t num_tiles = scalar::CeilDiv(vec_len, align_size);
+  const uint32_t full_block_len =
+      scalar::CeilDiv(num_tiles, block_dim) * align_size;
+  const uint64_t chunk_granularity =
+      static_cast<uint64_t>(block_dim) * align_size;
+  uint64_t l2_granules = l2_cache_size / per_elem / chunk_granularity;
+  if (l2_granules < 1) {
+    l2_granules = 1;
+  }
+  const uint64_t l2_block_len = l2_granules * align_size;
+  const uint32_t block_len = l2_block_len < full_block_len
+                                 ? static_cast<uint32_t>(l2_block_len)
+                                 : full_block_len;
+
   // Non-zeros processed per L2 chunk: all cores cooperate on one chunk.
   const uint32_t fitting_len = block_dim * block_len;
+  const uint32_t num_l2 = scalar::CeilDiv(vec_len, fitting_len);
   // Total number of (chunk x block) slabs indexed by the segment offset table.
   const uint32_t num_blocks = num_l2 * block_dim;
 
@@ -179,15 +196,14 @@ extern "C" __global__ __aicore__ void spmv_v2_fp16(
   const uint32_t num_segments = tiling.num_segments;
   const uint32_t x_len = tiling.x_len;
   const uint32_t tile_len = tiling.tile_len;
-  const uint32_t block_len = tiling.block_len;
-  const uint32_t num_l2 = tiling.num_l2_splits;
   const uint32_t block_dim = tiling.block_dim;
+  const uint64_t l2_cache_size = tiling.l2_cache_size;
 
   GM_ADDR const upper = load_tril_matrix<half>(tile_len);
 
   run_spmv_v2<half>(vec_in, cols_in, indptr, x_in, upper, segment_offsets,
                     vec_out, workspace, vec_len, num_segments, x_len, tile_len,
-                    block_len, num_l2, block_dim);
+                    block_dim, l2_cache_size);
 }
 
 /**
@@ -217,13 +233,12 @@ extern "C" __global__ __aicore__ void spmv_v2_fp32(
   const uint32_t num_segments = tiling.num_segments;
   const uint32_t x_len = tiling.x_len;
   const uint32_t tile_len = tiling.tile_len;
-  const uint32_t block_len = tiling.block_len;
-  const uint32_t num_l2 = tiling.num_l2_splits;
   const uint32_t block_dim = tiling.block_dim;
+  const uint64_t l2_cache_size = tiling.l2_cache_size;
 
   GM_ADDR const upper = load_tril_matrix<float>(tile_len);
 
   run_spmv_v2<float>(vec_in, cols_in, indptr, x_in, upper, segment_offsets,
                      vec_out, workspace, vec_len, num_segments, x_len, tile_len,
-                     block_len, num_l2, block_dim);
+                     block_dim, l2_cache_size);
 }

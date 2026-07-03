@@ -9,6 +9,8 @@
 
 #include <pybind11/pybind11.h>
 
+#include <limits>
+
 #include "../tiling/tiling_spmv.h"
 #include "aclrtlaunch_spmv_v2_fp16.h"
 #include "aclrtlaunch_spmv_v2_fp32.h"
@@ -105,13 +107,40 @@ at::Tensor run_spmv(const at::Tensor& vals, const at::Tensor& indptr,
  * @param cols column index array of the CSR matrix
  * @param x dense vector to multiply
  * @param s tile size for the multi-core segmented sum kernel
- * @param split_l2 If true, split the non-zeros into L2-cache-sized chunks
- * processed serially so each chunk's workspace stays L2-resident across the
- * gather / scan / segmented-sum stages. If false, process all non-zeros in a
- * single chunk (num_l2 = 1).
+ * @param split_l2 If true, query the hardware L2 size and split the non-zeros
+ * into L2-cache-sized chunks processed serially so each chunk's workspace stays
+ * L2-resident across the gather / scan / segmented-sum stages. If false, pass an
+ * effectively infinite L2 size so a single chunk covers all non-zeros.
  * @param [in] segm_offsets Segment start index offset per block.
  * @return Dense result vector of the SpMV product A @ x
  */
+/**
+ * @brief Per-block, per-L2-chunk slab length (in non-zeros).
+ *
+ * Kept in sync with the device derivation in `run_spmv_v2()` (src/spmv.cpp): all
+ * cores cooperate on one L2 chunk of `block_dim * block_len` non-zeros, sized so
+ * the CSR products buffer plus the fp32 row-scan output stay L2-resident.
+ * Degrades to the full single-chunk slab when everything fits in L2.
+ *
+ * @param per_elem Working-set bytes per non-zero (input dtype + fp32 output).
+ */
+inline uint32_t spmv_l2_block_len(uint32_t nnz, uint32_t block_dim,
+                                  uint32_t align_size, uint64_t per_elem,
+                                  uint64_t l2_cache_size) {
+  const uint32_t num_tiles = host_utils::CeilDiv(nnz, align_size);
+  const uint32_t full_block_len =
+      host_utils::CeilDiv(num_tiles, block_dim) * align_size;
+  const uint64_t chunk_granularity =
+      static_cast<uint64_t>(block_dim) * align_size;
+  uint64_t l2_granules = l2_cache_size / per_elem / chunk_granularity;
+  if (l2_granules < 1) {
+    l2_granules = 1;
+  }
+  const uint64_t l2_block_len = l2_granules * align_size;
+  return l2_block_len < full_block_len ? static_cast<uint32_t>(l2_block_len)
+                                       : full_block_len;
+}
+
 inline at::Tensor run_spmv_v2_impl(
     const at::Tensor& vals, const at::Tensor& indptr, const at::Tensor& cols,
     const at::Tensor& x, int s, bool split_l2,
@@ -143,43 +172,26 @@ inline at::Tensor run_spmv_v2_impl(
   if (num_tiles < block_dim) {
     block_dim = num_tiles;
   }
-  const uint32_t max_num_tiles_per_block =
-      host_utils::CeilDiv(num_tiles, block_dim);
 
   const bool is_fp32 = (vals_dtype == torch::kFloat);
   const uint32_t input_elem_size = is_fp32 ? sizeof(float) : sizeof(int16_t);
+  // Working-set footprint per non-zero: CSR products (input dtype) + fp32
+  // row-scan output. The dense vector `x` is excluded (random-gather access does
+  // not localize per chunk).
+  const uint64_t per_elem = input_elem_size + sizeof(float);
 
-  // Default (no L2 splitting): a single chunk covers all non-zeros.
-  uint32_t block_len = max_num_tiles_per_block * align_size;
-  uint32_t num_l2 = 1;
-
+  // L2 cache size drives the chunking, on both host and device. The no-L2
+  // variant disables splitting by passing a value large enough that a single
+  // chunk covers all non-zeros.
+  uint64_t l2_cache_size = std::numeric_limits<uint64_t>::max();
   if (split_l2) {
-    uint64_t l2_size = 0;
     ascendc_platform->GetCoreMemSize(platform_ascendc::CoreMemType::L2,
-                                     l2_size);
-
-    // Per-element footprint that must stay L2-resident: the CSR products buffer
-    // (input dtype) plus the fp32 row-scan output. The dense vector `x` is
-    // excluded: it is accessed with random column indices and does not localize
-    // per chunk.
-    const uint64_t per_elem = input_elem_size + sizeof(float);
-    // Chunk granularity so that each chunk tiles evenly across all cores and
-    // block_len stays a multiple of align_size.
-    const uint32_t chunk_granularity = block_dim * align_size;
-    const uint64_t raw_fit = l2_size / per_elem;
-    uint32_t fitting_len = static_cast<uint32_t>(
-        (raw_fit / chunk_granularity) * chunk_granularity);
-    if (fitting_len < chunk_granularity) {
-      fitting_len = chunk_granularity;
-    }
-
-    const uint32_t candidate_num_l2 = host_utils::CeilDiv(nnz, fitting_len);
-    if (candidate_num_l2 > 1) {
-      num_l2 = candidate_num_l2;
-      block_len = fitting_len / block_dim;
-    }
-    // Otherwise everything fits in L2: keep the single-chunk defaults.
+                                     l2_cache_size);
   }
+
+  const uint32_t block_len =
+      spmv_l2_block_len(nnz, block_dim, align_size, per_elem, l2_cache_size);
+  const uint32_t num_l2 = host_utils::CeilDiv(nnz, block_dim * block_len);
 
   at::Tensor segm_offsets_;
   if (segm_offsets.has_value()) {
@@ -201,8 +213,8 @@ inline at::Tensor run_spmv_v2_impl(
       at::zeros({num_segments},
                 at::TensorOptions().dtype(torch::kFloat32).device(device));
 
-  const tcuscan::SpMVTiling tiling{nnz,       num_segments, x_len,   tile_len,
-                                   block_len, num_l2,       block_dim};
+  const tcuscan::SpMVTiling tiling{nnz,      num_segments, x_len,        tile_len,
+                                   block_dim, l2_cache_size};
   uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
 
   const uint32_t padded_nnz = host_utils::AlignUp(nnz, align_size);
