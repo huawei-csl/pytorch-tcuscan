@@ -34,14 +34,15 @@ using namespace tcuscan;
  * @param [in] num_segments Number of segments.
  * @param [in] x_len Length of the dense input vector.
  * @param [in] tile_len Tile size used for the matrix multiplication step.
- * @param [in] block_len Block length assigned to each AI Core group.
+ * @param [in] block_dim Launch grid size (number of AI Core groups).
+ * @param [in] l2_cache_size L2 cache size in bytes. A very large value disables L2 splitting.
  */
 template <typename T>
 __aicore__ inline void run_spmv_v2(
     GM_ADDR vec_in, GM_ADDR cols_in, GM_ADDR segm_ind_in, GM_ADDR x_in,
     GM_ADDR upper_in, GM_ADDR segm_offset_per_block, GM_ADDR vec_out,
     GM_ADDR workspace, uint32_t vec_len, uint32_t num_segments, uint32_t x_len,
-    uint32_t tile_len, uint32_t block_len) {
+    uint32_t tile_len, uint32_t block_dim, uint64_t l2_cache_size) {
   using OutputT = tcuscan::cube_unit::CubeOutType_t<T>;
 
   const uint32_t align_size = tile_len * tile_len;
@@ -52,58 +53,112 @@ __aicore__ inline void run_spmv_v2(
   GM_ADDR const spec_block_scan_ws = workspace + pad_size;
 
   const uint32_t csr_gather_tile_len = align_size > 1024 ? 1024 : align_size;
-  run_csr_gather<T, false>(vec_in, cols_in, x_in, csr_products_ws, vec_len,
-                           x_len, csr_gather_tile_len);
 
-  sync::SyncGroup<sync::GroupSyncDirection::FULL>();
-  sync::SyncAllCores();
+  // Per-block, per-L2-chunk slab length. Must match spmv_l2_block_len() in
+  // torch_spmv.h so the precomputed segment offsets line up with the chunks
+  // below. per_elem is the CSR products buffer plus the fp32 row-scan output.
+  const uint64_t per_elem = sizeof(T) + sizeof(OutputT);
+  const uint64_t total_tiles =
+      scalar::CeilDiv(static_cast<uint64_t>(vec_len), align_size);
+  const uint64_t l2_tiles = l2_cache_size / (per_elem * align_size);
 
-  if ASCEND_IS_AIC {
-    KernelRowScan<T> op_cube(tile_len, tile_len, padded_vec_len);
-    op_cube.Init(csr_products_ws, upper_in, spec_block_scan_ws);
-    op_cube.Process();
+  // Tiles per L2 chunk: capped by what fits in L2, but at least one.
+  uint64_t chunk_tiles = total_tiles < l2_tiles ? total_tiles : l2_tiles;
+  if (chunk_tiles < 1) {
+    chunk_tiles = 1;
   }
 
-  sync::SyncGroup<sync::GroupSyncDirection::FULL>();
-  sync::SyncAllCores();
-  AscendC::PipeBarrier<PIPE_ALL>();
+  // Spread the chunk across the cores; each core's slab is tile-aligned.
+  const uint32_t block_len = static_cast<uint32_t>(
+      scalar::CeilDiv(chunk_tiles, static_cast<uint64_t>(block_dim)) *
+      align_size);
 
-  if ASCEND_IS_AIV {
-    const uint32_t num_blocks = AscendC::GetBlockNum();
+  // Non-zeros per L2 chunk: all cores cooperate on one chunk.
+  const uint32_t fitting_len = block_dim * block_len;
+  const uint32_t num_l2 = scalar::CeilDiv(vec_len, fitting_len);
+  // Number of (chunk x block) slabs in the segment offset table.
+  const uint32_t num_blocks = num_l2 * block_dim;
 
-    // Use only 1 AIV core
-    if (GetBlockIdx() % 2 == 1) {
-      return;
+  for (uint32_t l2_idx = 0; l2_idx < num_l2; l2_idx++) {
+    // The previous chunk's segmented-sum writes must complete before this
+    // chunk reuses the vector cores. All cores (AIC + AIV) reach this barrier.
+    if (l2_idx > 0) {
+      SyncAll<false /*isAIVOnly*/>();
     }
 
-    // id is the id of each AI Core (2 AIVs and 1 AIC core)
-    const auto id = GetBlockIdx() / GetTaskRation();
-    int32_t segm_ind_offset =
-        scalar::GetGMValue<int32_t>(segm_offset_per_block, id, num_blocks + 1);
-    const int32_t next_offset = scalar::GetGMValue<int32_t>(
-        segm_offset_per_block, id + 1, num_blocks + 1);
-    const int32_t num_segments_per_block = next_offset - segm_ind_offset;
+    const uint32_t chunk_start = l2_idx * fitting_len;
+    if (chunk_start >= vec_len) {
+      break;
+    }
+    const uint32_t chunk_len = (fitting_len < vec_len - chunk_start)
+                                   ? fitting_len
+                                   : (vec_len - chunk_start);
+    const uint32_t padded_chunk_len = scalar::AlignUp(chunk_len, align_size);
 
-    // The boundaries of each segment must overlap
-    if (id > 0) {
-      segm_ind_offset--;
+    // Per-chunk workspace regions.
+    GM_ADDR const chunk_products_ws = csr_products_ws + chunk_start * sizeof(T);
+    GM_ADDR const chunk_scan_ws =
+        spec_block_scan_ws + chunk_start * sizeof(OutputT);
+
+    // Stage 1: gather z = val * x[col] for this chunk's non-zeros.
+    run_csr_gather<T, false>(vec_in + chunk_start * sizeof(T),
+                             cols_in + chunk_start * sizeof(int32_t), x_in,
+                             chunk_products_ws, chunk_len, x_len,
+                             csr_gather_tile_len);
+
+    sync::SyncGroup<sync::GroupSyncDirection::FULL>();
+    sync::SyncAllCores();
+
+    // Stage 2: per-tile inclusive scan on the cube unit.
+    if ASCEND_IS_AIC {
+      KernelRowScan<T> op_cube(tile_len, tile_len, padded_chunk_len);
+      op_cube.Init(chunk_products_ws, upper_in, chunk_scan_ws);
+      op_cube.Process();
     }
 
-    // Each AI Core group is responsible (offsets) starting from `block_len`
-    const uint32_t block_vec_offset = id * block_len;
-    if (block_vec_offset >= vec_len) {
-      return;
-    }
-    const bool is_overflow_block = block_vec_offset + block_len > vec_len;
-    if (is_overflow_block) {
-      block_len = vec_len - block_vec_offset;
-    }
+    sync::SyncGroup<sync::GroupSyncDirection::FULL>();
+    sync::SyncAllCores();
+    AscendC::PipeBarrier<PIPE_ALL>();
 
-    KernelSegSumVecRevert<OutputT, false, true> op(
-        block_len, num_segments_per_block, tile_len, block_vec_offset);
-    op.Init(spec_block_scan_ws, segm_ind_in + segm_ind_offset * sizeof(int32_t),
-            vec_out + segm_ind_offset * sizeof(OutputT));
-    op.Process();
+    // Stage 3: segmented sum, writing per-row results with atomic-add.
+    if ASCEND_IS_AIV {
+      // Use only 1 AIV core per group; the other still reaches the chunk sync.
+      if (GetBlockIdx() % 2 == 0) {
+        // Global block id across all L2 chunks. A segment straddling a chunk
+        // boundary is handled like one straddling a core boundary (segment
+        // overlap below + atomic-add output).
+        const auto local_id = GetBlockIdx() / GetTaskRation();
+        const auto id = l2_idx * block_dim + local_id;
+
+        int32_t segm_ind_offset = scalar::GetGMValue<int32_t>(
+            segm_offset_per_block, id, num_blocks + 1);
+        const int32_t next_offset = scalar::GetGMValue<int32_t>(
+            segm_offset_per_block, id + 1, num_blocks + 1);
+        const int32_t num_segments_per_block = next_offset - segm_ind_offset;
+
+        // The boundaries of each segment must overlap.
+        if (id > 0) {
+          segm_ind_offset--;
+        }
+
+        // This core's slab starts at the global offset id * block_len.
+        const uint32_t block_vec_offset = id * block_len;
+        if (block_vec_offset < vec_len) {
+          uint32_t this_block_len = block_len;
+          if (block_vec_offset + block_len > vec_len) {
+            this_block_len = vec_len - block_vec_offset;
+          }
+
+          KernelSegSumVecRevert<OutputT, false, true> op(
+              this_block_len, num_segments_per_block, tile_len,
+              block_vec_offset);
+          op.Init(spec_block_scan_ws,
+                  segm_ind_in + segm_ind_offset * sizeof(int32_t),
+                  vec_out + segm_ind_offset * sizeof(OutputT));
+          op.Process();
+        }
+      }
+    }
   }
 }
 
@@ -134,13 +189,14 @@ extern "C" __global__ __aicore__ void spmv_v2_fp16(
   const uint32_t num_segments = tiling.num_segments;
   const uint32_t x_len = tiling.x_len;
   const uint32_t tile_len = tiling.tile_len;
-  const uint32_t block_len = tiling.block_len;
+  const uint32_t block_dim = tiling.block_dim;
+  const uint64_t l2_cache_size = tiling.l2_cache_size;
 
   GM_ADDR const upper = load_tril_matrix<half>(tile_len);
 
   run_spmv_v2<half>(vec_in, cols_in, indptr, x_in, upper, segment_offsets,
                     vec_out, workspace, vec_len, num_segments, x_len, tile_len,
-                    block_len);
+                    block_dim, l2_cache_size);
 }
 
 /**
@@ -170,11 +226,12 @@ extern "C" __global__ __aicore__ void spmv_v2_fp32(
   const uint32_t num_segments = tiling.num_segments;
   const uint32_t x_len = tiling.x_len;
   const uint32_t tile_len = tiling.tile_len;
-  const uint32_t block_len = tiling.block_len;
+  const uint32_t block_dim = tiling.block_dim;
+  const uint64_t l2_cache_size = tiling.l2_cache_size;
 
   GM_ADDR const upper = load_tril_matrix<float>(tile_len);
 
   run_spmv_v2<float>(vec_in, cols_in, indptr, x_in, upper, segment_offsets,
                      vec_out, workspace, vec_len, num_segments, x_len, tile_len,
-                     block_len);
+                     block_dim, l2_cache_size);
 }

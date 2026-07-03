@@ -24,8 +24,10 @@ struct SpMVTiling {
   uint32_t x_len;
   /// @brief Tiling length.
   uint32_t tile_len;
-  /// @brief Block length.
-  uint32_t block_len;
+  /// @brief Launch grid size (number of AI Core groups).
+  uint32_t block_dim;
+  /// @brief L2 cache size in bytes. Pass a very large value to disable L2 splitting.
+  uint64_t l2_cache_size;
 };
 
 #pragma pack(pop)

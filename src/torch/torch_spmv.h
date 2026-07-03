@@ -9,6 +9,9 @@
 
 #include <pybind11/pybind11.h>
 
+#include <algorithm>
+#include <limits>
+
 #include "../tiling/tiling_spmv.h"
 #include "aclrtlaunch_spmv_v2_fp16.h"
 #include "aclrtlaunch_spmv_v2_fp32.h"
@@ -92,25 +95,60 @@ at::Tensor run_spmv(const at::Tensor& vals, const at::Tensor& indptr,
 }
 
 /**
+ * @brief Per-block, per-L2-chunk slab length (in non-zeros).
+ *
+ * Must match the device derivation in run_spmv_v2() (src/spmv.cpp): all cores
+ * cooperate on one L2 chunk of block_dim * block_len non-zeros, sized so the
+ * CSR products buffer plus the fp32 row-scan output stay L2-resident. Falls
+ * back to the full single-chunk slab when everything fits in L2.
+ *
+ * @param nnz Number of non-zeros.
+ * @param block_dim Launch grid size (number of AI Core groups).
+ * @param align_size Tile alignment granularity (tile_len * tile_len).
+ * @param per_elem Working-set bytes per non-zero (input dtype + fp32 output).
+ * @param l2_cache_size L2 cache size in bytes; a very large value disables
+ * splitting.
+ * @return Per-block slab length in non-zeros.
+ */
+inline uint32_t spmv_l2_block_len(uint32_t nnz, uint32_t block_dim,
+                                  uint32_t align_size, uint64_t per_elem,
+                                  uint64_t l2_cache_size) {
+  const uint64_t total_tiles =
+      host_utils::CeilDiv(static_cast<uint64_t>(nnz), align_size);
+  const uint64_t l2_tiles = l2_cache_size / (per_elem * align_size);
+
+  // Tiles per L2 chunk: capped by what fits in L2, but at least one.
+  const uint64_t chunk_tiles =
+      std::max<uint64_t>(std::min(total_tiles, l2_tiles), 1);
+
+  // Spread the chunk across the cores; each core's slab is tile-aligned.
+  return static_cast<uint32_t>(host_utils::CeilDiv(chunk_tiles, block_dim) *
+                               align_size);
+}
+
+/**
  * @brief CSR sparse matrix - dense vector multiplication using the multi-core
  * segmented sum algorithm. See Segmented Operations using Matrix
- * Multiplications (https://arxiv.org/pdf/2506.23906)
+ * Multiplications (https://arxiv.org/pdf/2506.23906).
  *
- * Computes A @ x where A is given in CSR format. Unlike run_spmv(), this
- * variant fuses the prefix-scan and gather steps into a single segmented sum
- * kernel (run_seg_sum_multi_core()), reducing intermediate tensor allocations.
+ * Computes A @ x where A is given in CSR format, fusing the prefix-scan and
+ * gather steps into a single segmented sum kernel.
  *
- * @param vals non-zero values of the CSR matrix
+ * @param vals non-zero values of the CSR matrix (fp16 or fp32)
  * @param indptr row pointer array of the CSR matrix (length rows + 1)
  * @param cols column index array of the CSR matrix
  * @param x dense vector to multiply
  * @param s tile size for the multi-core segmented sum kernel
- * @param [in] segm_offsets Segment start index offset per block.
+ * @param split_l2 If true, query the hardware L2 size and split the non-zeros
+ * into serial L2-resident chunks; if false, use a single chunk over all
+ * non-zeros.
+ * @param segm_offsets Optional precomputed segment start index per block.
  * @return Dense result vector of the SpMV product A @ x
  */
-at::Tensor run_spmv_v2(const at::Tensor& vals, const at::Tensor& indptr,
-                       const at::Tensor& cols, const at::Tensor& x, int s,
-                       c10::optional<at::Tensor> segm_offsets = c10::nullopt) {
+inline at::Tensor run_spmv_v2_impl(
+    const at::Tensor& vals, const at::Tensor& indptr, const at::Tensor& cols,
+    const at::Tensor& x, int s, bool split_l2,
+    c10::optional<at::Tensor> segm_offsets = c10::nullopt) {
   const auto vals_dtype = vals.options().dtype();
   const auto x_dtype = x.options().dtype();
   TORCH_CHECK((vals_dtype == torch::kHalf && x_dtype == torch::kHalf) ||
@@ -138,17 +176,32 @@ at::Tensor run_spmv_v2(const at::Tensor& vals, const at::Tensor& indptr,
   if (num_tiles < block_dim) {
     block_dim = num_tiles;
   }
-  const uint32_t max_num_tiles_per_block =
-      host_utils::CeilDiv(num_tiles, block_dim);
-  const uint32_t block_len = max_num_tiles_per_block * align_size;
+
+  const bool is_fp32 = (vals_dtype == torch::kFloat);
+  const uint32_t input_elem_size = is_fp32 ? sizeof(float) : sizeof(int16_t);
+  const uint64_t per_elem = input_elem_size + sizeof(float);
+
+  // L2 cache size drives the chunking, on both host and device. The no-L2
+  // variant disables splitting by passing a value large enough that a single
+  // chunk covers all non-zeros.
+  uint64_t l2_cache_size = std::numeric_limits<uint64_t>::max();
+  if (split_l2) {
+    ascendc_platform->GetCoreMemSize(platform_ascendc::CoreMemType::L2,
+                                     l2_cache_size);
+  }
+
+  const uint32_t block_len =
+      spmv_l2_block_len(nnz, block_dim, align_size, per_elem, l2_cache_size);
+  const uint32_t num_l2_iter = host_utils::CeilDiv(nnz, block_dim * block_len);
 
   at::Tensor segm_offsets_;
   if (segm_offsets.has_value()) {
     segm_offsets_ = segm_offsets.value();
   } else {
+    // One boundary per (L2 chunk x block); global block id g indexes entry g.
     const at::Tensor sstart = torch::clamp(
         torch::arange(
-            0, block_dim + 1,
+            0, num_l2_iter * block_dim + 1,
             torch::TensorOptions().dtype(torch::kInt32).device(device)) *
             block_len,
         c10::nullopt, static_cast<int32_t>(nnz));
@@ -161,18 +214,13 @@ at::Tensor run_spmv_v2(const at::Tensor& vals, const at::Tensor& indptr,
       at::zeros({num_segments},
                 at::TensorOptions().dtype(torch::kFloat32).device(device));
 
-  const tcuscan::SpMVTiling tiling{nnz, num_segments, x_len, tile_len,
-                                   block_len};
+  const tcuscan::SpMVTiling tiling{nnz,      num_segments, x_len,
+                                   tile_len, block_dim,    l2_cache_size};
   uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
 
   const uint32_t padded_nnz = host_utils::AlignUp(nnz, align_size);
-  const bool is_fp32 = (vals_dtype == torch::kFloat);
 
-  // workspace: padded_nnz * sizeof(input_dtype) for CSR products
-  //          + padded_nnz * sizeof(float) for cube scan output
-  const uint32_t input_elem_size = is_fp32 ? sizeof(float) : sizeof(int16_t);
-  const uint32_t workspace_size =
-      padded_nnz * (input_elem_size + sizeof(float));
+  const uint32_t workspace_size = padded_nnz * per_elem;
   const at::Tensor workspace_tensor =
       tcuscan::alloc_zeros_workspace(workspace_size, device);
 
@@ -205,6 +253,35 @@ at::Tensor run_spmv_v2(const at::Tensor& vals, const at::Tensor& indptr,
   aclrtSynchronizeStream(acl_stream);
 
   return z;
+}
+
+/**
+ * @brief CSR SpMV (v2) with L2-cache splitting enabled.
+ *
+ * Splits the non-zeros into L2-cache-sized chunks (derived from the hardware L2
+ * size) and processes them serially so each chunk's workspace stays resident in
+ * L2 across the fused gather / scan / segmented-sum stages. Degrades to a
+ * single chunk (identical to run_spmv_v2_no_l2) when the whole problem already
+ * fits in L2. See run_spmv_v2_impl() for parameter details.
+ */
+inline at::Tensor run_spmv_v2(
+    const at::Tensor& vals, const at::Tensor& indptr, const at::Tensor& cols,
+    const at::Tensor& x, int s,
+    c10::optional<at::Tensor> segm_offsets = c10::nullopt) {
+  return run_spmv_v2_impl(vals, indptr, cols, x, s, /*split_l2=*/true,
+                          segm_offsets);
+}
+
+/**
+ * @brief CSR SpMV (v2) without L2-cache splitting (single chunk over all
+ * non-zeros). Provided for benchmarking against run_spmv_v2().
+ */
+inline at::Tensor run_spmv_v2_no_l2(
+    const at::Tensor& vals, const at::Tensor& indptr, const at::Tensor& cols,
+    const at::Tensor& x, int s,
+    c10::optional<at::Tensor> segm_offsets = c10::nullopt) {
+  return run_spmv_v2_impl(vals, indptr, cols, x, s, /*split_l2=*/false,
+                          segm_offsets);
 }
 
 }  // namespace tcuscan
