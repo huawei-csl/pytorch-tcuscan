@@ -70,7 +70,12 @@ class KernelCSRGather {
                               GM_ADDR z_out) {
     // CSR Matrix (values, columns, row_ptr)
     global_values_.SetGlobalBuffer((__gm__ T*)values_in, values_in_len_);
+    // Values are read once and not reused: bypass L2
+    global_values_.SetL2CacheHint(AscendC::CacheMode::CACHE_MODE_DISABLE);
+
     global_cols_.SetGlobalBuffer((__gm__ uint32_t*)cols_in, values_in_len_);
+    // Column indices are read once and not reused, bypass L2
+    global_cols_.SetL2CacheHint(AscendC::CacheMode::CACHE_MODE_DISABLE);
 
     global_x_.SetGlobalBuffer((__gm__ T*)x_in, x_in_len_);
     global_z_.SetGlobalBuffer((__gm__ T*)z_out, values_in_len_);
