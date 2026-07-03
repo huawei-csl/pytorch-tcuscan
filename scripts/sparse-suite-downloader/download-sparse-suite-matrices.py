@@ -79,9 +79,7 @@ def main():
 
     # Example 3: Download list of matrices by ids
     downloaded_mats = []
-    print(
-        f"Downloading matrix set '{_MATRIX_SET}' ({len(_SPARSE_SUITE_MATRIX_IDS)} matrices)"
-    )
+    print(f"Downloading matrix set '{_MATRIX_SET}' ({len(_SPARSE_SUITE_MATRIX_IDS)} matrices)")
     print(f"Writing to {SS_HOME}")
     for matrix_id in _SPARSE_SUITE_MATRIX_IDS:
         matrix = ssgetpy.fetch(matrix_id, location=SS_HOME)[0]
