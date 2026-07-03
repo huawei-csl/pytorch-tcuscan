@@ -26,10 +26,7 @@ struct SpMVTiling {
   uint32_t tile_len;
   /// @brief Launch grid size (number of AI Core groups).
   uint32_t block_dim;
-  /// @brief L2 cache size in bytes. Drives the per-block, per-L2-chunk slab
-  /// length and the number of serial L2 chunks, both derived identically on the
-  /// host (to precompute the per-block segment offsets) and on the device (to
-  /// loop over chunks). Pass a very large value to disable L2 splitting.
+  /// @brief L2 cache size in bytes. Pass a very large value to disable L2 splitting.
   uint64_t l2_cache_size;
 };
 

@@ -94,35 +94,20 @@ at::Tensor run_spmv(const at::Tensor& vals, const at::Tensor& indptr,
 }
 
 /**
- * @brief CSR sparse matrix - dense vector multiplication using the multi-core
- * segmented sum algorithm. See Segmented Operations using Matrix
- * Multiplications (https://arxiv.org/pdf/2506.23906)
- *
- * Computes A @ x where A is given in CSR format. Unlike run_spmv(), this
- * variant fuses the prefix-scan and gather steps into a single segmented sum
- * kernel (run_seg_sum_multi_core()), reducing intermediate tensor allocations.
- *
- * @param vals non-zero values of the CSR matrix
- * @param indptr row pointer array of the CSR matrix (length rows + 1)
- * @param cols column index array of the CSR matrix
- * @param x dense vector to multiply
- * @param s tile size for the multi-core segmented sum kernel
- * @param split_l2 If true, query the hardware L2 size and split the non-zeros
- * into L2-cache-sized chunks processed serially so each chunk's workspace stays
- * L2-resident across the gather / scan / segmented-sum stages. If false, pass an
- * effectively infinite L2 size so a single chunk covers all non-zeros.
- * @param [in] segm_offsets Segment start index offset per block.
- * @return Dense result vector of the SpMV product A @ x
- */
-/**
  * @brief Per-block, per-L2-chunk slab length (in non-zeros).
  *
- * Kept in sync with the device derivation in `run_spmv_v2()` (src/spmv.cpp): all
- * cores cooperate on one L2 chunk of `block_dim * block_len` non-zeros, sized so
- * the CSR products buffer plus the fp32 row-scan output stay L2-resident.
- * Degrades to the full single-chunk slab when everything fits in L2.
+ * Must match the device derivation in run_spmv_v2() (src/spmv.cpp): all cores
+ * cooperate on one L2 chunk of block_dim * block_len non-zeros, sized so the
+ * CSR products buffer plus the fp32 row-scan output stay L2-resident. Falls
+ * back to the full single-chunk slab when everything fits in L2.
  *
+ * @param nnz Number of non-zeros.
+ * @param block_dim Launch grid size (number of AI Core groups).
+ * @param align_size Tile alignment granularity (tile_len * tile_len).
  * @param per_elem Working-set bytes per non-zero (input dtype + fp32 output).
+ * @param l2_cache_size L2 cache size in bytes; a very large value disables
+ * splitting.
+ * @return Per-block slab length in non-zeros.
  */
 inline uint32_t spmv_l2_block_len(uint32_t nnz, uint32_t block_dim,
                                   uint32_t align_size, uint64_t per_elem,
@@ -141,6 +126,25 @@ inline uint32_t spmv_l2_block_len(uint32_t nnz, uint32_t block_dim,
                                        : full_block_len;
 }
 
+/**
+ * @brief CSR sparse matrix - dense vector multiplication using the multi-core
+ * segmented sum algorithm. See Segmented Operations using Matrix
+ * Multiplications (https://arxiv.org/pdf/2506.23906).
+ *
+ * Computes A @ x where A is given in CSR format, fusing the prefix-scan and
+ * gather steps into a single segmented sum kernel.
+ *
+ * @param vals non-zero values of the CSR matrix (fp16 or fp32)
+ * @param indptr row pointer array of the CSR matrix (length rows + 1)
+ * @param cols column index array of the CSR matrix
+ * @param x dense vector to multiply
+ * @param s tile size for the multi-core segmented sum kernel
+ * @param split_l2 If true, query the hardware L2 size and split the non-zeros
+ * into serial L2-resident chunks; if false, use a single chunk over all
+ * non-zeros.
+ * @param segm_offsets Optional precomputed segment start index per block.
+ * @return Dense result vector of the SpMV product A @ x
+ */
 inline at::Tensor run_spmv_v2_impl(
     const at::Tensor& vals, const at::Tensor& indptr, const at::Tensor& cols,
     const at::Tensor& x, int s, bool split_l2,
@@ -175,9 +179,6 @@ inline at::Tensor run_spmv_v2_impl(
 
   const bool is_fp32 = (vals_dtype == torch::kFloat);
   const uint32_t input_elem_size = is_fp32 ? sizeof(float) : sizeof(int16_t);
-  // Working-set footprint per non-zero: CSR products (input dtype) + fp32
-  // row-scan output. The dense vector `x` is excluded (random-gather access does
-  // not localize per chunk).
   const uint64_t per_elem = input_elem_size + sizeof(float);
 
   // L2 cache size drives the chunking, on both host and device. The no-L2
@@ -213,16 +214,13 @@ inline at::Tensor run_spmv_v2_impl(
       at::zeros({num_segments},
                 at::TensorOptions().dtype(torch::kFloat32).device(device));
 
-  const tcuscan::SpMVTiling tiling{nnz,      num_segments, x_len,        tile_len,
-                                   block_dim, l2_cache_size};
+  const tcuscan::SpMVTiling tiling{nnz,      num_segments, x_len,
+                                   tile_len, block_dim,    l2_cache_size};
   uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
 
   const uint32_t padded_nnz = host_utils::AlignUp(nnz, align_size);
 
-  // workspace: padded_nnz * sizeof(input_dtype) for CSR products
-  //          + padded_nnz * sizeof(float) for cube scan output
-  const uint32_t workspace_size =
-      padded_nnz * (input_elem_size + sizeof(float));
+  const uint32_t workspace_size = padded_nnz * per_elem;
   const at::Tensor workspace_tensor =
       tcuscan::alloc_zeros_workspace(workspace_size, device);
 
@@ -262,9 +260,9 @@ inline at::Tensor run_spmv_v2_impl(
  *
  * Splits the non-zeros into L2-cache-sized chunks (derived from the hardware L2
  * size) and processes them serially so each chunk's workspace stays resident in
- * L2 across the fused gather / scan / segmented-sum stages. Degrades to a single
- * chunk (identical to run_spmv_v2_no_l2) when the whole problem already fits in
- * L2. See run_spmv_v2_impl() for parameter details.
+ * L2 across the fused gather / scan / segmented-sum stages. Degrades to a
+ * single chunk (identical to run_spmv_v2_no_l2) when the whole problem already
+ * fits in L2. See run_spmv_v2_impl() for parameter details.
  */
 inline at::Tensor run_spmv_v2(
     const at::Tensor& vals, const at::Tensor& indptr, const at::Tensor& cols,

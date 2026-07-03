@@ -35,11 +35,7 @@ using namespace tcuscan;
  * @param [in] x_len Length of the dense input vector.
  * @param [in] tile_len Tile size used for the matrix multiplication step.
  * @param [in] block_dim Launch grid size (number of AI Core groups).
- * @param [in] l2_cache_size L2 cache size in bytes. The non-zeros are processed
- * in serial L2 chunks (one chunk at a time across all cores) so that a chunk's
- * workspace stays L2-resident across the gather / row-scan / segmented sum
- * stages. The per-block slab length and chunk count are derived from this value
- * exactly as on the host; a very large value disables L2 splitting.
+ * @param [in] l2_cache_size L2 cache size in bytes. A very large value disables L2 splitting.
  */
 template <typename T>
 __aicore__ inline void run_spmv_v2(
@@ -58,11 +54,6 @@ __aicore__ inline void run_spmv_v2(
 
   const uint32_t csr_gather_tile_len = align_size > 1024 ? 1024 : align_size;
 
-  // Per-block, per-L2-chunk slab length. Derived identically on the host (see
-  // spmv_l2_block_len() in torch_spmv.h) so the precomputed segment offsets line
-  // up with the chunks walked below. Working-set footprint per non-zero is the
-  // CSR products buffer plus the fp32 row-scan output. Falls back to a single
-  // full-width slab when everything fits in L2.
   const uint64_t per_elem = sizeof(T) + sizeof(OutputT);
   const uint32_t num_tiles = scalar::CeilDiv(vec_len, align_size);
   const uint32_t full_block_len =
@@ -78,16 +69,15 @@ __aicore__ inline void run_spmv_v2(
                                  ? static_cast<uint32_t>(l2_block_len)
                                  : full_block_len;
 
-  // Non-zeros processed per L2 chunk: all cores cooperate on one chunk.
+  // Non-zeros per L2 chunk: all cores cooperate on one chunk.
   const uint32_t fitting_len = block_dim * block_len;
   const uint32_t num_l2 = scalar::CeilDiv(vec_len, fitting_len);
-  // Total number of (chunk x block) slabs indexed by the segment offset table.
+  // Number of (chunk x block) slabs in the segment offset table.
   const uint32_t num_blocks = num_l2 * block_dim;
 
   for (uint32_t l2_idx = 0; l2_idx < num_l2; l2_idx++) {
-    // Separate consecutive L2 chunks: the previous chunk's segmented-sum
-    // writes must complete before this chunk reuses the vector cores. All
-    // cores (AIC + AIV) reach this barrier.
+    // The previous chunk's segmented-sum writes must complete before this
+    // chunk reuses the vector cores. All cores (AIC + AIV) reach this barrier.
     if (l2_idx > 0) {
       SyncAll<false /*isAIVOnly*/>();
     }
@@ -101,7 +91,7 @@ __aicore__ inline void run_spmv_v2(
                                    : (vec_len - chunk_start);
     const uint32_t padded_chunk_len = scalar::AlignUp(chunk_len, align_size);
 
-    // Per-chunk workspace regions (global offsets into the full workspace).
+    // Per-chunk workspace regions.
     GM_ADDR const chunk_products_ws = csr_products_ws + chunk_start * sizeof(T);
     GM_ADDR const chunk_scan_ws =
         spec_block_scan_ws + chunk_start * sizeof(OutputT);
@@ -131,8 +121,8 @@ __aicore__ inline void run_spmv_v2(
       // Use only 1 AIV core per group; the other still reaches the chunk sync.
       if (GetBlockIdx() % 2 == 0) {
         // Global block id across all L2 chunks. A segment straddling a chunk
-        // boundary is handled exactly like one straddling a core boundary
-        // (segment overlap below + atomic-add output).
+        // boundary is handled like one straddling a core boundary (segment
+        // overlap below + atomic-add output).
         const auto local_id = GetBlockIdx() / GetTaskRation();
         const auto id = l2_idx * block_dim + local_id;
 
@@ -147,8 +137,7 @@ __aicore__ inline void run_spmv_v2(
           segm_ind_offset--;
         }
 
-        // This core's non-zero slab starts at the global offset
-        // `id * block_len == chunk_start + local_id * block_len`.
+        // This core's slab starts at the global offset id * block_len.
         const uint32_t block_vec_offset = id * block_len;
         if (block_vec_offset < vec_len) {
           uint32_t this_block_len = block_len;
