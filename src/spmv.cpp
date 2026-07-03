@@ -54,20 +54,24 @@ __aicore__ inline void run_spmv_v2(
 
   const uint32_t csr_gather_tile_len = align_size > 1024 ? 1024 : align_size;
 
+  // Per-block, per-L2-chunk slab length. Must match spmv_l2_block_len() in
+  // torch_spmv.h so the precomputed segment offsets line up with the chunks
+  // below. per_elem is the CSR products buffer plus the fp32 row-scan output.
   const uint64_t per_elem = sizeof(T) + sizeof(OutputT);
-  const uint32_t num_tiles = scalar::CeilDiv(vec_len, align_size);
-  const uint32_t full_block_len =
-      scalar::CeilDiv(num_tiles, block_dim) * align_size;
-  const uint64_t chunk_granularity =
-      static_cast<uint64_t>(block_dim) * align_size;
-  uint64_t l2_granules = l2_cache_size / per_elem / chunk_granularity;
-  if (l2_granules < 1) {
-    l2_granules = 1;
+  const uint64_t total_tiles =
+      scalar::CeilDiv(static_cast<uint64_t>(vec_len), align_size);
+  const uint64_t l2_tiles = l2_cache_size / (per_elem * align_size);
+
+  // Tiles per L2 chunk: capped by what fits in L2, but at least one.
+  uint64_t chunk_tiles = total_tiles < l2_tiles ? total_tiles : l2_tiles;
+  if (chunk_tiles < 1) {
+    chunk_tiles = 1;
   }
-  const uint64_t l2_block_len = l2_granules * align_size;
-  const uint32_t block_len = l2_block_len < full_block_len
-                                 ? static_cast<uint32_t>(l2_block_len)
-                                 : full_block_len;
+
+  // Spread the chunk across the cores; each core's slab is tile-aligned.
+  const uint32_t block_len = static_cast<uint32_t>(
+      scalar::CeilDiv(chunk_tiles, static_cast<uint64_t>(block_dim)) *
+      align_size);
 
   // Non-zeros per L2 chunk: all cores cooperate on one chunk.
   const uint32_t fitting_len = block_dim * block_len;

@@ -9,6 +9,7 @@
 
 #include <pybind11/pybind11.h>
 
+#include <algorithm>
 #include <limits>
 
 #include "../tiling/tiling_spmv.h"
@@ -112,18 +113,17 @@ at::Tensor run_spmv(const at::Tensor& vals, const at::Tensor& indptr,
 inline uint32_t spmv_l2_block_len(uint32_t nnz, uint32_t block_dim,
                                   uint32_t align_size, uint64_t per_elem,
                                   uint64_t l2_cache_size) {
-  const uint32_t num_tiles = host_utils::CeilDiv(nnz, align_size);
-  const uint32_t full_block_len =
-      host_utils::CeilDiv(num_tiles, block_dim) * align_size;
-  const uint64_t chunk_granularity =
-      static_cast<uint64_t>(block_dim) * align_size;
-  uint64_t l2_granules = l2_cache_size / per_elem / chunk_granularity;
-  if (l2_granules < 1) {
-    l2_granules = 1;
-  }
-  const uint64_t l2_block_len = l2_granules * align_size;
-  return l2_block_len < full_block_len ? static_cast<uint32_t>(l2_block_len)
-                                       : full_block_len;
+  const uint64_t total_tiles =
+      host_utils::CeilDiv(static_cast<uint64_t>(nnz), align_size);
+  const uint64_t l2_tiles = l2_cache_size / (per_elem * align_size);
+
+  // Tiles per L2 chunk: capped by what fits in L2, but at least one.
+  const uint64_t chunk_tiles =
+      std::max<uint64_t>(std::min(total_tiles, l2_tiles), 1);
+
+  // Spread the chunk across the cores; each core's slab is tile-aligned.
+  return static_cast<uint32_t>(host_utils::CeilDiv(chunk_tiles, block_dim) *
+                               align_size);
 }
 
 /**
@@ -192,7 +192,7 @@ inline at::Tensor run_spmv_v2_impl(
 
   const uint32_t block_len =
       spmv_l2_block_len(nnz, block_dim, align_size, per_elem, l2_cache_size);
-  const uint32_t num_l2 = host_utils::CeilDiv(nnz, block_dim * block_len);
+  const uint32_t num_l2_iter = host_utils::CeilDiv(nnz, block_dim * block_len);
 
   at::Tensor segm_offsets_;
   if (segm_offsets.has_value()) {
@@ -201,7 +201,7 @@ inline at::Tensor run_spmv_v2_impl(
     // One boundary per (L2 chunk x block); global block id g indexes entry g.
     const at::Tensor sstart = torch::clamp(
         torch::arange(
-            0, num_l2 * block_dim + 1,
+            0, num_l2_iter * block_dim + 1,
             torch::TensorOptions().dtype(torch::kInt32).device(device)) *
             block_len,
         c10::nullopt, static_cast<int32_t>(nnz));
