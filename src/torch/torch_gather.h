@@ -131,8 +131,9 @@ at::Tensor run_csr_gather(const at::Tensor& values, const at::Tensor& cols,
   const uint32_t x_len = x.numel();
 
   constexpr uint32_t TILE_LEN = 1024;
+  constexpr uint32_t X_TILE_ELEMS_MAX = 16384;
 
-  const CSRGatherTiling tiling{values_len, x_len, TILE_LEN};
+  const CSRGatherTiling tiling{values_len, x_len, TILE_LEN, X_TILE_ELEMS_MAX};
   uint8_t* tiling_device = alloc_copy_tiling(tiling);
 
   uint32_t block_dim = host_utils::CeilDiv(values_len, TILE_LEN);

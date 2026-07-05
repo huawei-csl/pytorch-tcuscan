@@ -21,19 +21,17 @@ namespace tcuscan {
  *
  * The input `x` vector is not required to fit entirely in Unified Buffer. When
  * `x` is small enough it is loaded once and gathered directly (fast path).
- * Otherwise `x` is processed in chunks of at most `XTileElemsMax` elements: for
- * every chunk each tile gathers the entries of `x` that fall inside the chunk
- * and accumulates them, so arbitrary (unsorted) column indices are supported.
+ * Otherwise `x` is processed in chunks of at most `x_tile_elems_max` elements:
+ * for every chunk each tile gathers the entries of `x` that fall inside the
+ * chunk and accumulates them, so arbitrary (unsorted) column indices are
+ * supported.
  *
  * [1] Segmented Operations for Sparse Matrix Computation on Vector
  * Multiprocessors: https://dl.acm.org/doi/10.5555/865221.
  *
  * @tparam T Input data type.
- * @tparam XTileElemsMax Maximum number of `x` elements held in Unified Buffer at
- * once. Determines the fast-path threshold and the chunk size used for larger
- * `x` vectors.
  */
-template <typename T, uint32_t XTileElemsMax = 16384>
+template <typename T>
 class KernelCSRGather {
   constexpr static uint32_t BUFFER_NUM = 2;
 
@@ -44,18 +42,22 @@ class KernelCSRGather {
    * @param [in] values_in_len Length of the input values vector.
    * @param [in] x_in_len Length of the input x vector.
    * @param [in] tile_len Length of the tile processed in a single iteration.
+   * @param [in] x_tile_elems_max Maximum number of `x` elements held in Unified
+   * Buffer at once. Determines the fast-path threshold and the chunk size used
+   * for larger `x` vectors.
    */
 
   __aicore__ inline KernelCSRGather(uint32_t values_in_len, uint32_t x_in_len,
-                                    uint32_t tile_len)
+                                    uint32_t tile_len,
+                                    uint32_t x_tile_elems_max)
       : vec_core_num_(GetBlockNum() * GetTaskRation()),
         values_in_len_(values_in_len),
         x_in_len_(x_in_len),
         tile_len_(tile_len),
         num_tiles_(scalar::CeilDiv(values_in_len, tile_len_)),
         max_num_tiles_per_block_(scalar::CeilDiv(num_tiles_, vec_core_num_)),
-        single_x_load_(x_in_len <= XTileElemsMax),
-        x_buf_elems_(single_x_load_ ? x_in_len : XTileElemsMax),
+        single_x_load_(x_in_len <= x_tile_elems_max),
+        x_buf_elems_(single_x_load_ ? x_in_len : x_tile_elems_max),
         num_x_chunks_(scalar::CeilDiv(x_in_len, x_buf_elems_)) {}
 
   /**
@@ -82,7 +84,8 @@ class KernelCSRGather {
 
     pipe.InitBuffer(values_q_, BUFFER_NUM, tile_len_ * sizeof(T));
     pipe.InitBuffer(cols_q_, BUFFER_NUM, tile_len_ * sizeof(uint32_t));
-    // Only `x_buf_elems_` (<= XTileElemsMax) elements of `x` are ever resident,
+    // Only `x_buf_elems_` (<= x_tile_elems_max) elements of `x` are ever
+    // resident,
     // so arbitrarily large `x` vectors are supported.
     pipe.InitBuffer(x_q_, 1, x_buf_elems_ * sizeof(T));
     pipe.InitBuffer(output_q_, BUFFER_NUM, tile_len_ * sizeof(T));
@@ -304,12 +307,16 @@ class KernelCSRGather {
  * @param [in] values_in_len Length of the input values vector.
  * @param [in] x_in_len Length of the input x vector.
  * @param [in] tile_len Length of the tile processed in a single iteration.
+ * @param [in] x_tile_elems_max Maximum number of `x` elements held in Unified
+ * Buffer at once. Determines the fast-path threshold and the chunk size used
+ * for larger `x` vectors.
  */
 template <typename T, bool ForceMixMode = true>
 __aicore__ inline void run_csr_gather(GM_ADDR values_in, GM_ADDR cols_in,
                                       GM_ADDR x_in, GM_ADDR z_out,
                                       uint32_t values_in_len, uint32_t x_in_len,
-                                      uint32_t tile_len) {
+                                      uint32_t tile_len,
+                                      uint32_t x_tile_elems_max = 16384) {
   if constexpr (ForceMixMode) {
     exec_mode::EnableCubeCores();
   }
@@ -318,7 +325,7 @@ __aicore__ inline void run_csr_gather(GM_ADDR values_in, GM_ADDR cols_in,
     static_assert(std::is_same_v<T, half> || std::is_same_v<T, int16_t> ||
                       std::is_same_v<T, float>,
                   "[csr_gather] Unsupported input dtype");
-    KernelCSRGather<T> op(values_in_len, x_in_len, tile_len);
+    KernelCSRGather<T> op(values_in_len, x_in_len, tile_len, x_tile_elems_max);
     op.Init(values_in, cols_in, x_in, z_out);
     op.Process();
   }
