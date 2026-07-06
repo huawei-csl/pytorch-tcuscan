@@ -77,6 +77,7 @@ ascendc_library(
   src/seg_scan_mc_revert.cpp
   src/seg_sum_single_core.cpp
   src/seg_sum_multi_core.cpp
+  src/seg_sum_multi_cube.cpp
   src/seg_sum_single_cube.cpp
   src/row_scan.cpp
   src/block_scan.cpp

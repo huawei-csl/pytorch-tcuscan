@@ -116,7 +116,6 @@ class KernelSegSumCubeRevert {
       copy::CopyVecToGm(global_out_[out_offset_], out_q_, tile_len_);
       if constexpr (UseAtomicWrite) {
         AscendC::SetAtomicNone();
-        AscendC::DisableDmaAtomic();
       }
       out_offset_ += tile_len_;
       vec_out_lt = out_q_.template AllocTensor<T>();
@@ -186,7 +185,7 @@ class KernelSegSumCubeRevert {
     T accumulation = 0;
     uint32_t in_offset = 0;
     uint32_t out_idx = 0;
-    uint32_t segm_idx = 1;
+    uint32_t segm_idx = 0;
     uint32_t segm_end = segm_ind_lt.GetValue(segm_idx) - vec_start_offset_;
 
     for (uint32_t tile_idx = 0; tile_idx < num_tiles_; tile_idx++) {
@@ -237,7 +236,6 @@ class KernelSegSumCubeRevert {
     copy::CopyVecToGm(global_out_[out_offset_], out_q_, tail_len);
     if constexpr (UseAtomicWrite) {
       AscendC::SetAtomicNone();
-      AscendC::DisableDmaAtomic();
     }
   }
 
