@@ -1,5 +1,10 @@
 .PHONY: all clean setup_once setup_once_aarch64 build test profile
 
+CSRC_KERNEL_DIR := src/kernel
+
+# Host architecture (e.g. x86_64 or aarch64), used to locate the Ascend toolkit includes.
+ARCH := $(shell uname -m)
+
 DENSITY?=0.001
 LOCAL_SPARSE_MATRIX_NAME?='Williams/pdb1HYS/pdb1HYS'
 BASE_SPARSE_MATRIX_PATH?=/scratch/TCUSCAN/sparse-suite-matrices/ssgetpy-downloaded-matrices
@@ -48,6 +53,21 @@ build: build.sh
 
 pypackage:
 	./build-pypackage.sh -v ${ASCEND_DEVICE}
+
+# 'make compile_vadd' compiles 'kernel_vadd.cpp' into 'libkernel_vadd.so' without building the whole project.
+# This is useful for development and debugging of individual kernels.
+compile_%:
+	bisheng -fPIC -shared -xcce -O2 -std=c++17 \
+		-I$(CSRC_KERNEL_DIR) \
+		-I$(ASCEND_TOOLKIT_HOME)/$(ARCH)-linux/tikcpp/tikcfw \
+		-I$(ASCEND_TOOLKIT_HOME)/$(ARCH)-linux/asc/include/interface \
+		-I$(ASCEND_TOOLKIT_HOME)/$(ARCH)-linux/asc/impl/basic_api \
+		--npu-arch=dav-2201 \
+		-mllvm -cce-aicore-stack-size=0x8000 \
+		-mllvm -cce-aicore-function-stack-size=0x8000 \
+		-Wno-ignored-attributes \
+		src/$*.cpp \
+		-o libkernel_$*.so
 
 build_tidy: build-tidy.sh
 	./build-tidy.sh -v ${ASCEND_DEVICE}
