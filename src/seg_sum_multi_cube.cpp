@@ -54,22 +54,13 @@ __aicore__ inline void run_seg_sum_multi_cube(
   sync::SyncAllCores();
 
   if ASCEND_IS_AIC {
-    KernelBlockScan<T> op_cube(padded_vec_len, tile_len);
+    KernelBlockScan<T, true /* SyncBefore */> op_cube(padded_vec_len, tile_len);
     op_cube.Init(padded_input, upper, lower, spec_block_scan);
     op_cube.Process();
   }
 
-  sync::SyncGroup<sync::GroupSyncDirection::FULL>();
-  sync::SyncAllCores();
-  AscendC::PipeBarrier<PIPE_ALL>();
-
   if ASCEND_IS_AIV {
     const uint32_t num_blocks = AscendC::GetBlockNum();
-
-    // Use only 1 AIV core
-    if (GetBlockIdx() % 2 == 1) {
-      return;
-    }
 
     // id is the id of each AI Core (2 AIVs and 1 AIC core)
     const auto id = GetBlockIdx() / GetTaskRation();
@@ -94,8 +85,9 @@ __aicore__ inline void run_seg_sum_multi_cube(
       block_len = vec_len - block_vec_offset;
     }
 
-    KernelSegSumCubeRevert<OutputT, false, true> op(
-        block_len, num_segments_per_block, tile_len, block_vec_offset);
+    KernelSegSumCubeRevert<OutputT, true /* SyncBefore */,
+                           true /* UseAtomicWrite */>
+        op(block_len, num_segments_per_block, tile_len, block_vec_offset);
     op.Init(spec_block_scan, segm_ind_in + segm_ind_offset * sizeof(int32_t),
             vec_out + segm_ind_offset * sizeof(OutputT));
     op.Process();
