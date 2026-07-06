@@ -1,7 +1,5 @@
 .PHONY: all clean setup_once setup_once_aarch64 build test profile
 
-CSRC_KERNEL_DIR := src/kernel
-
 # Host architecture (e.g. x86_64 or aarch64), used to locate the Ascend toolkit includes.
 ARCH := $(shell uname -m)
 
@@ -58,7 +56,7 @@ pypackage:
 # This is useful for development and debugging of individual kernels.
 compile_%:
 	bisheng -fPIC -shared -xcce -O2 -std=c++17 \
-		-I$(CSRC_KERNEL_DIR) \
+		-Isrc/kernel \
 		-I$(ASCEND_TOOLKIT_HOME)/$(ARCH)-linux/tikcpp/tikcfw \
 		-I$(ASCEND_TOOLKIT_HOME)/$(ARCH)-linux/asc/include/interface \
 		-I$(ASCEND_TOOLKIT_HOME)/$(ARCH)-linux/asc/impl/basic_api \
