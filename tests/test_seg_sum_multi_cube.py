@@ -64,7 +64,7 @@ def tiling_function(nnz: int, s: int, max_aic_cores: int = 20):
 def _test_seg_sum_multi_cube(
     num_rows: int, num_cols: int, s: int, density: float, dtype: torch.dtype
 ):
-    sp_dtype = np.float32 if dtype == torch.float16 else np.int32
+    sp_dtype = np.float32 if dtype in (torch.float16, torch.float32) else np.int32
 
     num_segments = num_rows
 
@@ -150,7 +150,7 @@ def _test_seg_sum_multi_cube(
 )
 @pytest.mark.parametrize("num_cols", _NUM_COLUMNS, ids=lambda x: f"num_cols:({x})")
 @pytest.mark.parametrize("s", [16], ids=lambda s: f"s:({s})")
-@pytest.mark.parametrize("dtype", [torch.float16], ids=str)
+@pytest.mark.parametrize("dtype", [torch.float16, torch.float32], ids=str)
 def test_seg_sum_multi_cube(
     num_segments: int, num_cols: int, s: int, dtype: torch.dtype
 ):
