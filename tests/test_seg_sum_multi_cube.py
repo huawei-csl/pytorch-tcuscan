@@ -10,7 +10,6 @@
 
 import os
 import random
-import math
 from math import ceil
 
 import numpy as np
@@ -31,7 +30,7 @@ NPU_DEVICE = os.environ.get("NPU_DEVICE", "npu:1")
 torch.npu.config.allow_internal_format = False
 torch.npu.set_device(NPU_DEVICE)
 
-_NUM_SEGMENTS = [513, 1025, 2011]  # 519, 2043 fails!
+_NUM_SEGMENTS = [513, 519, 1025, 2011, 2043]
 _NUM_COLUMNS = [64 * 64 - 1, 128 * 128, 128 * 128 - 13, 128 * 128 + 13, 128 * 128 - 133]
 
 
@@ -141,14 +140,9 @@ def _test_seg_sum_multi_cube(
     assert (
         actual.dtype == expected.dtype
     ), f"Output dtype mismatch. Got {actual.dtype}. Expected {expected.dtype}"
-    if dtype == torch.int8:
-        assert torch.equal(
-            actual, expected
-        ), f"Error seg_sum ({expected.dtype}). Abs-error: {abs_error} / {rel_error}, s={s}, num_cols={num_cols}"
-    elif dtype == torch.float16:
-        assert torch.allclose(
-            actual, expected, atol=1e-2
-        ), f"Error seg_sum ({expected.dtype}). Abs-error: {abs_error} / {rel_error}, s={s}, num_cols={num_cols}"
+    assert torch.allclose(
+        actual, expected, atol=1e-2
+    ), f"Error seg_sum ({expected.dtype}). Abs-error: {abs_error} / {rel_error}, s={s}, num_cols={num_cols}"
 
 
 @pytest.mark.parametrize(
