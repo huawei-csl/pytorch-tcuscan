@@ -422,9 +422,10 @@ __aicore__ inline void CopyL0CToL1(const LocalTensor<DstDataType>& dst_lt,
   exec_mode::AssertIsAIC();
   exec_mode::AssertLocalTensorIsIn(src_lt, QuePosition::CO1);
   exec_mode::AssertLocalTensorIsInL1(dst_lt);
-  static_assert(
-      std::is_same_v<SrcDataType, float> && std::is_same_v<DstDataType, half>,
-      "Unsupported data types. Please add support yourself.");
+  static_assert(std::is_same_v<SrcDataType, float> and
+                    (std::is_same_v<DstDataType, half> or
+                     std::is_same_v<DstDataType, float>),
+                "Unsupported data types. Please add support yourself.");
 
   FixpipeParamsV220 params;
   params.nSize = width;
@@ -432,7 +433,13 @@ __aicore__ inline void CopyL0CToL1(const LocalTensor<DstDataType>& dst_lt,
   params.srcStride = height;
   params.dstStride = width;
   params.ndNum = 1;
-  params.quantPre = QuantMode_t::F322F16;
+  if constexpr (std::is_same_v<DstDataType, float>) {
+    params.quantPre = QuantMode_t::NoQuant;
+  }
+
+  if constexpr (std::is_same_v<DstDataType, half>) {
+    params.quantPre = QuantMode_t::F322F16;
+  }
 
   Fixpipe<DstDataType, SrcDataType, CFG_NZ>(dst_lt, src_lt, params);
 }
