@@ -95,23 +95,21 @@ at::Tensor run_csr_gather(const at::Tensor& values, const at::Tensor& cols,
               values.dim(), "D");
   TORCH_CHECK(cols.dim() == 1, "run_csr_gather: cols must be 1D, got ",
               cols.dim(), "D");
-  TORCH_CHECK(x.dim() == 1, "run_csr_gather: x must be 1D, got ", x.dim(),
-              "D");
-  TORCH_CHECK(cols.numel() == values.numel(),
-              "run_csr_gather: cols length (", cols.numel(),
-              ") must match values length (", values.numel(), ")");
+  TORCH_CHECK(x.dim() == 1, "run_csr_gather: x must be 1D, got ", x.dim(), "D");
+  TORCH_CHECK(cols.numel() == values.numel(), "run_csr_gather: cols length (",
+              cols.numel(), ") must match values length (", values.numel(),
+              ")");
   const auto dtype = values.options().dtype();
-  TORCH_CHECK(dtype == torch::kHalf || dtype == torch::kInt16 ||
-                  dtype == torch::kFloat,
-              "run_csr_gather: values dtype must be fp16, int16, or fp32, got ",
-              dtype);
-  TORCH_CHECK(x.options().dtype() == dtype,
-              "run_csr_gather: x dtype (", x.options().dtype(),
-              ") must match values dtype (", dtype, ")");
+  TORCH_CHECK(
+      dtype == torch::kHalf || dtype == torch::kInt16 || dtype == torch::kFloat,
+      "run_csr_gather: values dtype must be fp16, int16, or fp32, got ", dtype);
+  TORCH_CHECK(x.options().dtype() == dtype, "run_csr_gather: x dtype (",
+              x.options().dtype(), ") must match values dtype (", dtype, ")");
   TORCH_CHECK(cols.options().dtype() == torch::kInt32,
               "run_csr_gather: cols dtype must be int32, got ",
               cols.options().dtype());
-  TORCH_CHECK(values.is_contiguous(), "run_csr_gather: values must be contiguous");
+  TORCH_CHECK(values.is_contiguous(),
+              "run_csr_gather: values must be contiguous");
   TORCH_CHECK(cols.is_contiguous(), "run_csr_gather: cols must be contiguous");
   TORCH_CHECK(x.is_contiguous(), "run_csr_gather: x must be contiguous");
   TORCH_CHECK(values.device() == cols.device(),
@@ -131,7 +129,28 @@ at::Tensor run_csr_gather(const at::Tensor& values, const at::Tensor& cols,
   const uint32_t x_len = x.numel();
 
   constexpr uint32_t TILE_LEN = 1024;
-  constexpr uint32_t X_TILE_ELEMS_MAX = 16384;
+
+  // Size the `x` staging buffer to the largest chunk that fits in Unified
+  // Buffer alongside the other buffers resident during the chunked path,
+  // instead of a fixed cap. Buffers co-resident with `x` (see
+  // KernelCSRGather::Init), with BUFFER_NUM == 2:
+  //   `T`-typed      : values_q_(2) + output_q_(2) + gather_buf_(1)
+  //   uint32_t-typed : cols_q_(2)   + tbuf_(1)      + clamp_buf_(1)
+  //   uint8_t-typed  : sel_buf_(1)
+  const uint32_t elem_size = static_cast<uint32_t>(values.element_size());
+  uint64_t ub_size = 0;
+  ascendc_platform->GetCoreMemSize(platform_ascendc::CoreMemType::UB, ub_size);
+  const uint32_t reserved_bytes = 5 * TILE_LEN * elem_size +
+                                  4 * TILE_LEN * sizeof(uint32_t) +
+                                  1 * TILE_LEN * sizeof(uint8_t);
+  TORCH_CHECK(ub_size > reserved_bytes, "run_csr_gather: Unified Buffer (",
+              ub_size, " bytes) too small for the required scratch buffers (",
+              reserved_bytes, " bytes)");
+  // Floor to a 32-byte boundary so the buffer allocation stays aligned.
+  const uint32_t x_bytes_max =
+      (static_cast<uint32_t>(ub_size) - reserved_bytes) & ~uint32_t{31};
+  const uint32_t X_TILE_ELEMS_MAX =
+      host_utils::FloorDiv(x_bytes_max, elem_size);
 
   const CSRGatherTiling tiling{values_len, x_len, TILE_LEN, X_TILE_ELEMS_MAX};
   uint8_t* tiling_device = alloc_copy_tiling(tiling);

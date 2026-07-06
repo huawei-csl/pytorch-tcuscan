@@ -199,9 +199,8 @@ class KernelCSRGather {
 
     for (uint32_t chunk = 0; chunk < num_x_chunks_; chunk++) {
       const uint32_t base = chunk * x_buf_elems_;
-      const uint32_t len = x_in_len_ - base < x_buf_elems_
-                               ? x_in_len_ - base
-                               : x_buf_elems_;
+      const uint32_t len =
+          x_in_len_ - base < x_buf_elems_ ? x_in_len_ - base : x_buf_elems_;
 
       copy::CopyGmToVec(x_q_, global_x_[base], len);
       LocalTensor<T> x_chunk_lt = x_q_.DeQue<T>();
@@ -216,8 +215,9 @@ class KernelCSRGather {
       // Turn the element index into a byte offset expected by `Gather`.
       Muls(clamp_lt, clamp_lt, static_cast<int32_t>(sizeof(T)), tile_len_);
 
-      AscendC::Gather(gather_lt, x_chunk_lt, clamp_lt.ReinterpretCast<uint32_t>(),
-                      (uint32_t)0, tile_len_);
+      AscendC::Gather(gather_lt, x_chunk_lt,
+                      clamp_lt.ReinterpretCast<uint32_t>(), (uint32_t)0,
+                      tile_len_);
       x_q_.FreeTensor<T>(x_chunk_lt);
 
       // Zero the lanes whose column index is not in this chunk, then
@@ -242,7 +242,8 @@ class KernelCSRGather {
    * `half` shares the bit pattern of a zeroed `int16_t`.
    *
    * @param [in,out] data Values to mask.
-   * @param [in] sel Bit mask; a set bit keeps the value, a cleared bit zeroes it.
+   * @param [in] sel Bit mask; a set bit keeps the value, a cleared bit zeroes
+   * it.
    * @param [in] count Number of elements to process.
    */
   __aicore__ inline void ZeroWhereNotSelected(const LocalTensor<T>& data,
@@ -316,9 +317,14 @@ __aicore__ inline void run_csr_gather(GM_ADDR values_in, GM_ADDR cols_in,
                                       GM_ADDR x_in, GM_ADDR z_out,
                                       uint32_t values_in_len, uint32_t x_in_len,
                                       uint32_t tile_len,
-                                      uint32_t x_tile_elems_max = 16384) {
+                                      uint32_t x_tile_elems_max = 65536) {
   if constexpr (ForceMixMode) {
     exec_mode::EnableCubeCores();
+  }
+
+  // If input dtype if fp32, half the chunk size of x.
+  if constexpr (sizeof(T) == 4) {
+    x_tile_elems_max /= 2;
   }
 
   if ASCEND_IS_AIV {
