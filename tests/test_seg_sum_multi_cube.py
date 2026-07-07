@@ -103,7 +103,7 @@ def _test_seg_sum_multi_cube(
 
     torch.npu.synchronize()
     if use_segm_offsets:
-        block_len, num_blocks = tiling_function(nnz, s)
+        block_len, num_blocks = get_block_len_and_num_blocks(nnz, s)
         sstart = torch.clamp(
             torch.arange(0, num_blocks + 1, dtype=torch.int32, device=NPU_DEVICE)
             * block_len,
