@@ -10,6 +10,7 @@
 
 import os
 import random
+from functools import partial
 from math import ceil
 
 import numpy as np
@@ -17,7 +18,6 @@ import pytest
 import torch_npu  # noqa
 from scipy.sparse import csr_matrix
 from scipy.sparse import random as sp_random
-from functools import partial
 
 import tcuscan_ops
 import torch
@@ -105,9 +105,7 @@ def _test_seg_sum_multi_cube(
     if use_segm_offsets:
         block_len, num_blocks = tiling_function(nnz, s)
         sstart = torch.clamp(
-            torch.arange(
-                0, num_blocks + 1, dtype=torch.int32, device=NPU_DEVICE
-            )
+            torch.arange(0, num_blocks + 1, dtype=torch.int32, device=NPU_DEVICE)
             * block_len,
             max=nnz,
         )
@@ -156,17 +154,22 @@ def _test_seg_sum_multi_cube(
     "num_segments", _NUM_SEGMENTS, ids=lambda x: f"num_segms:({x})"
 )
 @pytest.mark.parametrize("num_cols", _NUM_COLUMNS, ids=lambda x: f"num_cols:({x})")
-@pytest.mark.parametrize("s", [16], ids=lambda s: f"s:({s})")
+@pytest.mark.parametrize("s", [32, 64, 128], ids=lambda s: f"s:({s})")
 @pytest.mark.parametrize("dtype", [torch.float16], ids=str)
+@pytest.mark.parametrize("density", [0.1, 0.05, 0.01], ids=lambda x: f"density:({x})")
 @pytest.mark.parametrize(
     "use_segm_offsets",
     [False, True],
     ids=lambda x: "with_segm_offsets" if x else "no_segm_offsets",
 )
 def test_seg_sum_multi_cube(
-    num_segments: int, num_cols: int, s: int, dtype: torch.dtype, use_segm_offsets: bool
+    num_segments: int,
+    num_cols: int,
+    s: int,
+    density: float,
+    dtype: torch.dtype,
+    use_segm_offsets: bool,
 ):
-    density = 0.01
     _test_seg_sum_multi_cube(
         num_segments, num_cols, s, density, dtype, use_segm_offsets
     )
