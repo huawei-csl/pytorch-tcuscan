@@ -432,16 +432,18 @@ at::Tensor run_seg_sum_multi_core(
  * zero and the trailing nnz entry), returns the segmented sum of each segment.
  *
  * @param [in] x Input data vector.
- * @param [in] indptr CSR row-pointer vector (length = num_segments + 1).
- * @param [in] segm_offsets Segment start index offset per block.
  * @param [in] upper Upper triangular all-ones matrix of size S.
  * @param [in] lower_strict Strict lower triangular all-ones matrix of size S.
+ * @param [in] indptr CSR row-pointer vector (length = num_segments + 1).
+ * @param [in] segm_offsets Segment start index offset per block. Optional; when
+ * omitted it is computed internally from `indptr` (same as
+ * `run_seg_sum_multi_core`).
  * @return Segmented sum vector. Output length equals `num_segments`.
  */
-at::Tensor run_seg_sum_multi_cube(const at::Tensor& x, const at::Tensor& upper,
-                                  const at::Tensor& lower_strict,
-                                  const at::Tensor& indptr,
-                                  const at::Tensor& segm_offsets) {
+at::Tensor run_seg_sum_multi_cube(
+    const at::Tensor& x, const at::Tensor& upper,
+    const at::Tensor& lower_strict, const at::Tensor& indptr,
+    c10::optional<at::Tensor> segm_offsets = c10::nullopt) {
   const auto ascendc_platform =
       platform_ascendc::PlatformAscendCManager::GetInstance();
   const at::Device device = x.options().device();
@@ -469,6 +471,21 @@ at::Tensor run_seg_sum_multi_cube(const at::Tensor& x, const at::Tensor& upper,
 
   const uint32_t block_len = max_num_tiles_per_block * matrix_tile_len;
 
+  at::Tensor segm_offsets_;
+  if (segm_offsets.has_value()) {
+    segm_offsets_ = segm_offsets.value();
+  } else {
+    const at::Tensor sstart = torch::clamp(
+        torch::arange(
+            0, block_dim + 1,
+            torch::TensorOptions().dtype(torch::kInt32).device(device)) *
+            block_len,
+        c10::nullopt, static_cast<int32_t>(total_length));
+
+    segm_offsets_ = torch::searchsorted(indptr.to(torch::kInt32), sstart,
+                                        /*out_int32=*/true);
+  }
+
   const at::Tensor z = at::zeros(
       {num_segments}, at::TensorOptions().dtype(dtype_out).device(device));
 
@@ -494,7 +511,7 @@ at::Tensor run_seg_sum_multi_cube(const at::Tensor& x, const at::Tensor& upper,
    const_cast<void*>(upper.storage().data()),
    const_cast<void*>(lower_strict.storage().data()),
    const_cast<void*>(indptr_data),
-   const_cast<void*>(segm_offsets.storage().data()),
+   const_cast<void*>(segm_offsets_.storage().data()),
    const_cast<void*>(z.storage().data()),
    const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
 
