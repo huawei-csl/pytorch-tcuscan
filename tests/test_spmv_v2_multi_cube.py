@@ -22,18 +22,7 @@ NPU_DEVICE = os.environ.get("NPU_DEVICE", "npu:1")
 torch.npu.config.allow_internal_format = False
 torch.npu.set_device(NPU_DEVICE)
 
-_NROW = [
-    1024 * 1,
-    1024 * 2,
-    1024 * 3,
-    1024 * 4,
-    1024 * 5,
-    1024 * 6,
-    1024 * 7,
-    1024 * 8,
-    1024 * 9,
-    1024 * 16,
-]
+_NROW = [64 * 64 - 1, 24 * 128 + 1, 16 * 128 - 13, 64 * 128 + 13, 32 * 128 - 133]
 
 
 def uniform_rvs(shape):
