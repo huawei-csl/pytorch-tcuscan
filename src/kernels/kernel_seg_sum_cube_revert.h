@@ -185,7 +185,7 @@ class KernelSegSumCubeRevert {
     T accumulation = 0;
     uint32_t in_offset = 0;
     uint32_t out_idx = 0;
-    uint32_t segm_idx = 1;
+    uint32_t segm_idx = 0;
     uint32_t segm_end = segm_ind_lt.GetValue(segm_idx) - vec_start_offset_;
 
     for (uint32_t tile_idx = 0; tile_idx < num_tiles_; tile_idx++) {
