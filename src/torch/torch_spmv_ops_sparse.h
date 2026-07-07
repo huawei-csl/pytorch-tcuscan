@@ -47,7 +47,7 @@ namespace tcuscan {
  */
 at::Tensor run_spmv_ops_sparse(const at::Tensor& vals, const at::Tensor& indptr,
                                const at::Tensor& cols, const at::Tensor& x,
-                               double alpha = 1.0, double beta = 0.0,
+                               float alpha = 1.0f, float beta = 0.0f,
                                bool trans = false,
                                c10::optional<int64_t> num_cols = c10::nullopt,
                                c10::optional<at::Tensor> y = c10::nullopt) {
