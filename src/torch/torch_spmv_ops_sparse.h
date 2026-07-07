@@ -31,8 +31,8 @@ namespace tcuscan {
  * CSR values, reduces the products and combines with the (scaled) prior output.
  *
  * @param vals CSR non-zero values (length nnz). fp16 or fp32.
- * @param indptr CSR row-pointer array (length rows + 1). int32.
- * @param cols CSR column-index array (length nnz). int32.
+ * @param indptr CSR row-pointer array (length rows + 1). int32 or uint32.
+ * @param cols CSR column-index array (length nnz). int32 or uint32.
  * @param x dense input vector. Same dtype as @p vals. Length must be
  *   `num_cols` (or `rows` when @p trans is true).
  * @param alpha scaling factor applied to the matrix-vector product.
