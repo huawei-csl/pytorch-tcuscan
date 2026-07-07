@@ -65,7 +65,26 @@ __aicore__ inline void run_spmv_v2_multi_cube(
   // Gather the CSR products z[i] = values[i] * x[cols[i]] into the workspace.
   // The workspace is zero-initialized on the host, so the [vec_len,
   // padded_vec_len) tail acts as the zero-padding consumed by the cube scan.
-  const uint32_t csr_gather_tile_len = align_size > 1024 ? 1024 : align_size;
+  //
+  // Size the gather tile to the largest that fits in the vector core's Unified
+  // Buffer. Per `KernelCSRGather::Init`, the UB footprint is
+  //   x_q_ (resident) : x_len * sizeof(T)
+  //   values_q_        : BUFFER_NUM * tile * sizeof(T)
+  //   cols_q_          : BUFFER_NUM * tile * sizeof(uint32_t)
+  //   output_q_        : BUFFER_NUM * tile * sizeof(T)
+  //   tbuf_            : tile * sizeof(uint32_t)
+  // i.e. UB = x_len*sizeof(T) + tile*(BUFFER_NUM*(2*sizeof(T)+4) + 4), with
+  // BUFFER_NUM == 2. Solve for the tile and floor it to the UB alignment.
+  constexpr uint32_t kUbBudget = 190 * 1024;  // Ascend910B4 UB, w/ TPipe slack.
+  constexpr uint32_t kTileByteCost =
+      2 * (2 * sizeof(T) + sizeof(uint32_t)) + sizeof(uint32_t);
+  const uint32_t x_bytes = x_len * sizeof(T);
+  const uint32_t ub_bound_tile =
+      x_bytes < kUbBudget ? (kUbBudget - x_bytes) / kTileByteCost : 0;
+  // No point tiling larger than the whole padded vector; keep 32B UB alignment.
+  const uint32_t csr_gather_tile_len = scalar::AlignDown<uint32_t>(
+      scalar::Min<uint32_t>(ub_bound_tile, padded_vec_len),
+      UB_ALIGNMENT / sizeof(T));
   run_csr_gather<T, false>(vec_in, cols_in, x_in, csr_products_ws, vec_len,
                            x_len, csr_gather_tile_len);
 
