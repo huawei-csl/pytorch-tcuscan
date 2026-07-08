@@ -3,10 +3,7 @@
  * @brief Torch wrapper for MatMul CCE kernel.
  * @date 2025-03-27
  *
- * Copied from
- * https://open.codehub.huawei.com/innersource/self_spec_infer_G/ascendc-samples
- *
- * @copyright Copyright Huawei (c) 2025
+ * @copyright Huawei (c) 2025
  */
 #pragma once
 
