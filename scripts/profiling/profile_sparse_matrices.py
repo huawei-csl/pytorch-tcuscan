@@ -388,7 +388,7 @@ def spmv_ops_sparse_benchmark(device: Device, B: csr_matrix, dtype: torch.dtype)
     rng = np.random.default_rng(seed=42)
     nrow, ncol = B.shape
     vals = torch.from_numpy((B.data).astype(np.float32)).to(dtype)
-    idx = torch.from_numpy((B.indptr).astype(np.uint32))
+    idx = torch.from_numpy((B.indptr).astype(np.int32))
     cols = torch.from_numpy((B.indices).astype(np.int32))
     vector = torch.from_numpy(rng.uniform(1, 9, ncol).astype(np.float32)).to(dtype)
     y0 = torch.from_numpy(rng.uniform(1, 9, nrow).astype(np.float32)).to(dtype)
@@ -406,6 +406,40 @@ def spmv_ops_sparse_benchmark(device: Device, B: csr_matrix, dtype: torch.dtype)
         )
 
     return _run_benchmark(device, run_spmv_ops_sparse), len(vals)
+
+
+def spmv_v2_multi_cube_benchmark(device: Device, B: csr_matrix, s: int):
+    """
+    Benchmark TCUSCAN SpMV v2 multi-cube kernel (segmented-sum based).
+
+    Args:
+        device: Device to run benchmark on.
+        B: Input CSR Matrix
+        s: Matrix size tiling parameter.
+
+    Returns:
+        Average time in microseconds.
+    """
+    rng = np.random.default_rng(seed=42)
+    vals = torch.from_numpy((B.data).astype(np.float16))
+    idx = torch.from_numpy((B.indptr).astype(np.int32))
+    cols = torch.from_numpy((B.indices).astype(np.int32))
+    vector = torch.from_numpy(rng.uniform(1, 9, len(idx) - 1).astype(np.float16))
+    vals_npu = vals.npu()
+    idx_npu = idx.npu()
+    col_npu = cols.npu()
+    vec_npu = vector.npu()
+    ones = torch.ones((s, s), dtype=torch.float16, device=NPU_DEVICE)
+    upper = torch.triu(ones)
+    lower_strict = torch.tril(ones, -1)
+    torch.npu.synchronize()
+
+    def run_spmv_v2_multi_cube():
+        _ = tcuscan_ops.run_spmv_v2_multi_cube(
+            vals_npu, idx_npu, col_npu, vec_npu, upper, lower_strict
+        )
+
+    return _run_benchmark(device, run_spmv_v2_multi_cube), len(vals)
 
 
 def csr_gather_benchmark(device: Device, B: csr_matrix):
@@ -511,6 +545,7 @@ if __name__ == "__main__":
             "spmv_v2",
             "spmv_multi_cube",
             "spmv_ops_sparse",
+            "spmv_v2_multi_cube",
             "csr_gather",
             "gather_spmv",
         ],
@@ -629,10 +664,19 @@ if __name__ == "__main__":
             device,
             "spmv_ops_sparse",
             dtype,
+            partial(spmv_ops_sparse_benchmark, B=B, dtype=STR_TO_DTYPE[dtype]),
+            bench_name,
+        )
+    elif bench == "spmv_v2_multi_cube" and dtype in ["fp16"]:
+        bench_name = fullpath.split("/")[-1]
+        benchmark(
+            device,
+            f"spmv_v2_multi_cube_{s}",
+            dtype,
             partial(
-                spmv_ops_sparse_benchmark,
+                spmv_v2_multi_cube_benchmark,
                 B=B,
-                dtype=STR_TO_DTYPE[dtype],
+                s=s,
             ),
             bench_name,
         )

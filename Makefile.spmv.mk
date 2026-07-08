@@ -1,4 +1,4 @@
-SPARSE_SUITE_HOME:=/scratch/TCUSCAN/sparse-suite-matrices/ssgetpy-downloaded-matrices/
+SPARSE_SUITE_HOME:=/scratch/TCUSCAN/sparse-suite-matrices/ssgetpy-downloaded-matrices
 # List of selected sparse matrices
 SPARSE_MATRICES=pdb1HYS/pdb1HYS rma10/rma10 conf5_4-8x8-05/conf5_4-8x8-05 conf5_4-8x8-10/conf5_4-8x8-10 mip1/mip1 cant/cant
 # Sparse suite matrices used in ALENEX
@@ -75,7 +75,10 @@ profile_fp16_spmv_ops_sparse_real:
 profile_fp32_spmv_ops_sparse_real:
 	$(foreach MATRIX,$(SPARSE_MATRICES), python3 ${PROFILING_SCRIPTS_PATH}/profile_sparse_matrices.py --bench spmv_ops_sparse --s 128  --matrixpath ${SPARSE_SUITE_HOME}/${MATRIX} --dtype fp32;)
 
-profile_fp16_spmv_versions: profile_fp16_spmv_real profile_fp16_spmv_real_multi_cube profile_fp16_spmv_v2_real
+profile_fp16_spmv_v2_multi_cube_real:
+	$(foreach MATRIX,$(ALENEX_MATRICES), python3 ${PROFILING_SCRIPTS_PATH}/profile_sparse_matrices.py --bench spmv_v2_multi_cube --s 128  --matrixpath ${SPARSE_SUITE_HOME}/${MATRIX} --dtype fp16;)
+
+profile_fp16_spmv_versions: profile_fp16_spmv_real profile_fp16_spmv_real_multi_cube profile_fp16_spmv_v2_real profile_fp16_spmv_v2_multi_cube_real
 
 profile_fp16_spmv_real_multi_cube_for_alenex26: # Suite-Sparse matrix ids: [2225, 2602, 2444, 1227, 541, 1867, 1238, 1399, 1357, 1385, 845, 566, 1589, 850, 807] + ...
 	$(foreach MATRIX,$(ALENEX_MATRICES), python3 ${PROFILING_SCRIPTS_PATH}/profile_sparse_matrices.py --bench spmv_multi_cube --s 128  --matrixpath ${SPARSE_SUITE_HOME}/${MATRIX} --dtype fp16;)
