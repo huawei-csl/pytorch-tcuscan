@@ -204,7 +204,7 @@ def vec_segmented_scan_single_core_benchmark(
     def run_vec_seg_scan_single_core() -> None:
         _ = tcuscan_ops.run_seg_scan_vec(x_npu, f_npu, s)
 
-    return _run_benchmark(device, run_vec_seg_scan_single_core), len(x_npu), sum(f_npu)
+    return _run_benchmark(device, run_vec_seg_scan_single_core), len(x_npu), int(f_npu.sum().item())
 
 
 def compress_benchmark(device: Device, x: torch.Tensor, f: torch.Tensor, s: int):
