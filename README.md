@@ -2,6 +2,21 @@
 
 AscendC TCUSCAN operators (scan, sort, split, top-k, compress, etc) using the Cube unit.
 
+## Support matrix
+
+| Component | Supported |
+| --- | --- |
+| Hardware | Atlas A2 / A3 training series (`SOC_VERSION` defaults to `Ascend910B4`) |
+| CANN toolkit | 9.0.0 |
+| `torch-npu` | 2.10.0 |
+| Python | 3.10 – 3.12 |
+| OS | Linux (aarch64, x86_64) |
+
+Other SoCs, CANN releases, and `torch-npu` versions are untested and may fail to build or
+produce incorrect results. Select a different chip at configure time with
+`SOC_VERSION=<soc> pip install -v .`, and point at a non-default CANN install with
+`ASCEND_CANN_PACKAGE_PATH` (default `/usr/local/Ascend/ascend-toolkit/latest`).
+
 ## TCUSCAN kernels
 
 All kernels are exported from the `tcuscan_ops` module (see `src/pybind11.cpp`).
