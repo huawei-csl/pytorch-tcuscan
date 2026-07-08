@@ -219,12 +219,12 @@ at::Tensor run_spmv_v2(const at::Tensor& vals, const at::Tensor& indptr,
  * atomic-add writes, mirroring run_seg_sum_multi_cube(). The tile size is taken
  * from the provided scan matrices (S = upper.size(0)).
  *
- * @param vals non-zero values of the CSR matrix (fp16)
- * @param indptr row pointer array of the CSR matrix (length rows + 1)
- * @param cols column index array of the CSR matrix
- * @param x dense vector to multiply (fp16)
- * @param upper pre-computed upper triangular all-ones matrix (SxS, fp16)
- * @param lower_strict pre-computed strict lower triangular all-ones matrix
+ * @param [in] vals non-zero values of the CSR matrix (fp16)
+ * @param [in] indptr row pointer array of the CSR matrix (length rows + 1)
+ * @param [in] cols column index array of the CSR matrix
+ * @param [in] x dense vector to multiply (fp16)
+ * @param [in] upper pre-computed upper triangular all-ones matrix (SxS, fp16)
+ * @param [in] lower_strict pre-computed strict lower triangular all-ones matrix
  * (SxS, fp16)
  * @param [in] segm_offsets Segment start index offset per block. Optional; when
  * omitted it is computed internally from `indptr`.
@@ -244,10 +244,9 @@ at::Tensor run_spmv_v2_multi_cube(
   TORCH_CHECK(vals_dtype == torch::kHalf && x_dtype == torch::kHalf,
               "run_spmv_v2_multi_cube: vals and x must both be fp16, got vals=",
               vals_dtype, " x=", x_dtype);
-  TORCH_CHECK(
-      indptr.scalar_type() == at::kInt || indptr.scalar_type() == at::kUInt32,
-      "run_spmv_v2_multi_cube: indptr must be int32 or uint32, got ",
-      indptr.scalar_type());
+  TORCH_CHECK(indptr.scalar_type() == at::kInt,
+              "run_spmv_v2_multi_cube: indptr must be int32, got ",
+              indptr.scalar_type());
   const auto ascendc_platform =
       platform_ascendc::PlatformAscendCManager::GetInstance();
   const at::Device device = x.options().device();
@@ -279,7 +278,7 @@ at::Tensor run_spmv_v2_multi_cube(
             block_len,
         c10::nullopt, static_cast<int32_t>(nnz));
 
-    segm_offsets_ = torch::searchsorted(indptr.to(torch::kInt32), sstart,
+    segm_offsets_ = torch::searchsorted(indptr, sstart,
                                         /*out_int32=*/true);
   }
 

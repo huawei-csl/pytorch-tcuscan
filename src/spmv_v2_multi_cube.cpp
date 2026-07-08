@@ -62,20 +62,11 @@ __aicore__ inline void run_spmv_v2_multi_cube(
   GM_ADDR const csr_products_ws = workspace;
   GM_ADDR const spec_block_scan_ws = workspace + pad_size;
 
-  // Gather the CSR products z[i] = values[i] * x[cols[i]] into the workspace.
-  // The workspace is zero-initialized on the host, so the [vec_len,
-  // padded_vec_len) tail acts as the zero-padding consumed by the cube scan.
-  //
   // Size the gather tile to the largest that fits in the vector core's Unified
   // Buffer. Per `KernelCSRGather::Init`, the UB footprint is
-  //   x_q_ (resident) : x_len * sizeof(T)
-  //   values_q_        : BUFFER_NUM * tile * sizeof(T)
-  //   cols_q_          : BUFFER_NUM * tile * sizeof(uint32_t)
-  //   output_q_        : BUFFER_NUM * tile * sizeof(T)
-  //   tbuf_            : tile * sizeof(uint32_t)
   // i.e. UB = x_len*sizeof(T) + tile*(BUFFER_NUM*(2*sizeof(T)+4) + 4), with
   // BUFFER_NUM == 2. Solve for the tile and floor it to the UB alignment.
-  constexpr uint32_t kUbBudget = 190 * 1024;  // Ascend910B4 UB, w/ TPipe slack.
+  constexpr uint32_t kUbBudget = tcuscan::UB_SIZE_BYTES;
   constexpr uint32_t kTileByteCost =
       2 * (2 * sizeof(T) + sizeof(uint32_t)) + sizeof(uint32_t);
   const uint32_t x_bytes = x_len * sizeof(T);

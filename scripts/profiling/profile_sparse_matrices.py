@@ -385,7 +385,7 @@ def spmv_v2_multi_cube_benchmark(device: Device, B: csr_matrix, s: int):
     """
     rng = np.random.default_rng(seed=42)
     vals = torch.from_numpy((B.data).astype(np.float16))
-    idx = torch.from_numpy((B.indptr).astype(np.uint32))
+    idx = torch.from_numpy((B.indptr).astype(np.int32))
     cols = torch.from_numpy((B.indices).astype(np.int32))
     vector = torch.from_numpy(rng.uniform(1, 9, len(idx) - 1).astype(np.float16))
     vals_npu = vals.npu()

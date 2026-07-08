@@ -42,7 +42,7 @@ def _test_tcuscan_spmv_v2_multi_cube(nnr: int, s: int, density: float):
     )
 
     values = (B.data).astype(np.float16)
-    indexes = (B.indptr).astype(np.uint32)
+    indexes = (B.indptr).astype(np.int32)
     cols = (B.indices).astype(np.int32)
     vector = rng.uniform(1, 9, nnr - 1).astype(np.float16)
 
