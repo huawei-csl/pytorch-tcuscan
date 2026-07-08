@@ -204,7 +204,11 @@ def vec_segmented_scan_single_core_benchmark(
     def run_vec_seg_scan_single_core() -> None:
         _ = tcuscan_ops.run_seg_scan_vec(x_npu, f_npu, s)
 
-    return _run_benchmark(device, run_vec_seg_scan_single_core), len(x_npu), int(f_npu.sum().item())
+    return (
+        _run_benchmark(device, run_vec_seg_scan_single_core),
+        len(x_npu),
+        int(f_npu.sum().item()),
+    )
 
 
 def compress_benchmark(device: Device, x: torch.Tensor, f: torch.Tensor, s: int):
@@ -477,7 +481,12 @@ def benchmark(
             f"Benchmark: {benchname}, OP:{op_name}, dtype: {dtype}, device: {device.str}"
         )
         time, nnz, nrows = fn(device)
-        bw_gbps = _spmv_io_bytes(nrows, nnz, STR_TO_DTYPE[dtype]) / (time * 1e-6) / 1e9
+
+        bw_gbps = float("nan")
+        if op_name.startswith(("spmv", "gather_spmv")):
+            bw_gbps = (
+                _spmv_io_bytes(nrows, nnz, STR_TO_DTYPE[dtype]) / (time * 1e-6) / 1e9
+            )
         fd.write(
             f"{benchname},{op_name},{dtype},{nnz},{nrows},{time:.2f},{bw_gbps:.2f}\n"
         )
