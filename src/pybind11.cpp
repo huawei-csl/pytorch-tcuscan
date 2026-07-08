@@ -70,10 +70,9 @@ PYBIND11_MODULE(tcuscan_ops, m) {
         pybind11::arg("segm_offsets") = pybind11::none(),
         "Segmented Sum (multi-cube)");
   m.def("run_spmv", &tcuscan::run_spmv, "Sparse Matrix-Vector Multiplication");
-  m.def("run_spmv_v2", &tcuscan::run_spmv_v2,
-        pybind11::arg("vals"), pybind11::arg("indptr"), pybind11::arg("cols"),
-        pybind11::arg("x"), pybind11::arg("s"),
-        pybind11::arg("segm_offsets") = pybind11::none(),
+  m.def("run_spmv_v2", &tcuscan::run_spmv_v2, pybind11::arg("vals"),
+        pybind11::arg("indptr"), pybind11::arg("cols"), pybind11::arg("x"),
+        pybind11::arg("s"), pybind11::arg("segm_offsets") = pybind11::none(),
         "Sparse Matrix-Vector Multiplication Using Segmented Sum");
   m.def("run_spmv_multi_cube", &tcuscan::run_spmv_multi_cube,
         "Sparse Matrix-Vector Multiplication Using Multi-cube Scan");
