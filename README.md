@@ -7,7 +7,7 @@ AscendC TCUSCAN operators (scan, sort, split, top-k, compress, etc) using the Cu
 | Component | Supported |
 | --- | --- |
 | Hardware | Atlas A2 / A3 training series (`SOC_VERSION` defaults to `Ascend910B4`) |
-| CANN toolkit | 9.0.0 |
+| CANN toolkit | 9.0.1 |
 | `torch-npu` | 2.10.0 |
 | Python | 3.10 – 3.12 |
 | OS | Linux (aarch64, x86_64) |

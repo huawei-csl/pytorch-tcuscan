@@ -70,7 +70,7 @@ jobs:
             python_version: 3.12
             npu_device: 910b
     container:
-      image: quay.io/ascend/cann:9.0.0-${{ matrix.npu_device }}-ubuntu22.04-py${{ matrix.python_version }}-devel
+      image: quay.io/ascend/cann:9.0.1-${{ matrix.npu_device }}-ubuntu22.04-py${{ matrix.python_version }}-devel
     steps:
       - name: Show OS
         run: cat /etc/os-release
@@ -106,7 +106,7 @@ jobs:
             python_version: 3.12
             npu_device: 910b
     container:
-      image: quay.io/ascend/cann:9.0.0-${{ matrix.npu_device }}-ubuntu22.04-py${{ matrix.python_version }}-devel
+      image: quay.io/ascend/cann:9.0.1-${{ matrix.npu_device }}-ubuntu22.04-py${{ matrix.python_version }}-devel
     steps:
       - name: Show OS
         run: cat /etc/os-release
