@@ -2,6 +2,129 @@
 
 AscendC TCUSCAN operators (scan, sort, split, top-k, compress, etc) using the Cube unit.
 
+## TCUSCAN kernels
+
+All kernels are exported from the `tcuscan_ops` module (see `src/pybind11.cpp`).
+Most kernels operate on 1D tensors and take a tiling parameter `S` (typical values: 32, 64, 128).
+
+The **input dtypes** column lists the dtypes of the *value* tensor that the wrapper in
+`src/torch/` actually dispatches on. Auxiliary tensors follow fixed conventions: boolean
+masks and segment flags are `int8`, and index tensors (`cols`, `indptr`, `indices`) are `int32`.
+
+Reducing kernels promote their accumulator: `fp16 -> fp32` and integer inputs `int8 -> int32`.
+
+### Scan (prefix sum)
+
+| Operator | Input dtypes | Description |
+| --- | --- | --- |
+| `run_scan_single_core` | `fp16`, `fp32`, `int8` | Prefix sum of a 1D vector on a single AI Core |
+| `run_scan_multi_core` | `fp16`, `int8` | Multi-core prefix sum |
+| `run_scan_multi_core_no_l2` | `fp16`, `int8` | Multi-core prefix sum without the L2 cache splitting optimization |
+| `run_scan_multi_cube` | `fp16` | Multi-cube prefix sum, built on top of the block scan |
+| `run_scan_batch` | `fp16`, `fp32` | Row-wise prefix sum of a 2D matrix (one cube core per row) |
+| `run_row_scan` | `fp16` | Prefix sum of each consecutive block of length `S` |
+| `run_block_scan` | `fp16` | Prefix sum of each consecutive block of length `S^2` |
+| `run_scan_cpu` | `fp16`, `fp32`, `int8` | CPU reference implementation |
+
+`run_scan_multi_core` and `run_scan_multi_core_no_l2` route *any* non-`fp16` dtype to the
+`int8` kernel, so passing `fp32` there is silently incorrect.
+
+### Segmented scan / segmented sum
+
+| Operator | Input dtypes | Description |
+| --- | --- | --- |
+| `run_seg_scan` | `fp16` | Segmented scan driven by a boolean flag vector |
+| `run_seg_scan_vec` | `fp16` | Segmented scan, vector (AIV) cores only |
+| `run_seg_scan_mc_revert` | `fp32` | Vector revert phase of the multi-core segmented scan |
+| `run_seg_sum` | `fp16` | Segmented sum driven by a boolean flag vector |
+| `run_seg_sum_single_core` | `fp16`, `int8` | Segmented sum from a CSR-style `indptr` (single core) |
+| `run_seg_sum_multi_core` | `fp16`, `int8` | Segmented sum from `indptr` across vector cores |
+| `run_seg_sum_single_cube` | `fp16` | Segmented sum on a single cube unit |
+| `run_seg_sum_multi_cube` | `fp16` | Segmented sum across cube units |
+
+
+### Sparse matrix–vector multiplication (SpMV)
+
+| Operator | Input dtypes | Description |
+| --- | --- | --- |
+| `run_spmv` | `fp16`, `int16` | CSR SpMV |
+| `run_spmv_v2` | `fp16`, `fp32` | CSR SpMV built on the segmented sum |
+| `run_spmv_multi_cube` | `fp16` | CSR SpMV built on the multi-cube scan |
+| `run_csr_gather` | `fp16`, `int16`, `fp32` | `z[i] = values[i] * x[cols[i]]`, the gather+scale phase of SpMV |
+| `run_gather_spmv` | `fp32` | Specialized multi-core gather for SpMV (fixed tiling of 128) |
+| `run_mc_gather` | `fp16`, `fp32` | General multi-core gather of a 1D vector |
+
+For `run_spmv_v2`, `vals` and `x` must have the *same* dtype, and `indptr` must be
+`int32`/`uint32`. `run_gather_spmv` is hard-instantiated as `KernelGatherSpmv<float>`, so it
+consumes the 32-bit output of the preceding scan.
+
+### Sort, top-k, and split
+
+| Operator | Input dtypes | Description |
+| --- | --- | --- |
+| `run_radix_sort` | `fp16`, `int16` | Radix sort of a 1D vector, returns values and `int32` indices |
+| `run_topk_fp16` / `run_topk_int16` | `fp16` / `int16` | Top-K elements via parallel splits |
+| `run_topk_pivot_fp16` | `fp16` | K-largest value estimator by sampling (`num_samples`, default 32) |
+| `run_split` | `fp16`, `int16` | Binary split of a vector given a boolean mask |
+| `run_split_ind` | `fp16`, `int16` | Binary split returning both values and indices |
+
+`run_split`/`run_split_ind` dispatch to a single 16-bit kernel (`split_uint16`), so `fp16` and
+`int16` share the same code path.
+
+### Compaction, filtering, and counting
+
+| Operator | Input dtypes | Description |
+| --- | --- | --- |
+| `run_compress` | `fp16`, `int16`, `fp32` | Stream compaction given a boolean mask |
+| `run_compress_pos` | `fp16`, `int16`, `fp32` | Compaction with pre-computed output positions |
+| `run_compress_ind` | `fp16`, `int16`, `fp32` | Compaction returning the surviving indices |
+| `run_compress_ind_no_arange` | `fp16`, `int16`, `fp32` | Same, without materializing the input index vector |
+| `run_filter_greater_eq` | `fp16` | Filter by `x_i >= pivot` |
+| `run_filter_less_eq` | `fp16`, `int16`, `fp32` | Filter by `x_i <= pivot` |
+| `run_where` | `fp16` | `torch.where`-style selection |
+| `run_count_if` | `fp16` | Count elements satisfying a pivot predicate |
+
+The `run_compress*` kernels dispatch on element *width*: `fp16`/`int16` use the 16-bit kernel,
+everything else falls through to the 32-bit (`*_fp32`) kernel. `run_filter_greater_eq` is
+`fp16`-only because it builds its mask with the `fp16`-only `greater_equal` kernel, whereas
+`run_filter_less_eq` builds the mask in ATen and so inherits the wider `run_compress` support.
+
+### Reductions and histogram
+
+| Operator | Input dtypes | Description |
+| --- | --- | --- |
+| `run_reduce_tiles` | `fp16`, `int8` | Sum-reduction over each tile of a 1D vector |
+| `run_cube_reduce` | `fp16`, `int8` | Block reduction using both AIC and AIV cores |
+| `run_complete_rows` | `fp32`, `int64` | Down-sweep (second) phase of MCSCAN |
+| `run_complete_blocks` | `fp32`, `int32` | Block-wise down-sweep (second) phase of the block scan |
+| `run_histogram` | `fp16` | Histogram over a given number of bins (returns `int32`) |
+
+`run_complete_rows` keys on `int64` (`torch::kLong`) while dispatching the `int32` kernel;
+`run_complete_blocks` keys on `int32`. The two are not interchangeable.
+
+### Linear algebra
+
+| Operator | Input dtypes | Description |
+| --- | --- | --- |
+| `run_gen_lower` | `fp16`, `int8` | Generate a lower triangular all-ones matrix |
+| `run_tri_inv_col_sweep` | `fp16`, `fp32` | Unit upper triangular matrix inverse, column sweep |
+| `run_tri_inv_cube_col_sweep` | `fp16` | Triangular matrix inverse using AIV/AIC cores (returns `fp32`) |
+| `run_triu_inv_rec_unroll` | `fp16` | Upper triangular inverse, recursive unrolled (returns `fp32`) |
+
+`run_gen_lower` takes the dtype as an explicit argument rather than inferring it from an input.
+
+### Elementwise and utility
+
+| Operator | Input dtypes | Description |
+| --- | --- | --- |
+| `run_add` | `fp16` | Vector add |
+| `run_diff` | `fp16`, `fp32` | Vector first difference |
+| `run_copy` | `fp16`, `fp32` | Memory copy on a single AI Core |
+| `run_simple_pad` | `fp16` | Pad a tensor from `vec_len` up to `align_len` |
+
+`run_add`, `run_simple_pad` and `run_matmul_cce` launch a single kernel with no dtype
+dispatch at all, so they assume `fp16` input.
+
 ## Getting started
 
 ```bash
@@ -21,7 +144,7 @@ Then, inside Python, type `import tcuscan`.
 Integrating TCUSCAN kernels to pytorch npu.
 
 ## Build, test, and install
-Currently there is no explicit "pythonic" installation of the package. 
+Currently there is no explicit "pythonic" installation of the package.
 All the artifacts are created using:
 ```bash
 make build
