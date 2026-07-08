@@ -645,7 +645,6 @@ def seg_sum_multi_core_benchmark(
     device: Device,
     vec_len: int,
     dtype: torch.dtype,
-    segm_density: float,
     s: int,
     num_blocks: int,
 ) -> Tuple[float, int]:
@@ -1453,7 +1452,6 @@ if __name__ == "__main__":  # noqa
                 seg_sum_multi_core_benchmark,
                 dtype=tdtype,
                 s=s,
-                segm_density=density,
                 num_blocks=num_cores,
             ),
             sizes,
