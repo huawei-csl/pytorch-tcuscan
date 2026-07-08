@@ -40,7 +40,7 @@ def hist_range(x, num_bins: int):
 
 def _test_tcuscan_histogram(length: int, hist_bins: int, dtype: torch.dtype):
     # x = 10 * torch.rand(length, dtype=dtype, device=NPU_DEVICE)
-    x = torch.randint(-2**7 +1, 2**7 - 1, (length,), dtype=dtype, device=NPU_DEVICE)
+    x = torch.randint(-(2**7) + 1, 2**7 - 1, (length,), dtype=dtype, device=NPU_DEVICE)
 
     torch.npu.synchronize()
     actual = tcuscan_ops.run_histogram(x, hist_bins)
@@ -59,6 +59,8 @@ def _test_tcuscan_histogram(length: int, hist_bins: int, dtype: torch.dtype):
 
 
 @pytest.mark.parametrize("length", _SIZES, ids=lambda x: f"length:{x:,}")
-@pytest.mark.parametrize("hist_bins", [5, 8, 16, 32, 24], ids=lambda x: f"hist_bins:{x}")
+@pytest.mark.parametrize(
+    "hist_bins", [5, 8, 16, 32, 24], ids=lambda x: f"hist_bins:{x}"
+)
 def test_tcuscan_histogram_fp16(length: int, hist_bins: int):
     _test_tcuscan_histogram(length, hist_bins, torch.float16)

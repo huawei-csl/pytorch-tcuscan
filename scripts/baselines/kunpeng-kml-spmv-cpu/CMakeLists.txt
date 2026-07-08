@@ -2,7 +2,8 @@ cmake_minimum_required(VERSION 3.10)
 project(kml_spmv)
 
 set(CMAKE_CXX_STANDARD 14)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -Wall -Werror")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")
+# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -Wall -Werror")
 find_package(OpenMP REQUIRED)
 
 # Set SPBLAS option
@@ -21,13 +22,13 @@ if(IS_KML_MULTI_ENABLED)
     # Add link library
     link_directories(${KML_PATH}/lib/kspblas/multi)
     # Find link library
-    find_library(KSPBLAS kspblas HINTS ${KML_PATH}/lib/kspblas/multi)
+    find_library(KSPBLAS kspblas HINTS ${KML_PATH}/lib/sve/kspblas/multi)
 else()
     message(STATUS "SPBLAS version used: single.")
     # Add link library
     link_directories(${KML_PATH}/lib/kspblas/single)
     # Find link library
-    find_library(KSPBLAS kspblas HINTS ${KML_PATH}/lib/kspblas/single)
+    find_library(KSPBLAS kspblas HINTS ${KML_PATH}/lib/sve/kspblas/single)
 endif()
 
 # Set debug compilation option
@@ -44,7 +45,7 @@ set(FMM_USE_RYU OFF)
 include(FetchContent)
 FetchContent_Declare(
         fast_matrix_market
-        GIT_REPOSITORY https://rnd-gitlab-eu.huawei.com/a00565472/fast_matrix_market.git
+        GIT_REPOSITORY https://github.com/alugowski/fast_matrix_market.git
         GIT_TAG main
         GIT_SHALLOW TRUE
         TLS_VERIFY FALSE
