@@ -78,6 +78,8 @@ at::Tensor run_spmv_ops_sparse(const at::Tensor& vals, const at::Tensor& indptr,
 
   const at::Device device = x.options().device();
 
+  TORCH_CHECK(indptr.numel() >= 1,
+              "run_spmv_ops_sparse: indptr must have at least 1 element");
   const uint32_t total_rows_num = static_cast<uint32_t>(indptr.numel() - 1);
   uint32_t total_cols_num;
   if (num_cols.has_value()) {
