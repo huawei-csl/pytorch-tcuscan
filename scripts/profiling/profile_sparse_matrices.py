@@ -179,7 +179,7 @@ def segmented_scan_single_core_benchmark(
     def run_seg_scan_single_core() -> None:
         _ = tcuscan_ops.run_seg_scan(x_npu, f_npu, s)
 
-    return _run_benchmark(device, run_seg_scan_single_core), len(x_npu), sum(f_npu)
+    return _run_benchmark(device, run_seg_scan_single_core), len(x_npu), int(f_npu.sum().item())
 
 
 def vec_segmented_scan_single_core_benchmark(
