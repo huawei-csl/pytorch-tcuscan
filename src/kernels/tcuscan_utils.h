@@ -17,6 +17,8 @@ namespace tcuscan {
 
 /// @brief Number of bytes for a required alignment in UB.
 constexpr uint16_t UB_ALIGNMENT = 32;
+/// @brief Number of bytes for the UB size (A2A3).
+constexpr uint32_t UB_SIZE_BYTES = 190 * 1024;
 /// @brief Number of bytes per data block.
 constexpr uint16_t DATA_BLOCK_SIZE = 32;
 /// Global memory allocation alignment, added only for performance.
