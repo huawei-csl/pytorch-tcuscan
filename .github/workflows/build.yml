@@ -14,9 +14,6 @@ on:
 jobs:
   shellcheck:
     name: ShellCheck
-    if: |
-      github.event.issue.pull_request &&
-      github.event.comment.body == '/run-ci'
     runs-on: ubuntu-latest
     container:
       image: koalaman/shellcheck-alpine:stable
@@ -31,9 +28,6 @@ jobs:
 
   black:
     name: Black
-    if: |
-      github.event.issue.pull_request &&
-      github.event.comment.body == '/run-ci'
     runs-on: ubuntu-latest
     container:
       image: python:3.10
@@ -45,9 +39,6 @@ jobs:
 
   prospector:
     name: Prospector
-    if: |
-      github.event.issue.pull_request &&
-      github.event.comment.body == '/run-ci'  
     runs-on: ubuntu-latest
     container:
       image: python:3.10
@@ -58,9 +49,6 @@ jobs:
 
   secret_detection:
     name: Gitleaks
-    if: |
-      github.event.issue.pull_request &&
-      github.event.comment.body == '/run-ci'
     runs-on: ubuntu-latest
     container:
       image: zricethezav/gitleaks:v8.18.2
@@ -71,9 +59,6 @@ jobs:
 
   build_cmake_docker:
     name: Cmake build inside quay.io/ascend/cann (${{ matrix.npu_device }}, py${{ matrix.python_version }})
-    if: |
-      github.event.issue.pull_request &&
-      github.event.comment.body == '/run-ci'
     runs-on: ubuntu-latest
     continue-on-error: true
 
@@ -111,9 +96,6 @@ jobs:
 
   build_wheel_docker:
     name: Build wheel inside quay.io/ascend/cann (${{ matrix.npu_device }}, py${{ matrix.python_version }})
-    if: |
-      github.event.issue.pull_request &&
-      github.event.comment.body == '/run-ci'
     runs-on: ubuntu-latest
     continue-on-error: true
     strategy:
