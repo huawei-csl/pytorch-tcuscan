@@ -1,8 +1,8 @@
 /**
  * Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
  *
- * @file spmv.cpp
- * @brief Entrypoint for SpMV kernel.
+ * @file spmv_v2.cpp
+ * @brief Entrypoint for SpMV v2 kernel.
  */
 
 #include "kernels/constants.h"
@@ -16,7 +16,7 @@ using namespace AscendC;
 using namespace tcuscan;
 
 /**
- * @brief Run the SpMV (Sparse Matrix-Vector multiplication) kernel.
+ * @brief Run the SpMV v2 (Sparse Matrix-Vector multiplication) kernel.
  *
  * @tparam T input data type
  *
