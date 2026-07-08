@@ -77,6 +77,7 @@ ascendc_library(
   src/seg_scan_mc_revert.cpp
   src/seg_sum_single_core.cpp
   src/seg_sum_multi_core.cpp
+  src/seg_sum_multi_cube.cpp
   src/seg_sum_single_cube.cpp
   src/row_scan.cpp
   src/block_scan.cpp
@@ -85,9 +86,10 @@ ascendc_library(
   src/simple_pad.cpp
   src/cube_reduce.cpp
   src/spmv.cpp
+  src/spmv_v2_multi_cube.cpp
   src/tri_inv_cube_col_sweep.cpp)
 
-#ascendc_compile_options(scan_kernels PRIVATE -Wall -Wextra -Werror)
+# ascendc_compile_options(scan_kernels PRIVATE -Wall -Wextra -Werror)
 
 ascendc_compile_definitions(scan_kernels PRIVATE -DHAVE_WORKSPACE -DHAVE_TILING)
 
@@ -114,7 +116,7 @@ ascendc_library(
   src/compare.cpp
   src/histogram.cpp)
 
-#ascendc_compile_options(vector_kernels PRIVATE -Wall -Wextra -Werror)
+# ascendc_compile_options(vector_kernels PRIVATE -Wall -Wextra -Werror)
 
 ascendc_compile_definitions(vector_kernels PRIVATE -DHAVE_WORKSPACE
                             -DHAVE_TILING)
@@ -128,7 +130,7 @@ target_link_libraries(vector_kernels PRIVATE ascendcl c_sec tiling_api register
 ascendc_library(split_kernels SHARED src/radix_sort.cpp src/compress.cpp
                 src/split.cpp src/topk.cpp)
 
-#ascendc_compile_options(split_kernels PRIVATE -Wall -Wextra -Werror)
+# ascendc_compile_options(split_kernels PRIVATE -Wall -Wextra -Werror)
 
 ascendc_compile_definitions(split_kernels PRIVATE -DHAVE_WORKSPACE
                             -DHAVE_TILING)

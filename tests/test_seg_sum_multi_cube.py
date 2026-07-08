@@ -30,7 +30,7 @@ NPU_DEVICE = os.environ.get("NPU_DEVICE", "npu:1")
 torch.npu.config.allow_internal_format = False
 torch.npu.set_device(NPU_DEVICE)
 
-_NUM_SEGMENTS = [513, 1025, 2011]  # 519, 2043 fails!
+_NUM_SEGMENTS = [513, 519, 1025, 2011, 2043]
 _NUM_COLUMNS = [64 * 64 - 1, 128 * 128, 128 * 128 - 13, 128 * 128 + 13, 128 * 128 - 133]
 
 
@@ -49,7 +49,7 @@ def random_csr(rows: int, cols: int, nnz: int, dtype: np.dtype) -> csr_matrix:
 
 
 def tiling_function(nnz: int, s: int, max_aic_cores: int = 20):
-    "Return the tiling parameters 'block_len' and 'num_blocks' of seg_sum_multi_core."
+    "Return the tiling parameters 'block_len' and 'num_blocks' of seg_sum_multi_cube."
     matmul_tile_len = s * s
     num_tiles = ceil(nnz / matmul_tile_len)
     num_blocks = max_aic_cores
@@ -60,7 +60,7 @@ def tiling_function(nnz: int, s: int, max_aic_cores: int = 20):
     return block_len, num_blocks
 
 
-def _test_seg_sum_multi_core(
+def _test_seg_sum_multi_cube(
     num_rows: int,
     num_cols: int,
     s: int,
@@ -85,6 +85,9 @@ def _test_seg_sum_multi_core(
     values = (A.data).astype(sp_dtype)
     indices = (A.indptr).astype(np.uint32)
     nnz = A.nnz
+    ones_npu = torch.ones((s, s), dtype=dtype, device=NPU_DEVICE)
+    upper_npu = torch.triu(ones_npu)
+    lower_strict_npu = torch.tril(ones_npu, -1)
 
     expected = A @ ones
     expected = torch.from_numpy(expected.flatten())
@@ -101,18 +104,21 @@ def _test_seg_sum_multi_core(
     if use_segm_offsets:
         block_len, num_blocks = tiling_function(nnz, s)
         sstart = torch.clamp(
-            torch.arange(0, num_blocks + 1, dtype=torch.int32) * block_len,
+            torch.arange(0, num_blocks + 1, dtype=torch.int32, device=NPU_DEVICE)
+            * block_len,
             max=nnz,
-        ).npu()
+        )
         torch.npu.synchronize()
         segm_offsets = torch.searchsorted(indices_npu, sstart, out_int32=True)
         torch.npu.synchronize()
 
-        actual = tcuscan_ops.run_seg_sum_multi_core(
-            values_npu, indices_npu, s, segm_offsets
+        actual = tcuscan_ops.run_seg_sum_multi_cube(
+            values_npu, upper_npu, lower_strict_npu, indices_npu, segm_offsets
         ).cpu()
     else:
-        actual = tcuscan_ops.run_seg_sum_multi_core(values_npu, indices_npu, s).cpu()
+        actual = tcuscan_ops.run_seg_sum_multi_cube(
+            values_npu, upper_npu, lower_strict_npu, indices_npu
+        ).cpu()
     torch.npu.synchronize()
 
     print(f"# of segments : {num_segments}")
@@ -138,14 +144,9 @@ def _test_seg_sum_multi_core(
     assert (
         actual.dtype == expected.dtype
     ), f"Output dtype mismatch. Got {actual.dtype}. Expected {expected.dtype}"
-    if dtype == torch.int8:
-        assert torch.equal(
-            actual, expected
-        ), f"Error seg_sum ({expected.dtype}). Abs-error: {abs_error} / {rel_error}, s={s}, num_cols={num_cols}"
-    elif dtype == torch.float16:
-        assert torch.allclose(
-            actual, expected, atol=1e-2
-        ), f"Error seg_sum ({expected.dtype}). Abs-error: {abs_error} / {rel_error}, s={s}, num_cols={num_cols}"
+    assert torch.allclose(
+        actual, expected, atol=1e-2
+    ), f"Error seg_sum ({expected.dtype}). Abs-error: {abs_error} / {rel_error}, s={s}, num_cols={num_cols}"
 
 
 @pytest.mark.parametrize(
@@ -153,16 +154,21 @@ def _test_seg_sum_multi_core(
 )
 @pytest.mark.parametrize("num_cols", _NUM_COLUMNS, ids=lambda x: f"num_cols:({x})")
 @pytest.mark.parametrize("s", [32, 64, 128], ids=lambda s: f"s:({s})")
-@pytest.mark.parametrize("dtype", [torch.int8, torch.float16], ids=str)
+@pytest.mark.parametrize("dtype", [torch.float16], ids=str)
+@pytest.mark.parametrize("density", [0.1, 0.05, 0.01], ids=lambda x: f"density:({x})")
 @pytest.mark.parametrize(
     "use_segm_offsets",
     [False, True],
     ids=lambda x: "with_segm_offsets" if x else "no_segm_offsets",
 )
-def test_seg_sum_multi_core(
-    num_segments: int, num_cols: int, s: int, dtype: torch.dtype, use_segm_offsets: bool
+def test_seg_sum_multi_cube(
+    num_segments: int,
+    num_cols: int,
+    s: int,
+    density: float,
+    dtype: torch.dtype,
+    use_segm_offsets: bool,
 ):
-    density = 0.01
-    _test_seg_sum_multi_core(
+    _test_seg_sum_multi_cube(
         num_segments, num_cols, s, density, dtype, use_segm_offsets
     )
