@@ -1,15 +1,10 @@
 name: CI
 
 on:
-  push:
-    branches: [ "main" ]
+  pull_request:            # runs on every commit pushed to a pull request
   schedule:
     - cron: "0 2 * * *"   # runs every day at 02:00 UTC
   workflow_dispatch:       # allows manual trigger
-  pull_request:
-    types: [labeled]
-  issue_comment:
-    types: [created]
 
 jobs:
   shellcheck:
