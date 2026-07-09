@@ -430,7 +430,7 @@ def spmv_v2_multi_cube_benchmark(device: Device, B: csr_matrix, s: int):
             vals_npu, idx_npu, col_npu, vec_npu, upper, lower_strict
         )
 
-    return _run_benchmark(device, run_spmv_v2_multi_cube), len(vals)
+    return _run_benchmark(device, run_spmv_v2_multi_cube), B.nnz, B.shape[0]
 
 
 def csr_gather_benchmark(device: Device, B: csr_matrix):
@@ -517,7 +517,7 @@ def benchmark(
         time, nnz, nrows = fn(device)
 
         bw_gbps = float("nan")
-        if op_name.startswith(("spmv", "gather_spmv")):
+        if op_name.startswith(("spmv")):
             bw_gbps = (
                 _spmv_io_bytes(nrows, nnz, STR_TO_DTYPE[dtype]) / (time * 1e-6) / 1e9
             )
