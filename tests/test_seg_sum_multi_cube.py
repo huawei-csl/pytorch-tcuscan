@@ -1,3 +1,10 @@
+# --------------------------------------------------------------------------------
+# Copyright (c) 2023-2026 Huawei Technologies Co., Ltd.
+# All rights reserved.
+# See LICENSE in the root of the software repository:
+# https://github.com/huawei-csl/pytorch-tcuscan/
+# for the full License text.
+# --------------------------------------------------------------------------------
 #!/usr/bin/python3
 # coding=utf-8
 #
@@ -36,15 +43,15 @@ _NUM_COLUMNS = [64 * 64 - 1, 128 * 128, 128 * 128 - 13, 128 * 128 + 13, 128 * 12
 
 def uniform_rvs(shape, dtype: np.dtype):
     if np.issubsctype(dtype, np.integer):
-        return np.random.randint(-2, 2, size=shape)
-    return 0.5 * np.random.uniform(0, 1, size=shape) - 0.25
+        return np.random.randint(-2, 2, size=shape).astype(dtype)
+    return (0.5 * np.random.uniform(0, 1, size=shape) - 0.25).astype(dtype)
 
 
 def random_csr(rows: int, cols: int, nnz: int, dtype: np.dtype) -> csr_matrix:
     flat = np.random.choice(rows * cols, size=nnz, replace=False)
     row = flat // cols
     col = flat % cols
-    data = uniform_rvs(nnz).astype(dtype)
+    data = uniform_rvs(nnz, dtype=dtype)
     return csr_matrix((data, (row, col)), shape=(rows, cols))
 
 
@@ -53,8 +60,7 @@ def tiling_function(nnz: int, s: int, max_aic_cores: int = 20):
     matmul_tile_len = s * s
     num_tiles = ceil(nnz / matmul_tile_len)
     num_blocks = max_aic_cores
-    if num_tiles < num_blocks:
-        num_blocks = num_tiles
+    num_blocks = min(num_blocks, num_tiles)
 
     max_num_tiles_per_block = ceil(num_tiles / num_blocks)
     block_len = max_num_tiles_per_block * matmul_tile_len
@@ -103,7 +109,7 @@ def _test_seg_sum_multi_cube(
 
     torch.npu.synchronize()
     if use_segm_offsets:
-        block_len, num_blocks = get_block_len_and_num_blocks(nnz, s)
+        block_len, num_blocks = tiling_function(nnz, s)
         sstart = torch.clamp(
             torch.arange(0, num_blocks + 1, dtype=torch.int32, device=NPU_DEVICE)
             * block_len,
@@ -131,7 +137,7 @@ def _test_seg_sum_multi_cube(
     diff = torch.abs(actual - expected) < 1e-2
     print(f"diff          : {diff}")
     print(f"ratio of wrong entries: {1 - diff.float().mean():.4f}")
-    np_where = torch.where(diff == False)
+    np_where = torch.where(~diff)
     print(f"np.where: {np_where}")
     print(f"actual: {actual[np_where]}")
     print(f"expected: {expected[np_where]}")
