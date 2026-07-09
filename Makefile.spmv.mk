@@ -60,6 +60,36 @@ profile_fp16_spmv_powerlaw:
 
 profile_fp16_spmv_random: profile_fp16_spmv_powerlaw profile_fp16_spmv_uniform
 
+profile_fp16_spmv_v2_uniform:
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_random_matrices.py --bench spmv_v2 --dtype fp16 --prob Uniform --num_cores 20 --s 128 --density 0.1
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_random_matrices.py --bench spmv_v2 --dtype fp16 --prob Uniform --num_cores 20 --s 128 --density 0.01
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_random_matrices.py --bench spmv_v2 --dtype fp16 --prob Uniform --num_cores 20 --s 128 --density 0.001
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_random_matrices.py --bench spmv_v2 --dtype fp16 --prob Uniform --num_cores 20 --s 128 --density 0.0001
+
+profile_fp16_spmv_v2_powerlaw:
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_random_matrices.py --bench spmv_v2 --dtype fp16 --prob PowerLaw --num_cores 20 --s 128 --density 0.1
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_random_matrices.py --bench spmv_v2 --dtype fp16 --prob PowerLaw --num_cores 20 --s 128 --density 0.01
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_random_matrices.py --bench spmv_v2 --dtype fp16 --prob PowerLaw --num_cores 20 --s 128 --density 0.001
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_random_matrices.py --bench spmv_v2 --dtype fp16 --prob PowerLaw --num_cores 20 --s 128 --density 0.0001
+
+profile_fp16_spmv_v2_random: profile_fp16_spmv_v2_powerlaw profile_fp16_spmv_v2_uniform
+
+profile_fp16_spmv_multi_cube_uniform:
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_random_matrices.py --bench spmv_multi_cube --dtype fp16 --prob Uniform --num_cores 20 --s 128 --density 0.1
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_random_matrices.py --bench spmv_multi_cube --dtype fp16 --prob Uniform --num_cores 20 --s 128 --density 0.01
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_random_matrices.py --bench spmv_multi_cube --dtype fp16 --prob Uniform --num_cores 20 --s 128 --density 0.001
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_random_matrices.py --bench spmv_multi_cube --dtype fp16 --prob Uniform --num_cores 20 --s 128 --density 0.0001
+
+profile_fp16_spmv_multi_cube_powerlaw:
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_random_matrices.py --bench spmv_multi_cube --dtype fp16 --prob PowerLaw --num_cores 20 --s 128 --density 0.1
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_random_matrices.py --bench spmv_multi_cube --dtype fp16 --prob PowerLaw --num_cores 20 --s 128 --density 0.01
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_random_matrices.py --bench spmv_multi_cube --dtype fp16 --prob PowerLaw --num_cores 20 --s 128 --density 0.001
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_random_matrices.py --bench spmv_multi_cube --dtype fp16 --prob PowerLaw --num_cores 20 --s 128 --density 0.0001
+
+profile_fp16_spmv_multi_cube_random: profile_fp16_spmv_multi_cube_powerlaw profile_fp16_spmv_multi_cube_uniform
+
+profile_fp16_spmv_versions_random: profile_fp16_spmv_random profile_fp16_spmv_multi_cube_random profile_fp16_spmv_v2_random
+
 profile_fp16_spmv_real:
 	$(foreach MATRIX,$(SPARSE_MATRICES), python3 ${PROFILING_SCRIPTS_PATH}/profile_sparse_matrices.py --bench spmv --s 128  --matrixpath ${SPARSE_SUITE_HOME}/${MATRIX} --dtype fp16;)
 
