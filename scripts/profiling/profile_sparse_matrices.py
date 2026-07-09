@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-# -*- coding:utf-8 -*-
-#
-# PyTorch profiling code is part of TCUSCAN-CH CSTT project.
-#
-# Copyright 2024 Huawei Technologies Co., Ltd
-
+# --------------------------------------------------------------------------------
+# Copyright (c) 2023-2026 Huawei Technologies Co., Ltd.
+# All rights reserved.
+# See LICENSE in the root of the software repository:
+# https://github.com/huawei-csl/pytorch-tcuscan/
+# for the full License text.
+# --------------------------------------------------------------------------------
 import argparse
 import logging
 import os
