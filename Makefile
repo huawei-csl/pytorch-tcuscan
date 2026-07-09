@@ -1,5 +1,8 @@
 .PHONY: all clean setup_once setup_once_aarch64 build test profile
 
+# Host architecture (e.g. x86_64 or aarch64), used to locate the Ascend toolkit includes.
+ARCH := $(shell uname -m)
+
 DENSITY?=0.001
 LOCAL_SPARSE_MATRIX_NAME?='Williams/pdb1HYS/pdb1HYS'
 BASE_SPARSE_MATRIX_PATH?=/scratch/TCUSCAN/sparse-suite-matrices/ssgetpy-downloaded-matrices
@@ -7,7 +10,7 @@ FULL_SPARSE_MATRIX_PATH=${BASE_SPARSE_MATRIX_PATH}/${LOCAL_SPARSE_MATRIX_NAME}
 PROFILING_SCRIPTS_PATH=scripts/profiling/
 CONDA_ENV_NAME="pytorch_tcuscan"
 
-TORCH_NPU_VER=2.9.0.post2
+TORCH_NPU_VER=2.10.0
 
 ASCEND_DEVICE=Ascend910B4
 DEVICE_TYPE?=npu
@@ -48,6 +51,21 @@ build: build.sh
 
 pypackage:
 	./build-pypackage.sh -v ${ASCEND_DEVICE}
+
+# 'make compile_vadd' compiles 'kernel_vadd.cpp' into 'libkernel_vadd.so' without building the whole project.
+# This is useful for development and debugging of individual kernels.
+compile_%:
+	bisheng -fPIC -shared -xcce -O2 -std=c++17 \
+		-Isrc/kernel \
+		-I$(ASCEND_TOOLKIT_HOME)/$(ARCH)-linux/tikcpp/tikcfw \
+		-I$(ASCEND_TOOLKIT_HOME)/$(ARCH)-linux/asc/include/interface \
+		-I$(ASCEND_TOOLKIT_HOME)/$(ARCH)-linux/asc/impl/basic_api \
+		--npu-arch=dav-2201 \
+		-mllvm -cce-aicore-stack-size=0x8000 \
+		-mllvm -cce-aicore-function-stack-size=0x8000 \
+		-Wno-ignored-attributes \
+		src/$*.cpp \
+		-o libkernel_$*.so
 
 build_tidy: build-tidy.sh
 	./build-tidy.sh -v ${ASCEND_DEVICE}

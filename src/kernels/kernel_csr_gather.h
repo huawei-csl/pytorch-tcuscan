@@ -17,14 +17,9 @@ namespace tcuscan {
  * @brief Performs the CSR gather operation as described in SEGMV algorithm in
  * [1].
  *
- * Computes `z[i] = values[i] * x[cols[i]]` for `i in range(len(cols))`.
- *
- * The input `x` vector is not required to fit entirely in Unified Buffer. When
- * `x` is small enough it is loaded once and gathered directly (fast path).
- * Otherwise `x` is processed in chunks of at most `x_tile_elems_max` elements:
- * for every chunk each tile gathers the entries of `x` that fall inside the
- * chunk and accumulates them, so arbitrary (unsorted) column indices are
- * supported.
+ * For each nonzero i, computes `z[i] = values[i] * x[cols[i]]`, i.e. gathers
+ * the matching x entry for every CSR nonzero and scales it by that nonzero's
+ * value.
  *
  * [1] Segmented Operations for Sparse Matrix Computation on Vector
  * Multiprocessors: https://dl.acm.org/doi/10.5555/865221.

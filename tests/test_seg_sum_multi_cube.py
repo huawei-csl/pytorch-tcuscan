@@ -1,3 +1,10 @@
+# --------------------------------------------------------------------------------
+# Copyright (c) 2023-2026 Huawei Technologies Co., Ltd.
+# All rights reserved.
+# See LICENSE in the root of the software repository:
+# https://github.com/huawei-csl/pytorch-tcuscan/
+# for the full License text.
+# --------------------------------------------------------------------------------
 #!/usr/bin/python3
 # coding=utf-8
 #
@@ -10,6 +17,7 @@
 
 import os
 import random
+from functools import partial
 from math import ceil
 
 import numpy as np
@@ -17,7 +25,6 @@ import pytest
 import torch_npu  # noqa
 from scipy.sparse import csr_matrix
 from scipy.sparse import random as sp_random
-from functools import partial
 
 import tcuscan_ops
 import torch
@@ -36,15 +43,15 @@ _NUM_COLUMNS = [64 * 64 - 1, 128 * 128, 128 * 128 - 13, 128 * 128 + 13, 128 * 12
 
 def uniform_rvs(shape, dtype: np.dtype):
     if np.issubsctype(dtype, np.integer):
-        return np.random.randint(-2, 2, size=shape)
-    return 0.5 * np.random.uniform(0, 1, size=shape) - 0.25
+        return np.random.randint(-2, 2, size=shape).astype(dtype)
+    return (0.5 * np.random.uniform(0, 1, size=shape) - 0.25).astype(dtype)
 
 
 def random_csr(rows: int, cols: int, nnz: int, dtype: np.dtype) -> csr_matrix:
     flat = np.random.choice(rows * cols, size=nnz, replace=False)
     row = flat // cols
     col = flat % cols
-    data = uniform_rvs(nnz).astype(dtype)
+    data = uniform_rvs(nnz, dtype=dtype)
     return csr_matrix((data, (row, col)), shape=(rows, cols))
 
 
@@ -53,8 +60,7 @@ def tiling_function(nnz: int, s: int, max_aic_cores: int = 20):
     matmul_tile_len = s * s
     num_tiles = ceil(nnz / matmul_tile_len)
     num_blocks = max_aic_cores
-    if num_tiles < num_blocks:
-        num_blocks = num_tiles
+    num_blocks = min(num_blocks, num_tiles)
 
     max_num_tiles_per_block = ceil(num_tiles / num_blocks)
     block_len = max_num_tiles_per_block * matmul_tile_len
@@ -62,7 +68,12 @@ def tiling_function(nnz: int, s: int, max_aic_cores: int = 20):
 
 
 def _test_seg_sum_multi_cube(
-    num_rows: int, num_cols: int, s: int, density: float, dtype: torch.dtype
+    num_rows: int,
+    num_cols: int,
+    s: int,
+    density: float,
+    dtype: torch.dtype,
+    use_segm_offsets: bool,
 ):
     sp_dtype = np.float32 if dtype == torch.float16 else np.int32
 
@@ -96,25 +107,25 @@ def _test_seg_sum_multi_cube(
     indices_npu = torch.from_numpy(indices).npu().to(torch.int32)
     nnz = A.nnz
 
-    block_len, num_blocks = tiling_function(nnz, s)
+    torch.npu.synchronize()
+    if use_segm_offsets:
+        block_len, num_blocks = tiling_function(nnz, s)
+        sstart = torch.clamp(
+            torch.arange(0, num_blocks + 1, dtype=torch.int32, device=NPU_DEVICE)
+            * block_len,
+            max=nnz,
+        )
+        torch.npu.synchronize()
+        segm_offsets = torch.searchsorted(indices_npu, sstart, out_int32=True)
+        torch.npu.synchronize()
 
-    torch.npu.synchronize()
-    sstart = torch.clamp(
-        torch.arange(0, num_blocks + 1, dtype=torch.int32) * block_len,
-        max=nnz,
-    ).npu()
-    torch.npu.synchronize()
-    segm_offsets = torch.searchsorted(indices_npu, sstart, right=False).to(torch.int32)
-    torch.npu.synchronize()
-
-    print(f"block_len                  : {nnz // num_blocks}")
-    print(f"block_offsets (len: {len(sstart)}): {sstart}")
-    print(f"segm_offsets (len: {len(segm_offsets)}): {segm_offsets}")
-
-    torch.npu.synchronize()
-    actual = tcuscan_ops.run_seg_sum_multi_cube(
-        values_npu, upper_npu, lower_strict_npu, indices_npu, segm_offsets
-    ).cpu()
+        actual = tcuscan_ops.run_seg_sum_multi_cube(
+            values_npu, upper_npu, lower_strict_npu, indices_npu, segm_offsets
+        ).cpu()
+    else:
+        actual = tcuscan_ops.run_seg_sum_multi_cube(
+            values_npu, upper_npu, lower_strict_npu, indices_npu
+        ).cpu()
     torch.npu.synchronize()
 
     print(f"# of segments : {num_segments}")
@@ -126,7 +137,7 @@ def _test_seg_sum_multi_cube(
     diff = torch.abs(actual - expected) < 1e-2
     print(f"diff          : {diff}")
     print(f"ratio of wrong entries: {1 - diff.float().mean():.4f}")
-    np_where = torch.where(diff == False)
+    np_where = torch.where(~diff)
     print(f"np.where: {np_where}")
     print(f"actual: {actual[np_where]}")
     print(f"expected: {expected[np_where]}")
@@ -149,10 +160,22 @@ def _test_seg_sum_multi_cube(
     "num_segments", _NUM_SEGMENTS, ids=lambda x: f"num_segms:({x})"
 )
 @pytest.mark.parametrize("num_cols", _NUM_COLUMNS, ids=lambda x: f"num_cols:({x})")
-@pytest.mark.parametrize("s", [16], ids=lambda s: f"s:({s})")
+@pytest.mark.parametrize("s", [32, 64, 128], ids=lambda s: f"s:({s})")
 @pytest.mark.parametrize("dtype", [torch.float16], ids=str)
+@pytest.mark.parametrize("density", [0.1, 0.05, 0.01], ids=lambda x: f"density:({x})")
+@pytest.mark.parametrize(
+    "use_segm_offsets",
+    [False, True],
+    ids=lambda x: "with_segm_offsets" if x else "no_segm_offsets",
+)
 def test_seg_sum_multi_cube(
-    num_segments: int, num_cols: int, s: int, dtype: torch.dtype
+    num_segments: int,
+    num_cols: int,
+    s: int,
+    density: float,
+    dtype: torch.dtype,
+    use_segm_offsets: bool,
 ):
-    density = 0.01
-    _test_seg_sum_multi_cube(num_segments, num_cols, s, density, dtype)
+    _test_seg_sum_multi_cube(
+        num_segments, num_cols, s, density, dtype, use_segm_offsets
+    )
