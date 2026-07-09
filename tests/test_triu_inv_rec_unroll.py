@@ -1,12 +1,20 @@
+# --------------------------------------------------------------------------------
+# Copyright (c) 2023-2026 Huawei Technologies Co., Ltd.
+# All rights reserved.
+# See LICENSE in the root of the software repository:
+# https://github.com/huawei-csl/pytorch-tcuscan/
+# for the full License text.
+# --------------------------------------------------------------------------------
+
 import os
 import random
 
 import numpy as np
 import pytest
-
-import torch
 import torch_npu  # noqa
+
 import tcuscan_ops
+import torch
 
 random.seed(42)
 torch.manual_seed(42)
