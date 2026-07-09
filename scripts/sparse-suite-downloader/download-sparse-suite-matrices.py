@@ -79,22 +79,37 @@ def main():
 
     # Example 3: Download list of matrices by ids
     downloaded_mats = []
-    print(f"Downloading matrix set '{_MATRIX_SET}' ({len(_SPARSE_SUITE_MATRIX_IDS)} matrices)")
+    print(
+        f"Downloading matrix set '{_MATRIX_SET}' ({len(_SPARSE_SUITE_MATRIX_IDS)} matrices)"
+    )
     print(f"Writing to {SS_HOME}")
     for matrix_id in _SPARSE_SUITE_MATRIX_IDS:
         matrix = ssgetpy.fetch(matrix_id, location=SS_HOME)[0]
         print(f"Downloading SS Matrix: {matrix.name}")
         file_location, _ = matrix.download(extract=True, destpath=SS_HOME)
         print(f"Downloaded SS Matrix: {matrix.name} @ {file_location}")
+        # Sparsity = fraction of zero entries in the dense matrix.
+        total = matrix.rows * matrix.cols
+        sparsity = 1.0 - (matrix.nnz / total) if total else 0.0
         downloaded_mats.append(
-            {"name": matrix.name, "loc": f"{file_location}/{matrix.name}.mtx"}
+            {
+                "name": matrix.name,
+                "loc": f"{file_location}/{matrix.name}.mtx",
+                "nrows": matrix.rows,
+                "ncols": matrix.cols,
+                "nnz": matrix.nnz,
+                "sparsity": sparsity,
+            }
         )
 
     with open("sparse_suite_matrices.csv", "w", encoding="utf-8") as fd:
-        fd.write("name,location\n")
+        fd.write("name,nrows,ncols,nnz,sparsity,location\n")
         for item in downloaded_mats:
             print(item)
-            fd.write(f"{item['name']},{item['loc']}\n")
+            fd.write(
+                f"{item['name']},{item['nrows']},{item['ncols']},"
+                f"{item['nnz']},{item['sparsity']:.6g},{item['loc']}\n"
+            )
 
 
 if __name__ == "__main__":

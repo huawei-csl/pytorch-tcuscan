@@ -8,7 +8,7 @@
 #!/usr/bin/python3
 # coding=utf-8
 #
-# Copyright (C) 2023-2024. Huawei Technologies Co., Ltd. All rights reserved.
+# Copyright (C) 2023-2026. Huawei Technologies Co., Ltd. All rights reserved.
 #
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -29,25 +29,14 @@ NPU_DEVICE = os.environ.get("NPU_DEVICE", "npu:1")
 torch.npu.config.allow_internal_format = False
 torch.npu.set_device(NPU_DEVICE)
 
-_NROW = [
-    1024 * 1,
-    1024 * 2,
-    1024 * 3,
-    1024 * 4,
-    1024 * 5,
-    1024 * 6,
-    1024 * 7,
-    1024 * 8,
-    1024 * 9,
-    1024 * 16,
-]
+_NROW = [64 * 64 - 1, 24 * 128 + 1, 16 * 128 - 13, 64 * 128 + 13, 32 * 128 - 133]
 
 
 def uniform_rvs(shape):
     return 2 * np.random.uniform(0, 1, size=shape) - 1
 
 
-def _test_tcuscan_spmv_multi_cube(nnr: int, s: int, density: float):
+def _test_tcuscan_spmv_v2_multi_cube(nnr: int, s: int, density: float):
     rng = np.random.default_rng(seed=42)
 
     B = random(
@@ -60,7 +49,7 @@ def _test_tcuscan_spmv_multi_cube(nnr: int, s: int, density: float):
     )
 
     values = (B.data).astype(np.float16)
-    indexes = (B.indptr).astype(np.uint32)
+    indexes = (B.indptr).astype(np.int32)
     cols = (B.indices).astype(np.int32)
     vector = rng.uniform(1, 9, nnr - 1).astype(np.float16)
 
@@ -76,7 +65,7 @@ def _test_tcuscan_spmv_multi_cube(nnr: int, s: int, density: float):
     lower_strict = torch.tril(ones, -1)
 
     torch.npu.synchronize()
-    actual = tcuscan_ops.run_spmv_multi_cube(
+    actual = tcuscan_ops.run_spmv_v2_multi_cube(
         torch_values, torch_indexes, torch_cols, torch_vector, upper, lower_strict
     )
     torch.npu.synchronize()
@@ -86,13 +75,16 @@ def _test_tcuscan_spmv_multi_cube(nnr: int, s: int, density: float):
         actual.shape == expected.shape
     ), f"Output shape mismatch. Got {actual.shape}. Expected {expected.shape}"
 
+    # The multi-cube block scan is a half-only kernel, so the output is fp32.
+    assert actual.dtype == torch.float32
+
     assert torch.allclose(
         actual_cpu, expected, atol=1e-0
-    ), f"Error spmv_multi_cube  ({expected.dtype}). s={s}"
+    ), f"Error spmv_v2_multi_cube  ({expected.dtype}). s={s}"
 
 
 @pytest.mark.parametrize("s", [32, 64, 128])
 @pytest.mark.parametrize("density", [0.01, 0.001, 0.0001])
 @pytest.mark.parametrize("nrow", _NROW)
-def test_tcuscan_spmv_multi_cube(s: int, density: float, nrow: int):
-    _test_tcuscan_spmv_multi_cube(nrow, s, density)
+def test_tcuscan_spmv_v2_multi_cube(s: int, density: float, nrow: int):
+    _test_tcuscan_spmv_v2_multi_cube(nrow, s, density)
