@@ -54,7 +54,7 @@ __aicore__ inline void run_seg_sum_multi_cube(
   sync::SyncAllCores();
 
   if ASCEND_IS_AIC {
-    KernelBlockScan<T, true /* SyncBefore */> op_cube(padded_vec_len, tile_len);
+    KernelBlockScan<T, /* SyncAfter*/ true> op_cube(padded_vec_len, tile_len);
     op_cube.Init(padded_input, upper, lower, spec_block_scan);
     op_cube.Process();
   }
@@ -85,8 +85,7 @@ __aicore__ inline void run_seg_sum_multi_cube(
       block_len = vec_len - block_vec_offset;
     }
 
-    KernelSegSumCubeRevert<OutputT, true /* SyncBefore */,
-                           true /* UseAtomicWrite */>
+    KernelSegSumCubeRevert<OutputT, /* SyncBefore*/ true, /* AtomicAdd */ true>
         op(block_len, num_segments_per_block, tile_len, block_vec_offset);
     op.Init(spec_block_scan, segm_ind_in + segm_ind_offset * sizeof(int32_t),
             vec_out + segm_ind_offset * sizeof(OutputT));
