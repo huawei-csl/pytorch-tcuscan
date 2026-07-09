@@ -107,6 +107,7 @@ ascendc_library(
   src/csr_gather.cpp
   src/copy.cpp
   src/gather_spmv.cpp
+  src/gather_spmv_diff.cpp
   src/mc_gather.cpp
   src/gen_lower.cpp
   src/reduce_tiles.cpp

@@ -17,6 +17,8 @@
 #include "aclrtlaunch_csr_gather_fp32.h"
 #include "aclrtlaunch_csr_gather_int16.h"
 #include "aclrtlaunch_gather_spmv.h"
+#include "aclrtlaunch_gather_spmv_diff_fp32.h"
+#include "aclrtlaunch_gather_spmv_diff_int32.h"
 #include "aclrtlaunch_mc_gather_fp16.h"
 #include "aclrtlaunch_mc_gather_fp32.h"
 #include "commons.h"
@@ -206,6 +208,79 @@ at::Tensor run_gather_spmv(const at::Tensor& values, const at::Tensor& idxs,
    const_cast<void*>(idxs.storage().data()),
    const_cast<void*>(z.storage().data()),
    const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+  aclrtFree(tiling_device);
+  aclrtSynchronizeStream(acl_stream);
+
+  return z;
+}
+
+/**
+ * @brief Special gather for SpMV with a fused `torch::diff`.
+ *
+ * Computes `torch::diff(run_gather_spmv(values, idxs, tile_len))` in a single
+ * kernel launch: the full-length gather is staged in a scratch workspace, a
+ * cross-core barrier makes it visible, and the diff is written directly to the
+ * output. Result: `z[i] = gather[i + 1] - gather[i]` with length `idx_len - 1`.
+ *
+ * The diff arithmetic runs in the input's native type, so `values` must be
+ * fp32 (fp16/fp32 SpMV, scan promotes to fp32) or int32 (int16 SpMV, scan
+ * promotes to int32).
+ *
+ * @param values Input 1D vector.
+ * @param idxs Input 1D indices vector.
+ * @param tile_len Tile length.
+ * @return Fused gather + diff for SpMV.
+ */
+at::Tensor run_gather_spmv_diff(const at::Tensor& values,
+                                const at::Tensor& idxs,
+                                const uint32_t tile_len) {
+  const auto dtype = values.options().dtype();
+  TORCH_CHECK(dtype == torch::kFloat || dtype == torch::kInt32,
+              "run_gather_spmv_diff: values must be float32 or int32, got ",
+              dtype);
+
+  const auto ascendc_platform =
+      platform_ascendc::PlatformAscendCManager::GetInstance();
+  const uint32_t max_aiv_cores = ascendc_platform->GetCoreNumAiv();
+
+  const at::Device device = values.options().device();
+
+  const uint32_t values_len = values.numel();
+  const uint32_t idx_len = idxs.numel();
+
+  // `torch::diff` of a vector shorter than 2 elements is empty.
+  if (idx_len <= 1) {
+    return at::empty({0}, values.options());
+  }
+
+  uint32_t block_dim = host_utils::CeilDiv(values_len, tile_len);
+  block_dim = block_dim > max_aiv_cores ? max_aiv_cores : block_dim;
+
+  // Fused output is `diff(gather)`, one element shorter than the gather.
+  const at::Tensor z = at::empty({idx_len - 1}, values.options());
+
+  // Scratch to stage the phase-1 gather (length `idx_len`).
+  const uint32_t scratch_size = idx_len * byte_size(values);
+  const at::Tensor workspace_tensor = alloc_workspace(scratch_size, device);
+
+  const GatherSpmvTiling tiling{block_dim, values_len, idx_len, tile_len};
+  uint8_t* tiling_device = alloc_copy_tiling(tiling);
+
+  auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
+
+  if (dtype == torch::kInt32) {
+    ACLRT_LAUNCH_KERNEL(gather_spmv_diff_int32)
+    (block_dim, acl_stream, const_cast<void*>(values.storage().data()),
+     const_cast<void*>(idxs.storage().data()),
+     const_cast<void*>(z.storage().data()),
+     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+  } else {
+    ACLRT_LAUNCH_KERNEL(gather_spmv_diff_fp32)
+    (block_dim, acl_stream, const_cast<void*>(values.storage().data()),
+     const_cast<void*>(idxs.storage().data()),
+     const_cast<void*>(z.storage().data()),
+     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+  }
   aclrtFree(tiling_device);
   aclrtSynchronizeStream(acl_stream);
 

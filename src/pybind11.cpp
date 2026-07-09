@@ -104,6 +104,8 @@ PYBIND11_MODULE(tcuscan_ops, m) {
   m.def("run_mc_gather", &tcuscan::run_mc_gather, "Vector Multi Core Gather");
   m.def("run_gather_spmv", &tcuscan::run_gather_spmv,
         "Vector Multi Core Gather SPMV");
+  m.def("run_gather_spmv_diff", &tcuscan::run_gather_spmv_diff,
+        "Vector Multi Core Gather SPMV with fused diff");
   m.def("run_radix_sort", &tcuscan::run_radix_sort,
         "Radix sort using cube units");
   m.def("run_matmul_cce", &tcuscan::matmul_cce,

@@ -27,9 +27,14 @@ namespace tcuscan {
  *     output = [0  0 12 15 15 15 19 19]
  *
  * @tparam DataType The data type of the tensor elements that must be gathered.
+ * @tparam EnableDiff When `true`, the kernel fuses `torch::diff` into the same
+ * launch: phase 1 gathers into a scratch buffer, a cross-core barrier makes the
+ * gather visible, then phase 2 writes `out[i] = gathered[i + 1] - gathered[i]`
+ * (length `idx_in_len - 1`) directly to the output. When `false`, the kernel
+ * behaves exactly as a plain gather (unchanged public contract).
  *
  */
-template <typename DataType>
+template <typename DataType, bool EnableDiff = false>
 class KernelGatherSpmv {
   constexpr static uint32_t BUFFER_NUM = 1;
   /// @brief * represents the maximum tile length handled by the LocalTensor
@@ -60,13 +65,26 @@ class KernelGatherSpmv {
    *
    * @param [in] values_in  Pointer to input values vector.
    * @param [in] idx_in Pointer to input column indices vector.
-   * @param [in] z_out Pointer to output z vector.
+   * @param [in] z_out Pointer to output vector. Length `idx_in_len_` for a
+   * plain gather, `idx_in_len_ - 1` when `EnableDiff`.
+   * @param [in] gathered_scratch Pointer to a scratch buffer of length
+   * `idx_in_len_` used to hold the phase-1 gather. Only read when `EnableDiff`.
    */
-  __aicore__ inline void Init(GM_ADDR values_in, GM_ADDR idx_in,
-                              GM_ADDR z_out) {
+  __aicore__ inline void Init(GM_ADDR values_in, GM_ADDR idx_in, GM_ADDR z_out,
+                              GM_ADDR gathered_scratch) {
     global_values_.SetGlobalBuffer((__gm__ DataType*)values_in, values_in_len_);
     global_idx_.SetGlobalBuffer((__gm__ uint32_t*)idx_in, idx_in_len_);
-    global_z_.SetGlobalBuffer((__gm__ DataType*)z_out, idx_in_len_);
+    if constexpr (EnableDiff) {
+      // Phase 1 gathers into the scratch buffer; phase 2 writes the fused
+      // `torch::diff` result (length `idx_in_len_ - 1`) into `z_out`.
+      global_gathered_.SetGlobalBuffer((__gm__ DataType*)gathered_scratch,
+                                       idx_in_len_);
+      global_diff_out_.SetGlobalBuffer((__gm__ DataType*)z_out,
+                                       idx_in_len_ - 1);
+    } else {
+      (void)gathered_scratch;
+      global_gathered_.SetGlobalBuffer((__gm__ DataType*)z_out, idx_in_len_);
+    }
 
     pipe.InitBuffer(values_q_gather_, BUFFER_NUM,
                     VALUE_TILE_LEN * sizeof(DataType));
@@ -78,6 +96,13 @@ class KernelGatherSpmv {
     pipe.InitBuffer(mask_up_buf_, tile_len_ * sizeof(uint32_t));
     pipe.InitBuffer(mask_down_buf_, tile_len_ * sizeof(uint32_t));
     pipe.InitBuffer(gathered_mask_buff_, tile_len_ * sizeof(uint32_t));
+
+    if constexpr (EnableDiff) {
+      pipe.InitBuffer(diff_in_q_, BUFFER_NUM,
+                      (tile_len_ + 1) * sizeof(DataType));
+      pipe.InitBuffer(diff_out_q_, BUFFER_NUM, tile_len_ * sizeof(DataType));
+      pipe.InitBuffer(diff_tbuf_, (tile_len_ + 1) * sizeof(uint32_t));
+    }
   }
 
   /**
@@ -101,6 +126,15 @@ class KernelGatherSpmv {
       copy::CopyGmToVec(idx_q_, global_idx_[gm_offset], this_tile_len);
       ProcessTile(gm_offset, this_tile_len);
       gm_offset += this_tile_len;
+    }
+
+    if constexpr (EnableDiff) {
+      // Fuse `torch::diff` into this launch. The barrier guarantees every
+      // core's phase-1 gather is committed to `global_gathered_` before any
+      // core reads it back in phase 2 (same producer -> consumer pattern used
+      // by the multi-core scan kernels).
+      sync::SyncAllCores();
+      RunDiff();
     }
   }
 
@@ -157,7 +191,8 @@ class KernelGatherSpmv {
     const uint32_t num_leading_zeros = i;
 
     output_q_.EnQue<DataType>(z_lt);
-    copy::CopyVecToGm(global_z_[output_gm], output_q_, num_leading_zeros);
+    copy::CopyVecToGm(global_gathered_[output_gm], output_q_,
+                      num_leading_zeros);
 
     if (i < this_tile_len) {
       output_gm = output_gm + num_leading_zeros;
@@ -202,7 +237,7 @@ class KernelGatherSpmv {
     GatherWithOffset(z_lt, idx_lt, sync_fetched_values, start, this_tile_len);
     values_q_gather_.FreeTensor<DataType>(sync_fetched_values);
     output_q_.EnQue<DataType>(z_lt);
-    copy::CopyVecToGm(global_z_[output_gm], output_q_, this_tile_len);
+    copy::CopyVecToGm(global_gathered_[output_gm], output_q_, this_tile_len);
   }
 
   /**
@@ -354,11 +389,95 @@ class KernelGatherSpmv {
                     static_cast<uint32_t>(0), subtile_size);
   }
 
+  /**
+   * @brief Phase 2 (only instantiated when `EnableDiff`): computes
+   * `torch::diff` of the phase-1 gather.
+   *
+   * Reads the gather output from `global_gathered_` (length `idx_in_len_`) and
+   * writes `out[i] = gathered[i + 1] - gathered[i]` to `global_diff_out_`
+   * (length `idx_in_len_ - 1`). Each core reads back only the contiguous chunk
+   * it gathered itself in phase 1, so every scratch read is self-coherent. The
+   * one right-overlap element per tile, `gathered[global_offset + num_elems]`,
+   * may belong to a neighbouring core; reading it back from scratch is a
+   * cross-core read-after-write race, so it is instead recomputed from the
+   * read-only inputs in `DiffTile` (see below).
+   *
+   * Mirrors `KernelDiff`, but writes the segment-sum result directly (no
+   * `prepend` shift / first-element fixup), fusing the standalone `diff`
+   * launch.
+   */
+  __aicore__ inline void RunDiff() {
+    uint32_t global_offset =
+        GetBlockIdx() * tile_len_ * max_num_tiles_per_block_idx_;
+    const uint32_t num_tiles_to_process = tcuscan::scalar::GetWorkDistribution(
+        idx_in_len_, tile_len_, vec_core_num_);
+    for (uint32_t tile_idx = 0; tile_idx < num_tiles_to_process; tile_idx++) {
+      // A tile produces `num_elems` diffs. The last tile stops one short of
+      // `idx_in_len_`.
+      const bool full_tile = global_offset + tile_len_ < idx_in_len_;
+      const uint32_t num_elems =
+          full_tile ? tile_len_ : idx_in_len_ - global_offset - 1;
+      copy::CopyGmToVec(diff_in_q_, global_gathered_[global_offset], num_elems);
+      DiffTile(num_elems, global_offset);
+      copy::CopyVecToGm(global_diff_out_[global_offset], diff_out_q_,
+                        num_elems);
+      global_offset += tile_len_;
+    }
+  }
+
+  /**
+   * @brief Computes one diff tile: `out[k] = in[k + 1] - in[k]` for `k in [0,
+   * num_elems)`, given `num_elems` gathered values queued in `diff_in_q_`. The
+   * result is enqueued in `diff_out_q_`.
+   *
+   * @param [in] num_elems Number of diff outputs this tile produces.
+   * @param [in] global_offset Global position of the first element of the tile.
+   */
+  __aicore__ inline void DiffTile(uint32_t num_elems, uint32_t global_offset) {
+    LocalTensor<DataType> vec_in_lt = diff_in_q_.DeQue<DataType>();
+    const LocalTensor<DataType> vec_out_lt =
+        diff_out_q_.AllocTensor<DataType>();
+
+    LocalTensor<uint32_t> cols_uint32_lt = diff_tbuf_.Get<uint32_t>();
+    LocalTensor<int32_t> cols_int32_lt =
+        cols_uint32_lt.template ReinterpretCast<int32_t>();
+
+    // Byte offsets sizeof, 2*sizeof, ... select the shifted-by-one input, so
+    // vec_out_lt[k] = vec_in_lt[k + 1] for k in [0, num_elems - 1).
+    ArithProgression<int32_t>(
+        cols_int32_lt, static_cast<int32_t>(sizeof(DataType)),
+        static_cast<int32_t>(sizeof(DataType)), num_elems - 1);
+    AscendC::Gather(vec_out_lt, vec_in_lt, cols_uint32_lt,
+                    static_cast<uint32_t>(0), num_elems - 1);
+    Sub(vec_out_lt, vec_out_lt, vec_in_lt, num_elems);
+
+    // The final diff needs gathered[global_offset + num_elems], which may live
+    // in another core's scratch region. Recompute it from the read-only inputs
+    // (always coherent) using the gather definition itself:
+    //   gathered[p] = idx[p] == 0 ? 0 : values[idx[p] - 1].
+    const uint32_t p = global_offset + num_elems;
+    const uint32_t idx_p = global_idx_.GetValue(p);
+    const DataType overlap = (idx_p == 0) ? static_cast<DataType>(0)
+                                          : global_values_.GetValue(idx_p - 1);
+    // Native-type subtraction: int32 accumulators (int16 SpMV) do not fit in
+    // float32, so the diff must stay in DataType, matching torch::diff.
+    const DataType last_in = vec_in_lt(num_elems - 1);
+    vec_out_lt.SetValue(num_elems - 1,
+                        static_cast<DataType>(overlap - last_in));
+
+    diff_out_q_.EnQue<DataType>(vec_out_lt);
+    diff_in_q_.FreeTensor<DataType>(vec_in_lt);
+  }
+
   TPipe pipe;
 
   TQue<QuePosition::VECIN, BUFFER_NUM> values_q_gather_;
   TQue<QuePosition::VECIN, BUFFER_NUM> idx_q_;
   TQue<QuePosition::VECOUT, BUFFER_NUM> output_q_;
+
+  // Phase-2 diff queues (only initialized when `EnableDiff`).
+  TQue<QuePosition::VECIN, BUFFER_NUM> diff_in_q_;
+  TQue<QuePosition::VECOUT, BUFFER_NUM> diff_out_q_;
 
   TBuf<QuePosition::VECCALC> threshold_up_buf_;
   TBuf<QuePosition::VECCALC> threshold_down_buf_;
@@ -366,10 +485,15 @@ class KernelGatherSpmv {
   TBuf<QuePosition::VECCALC> mask_up_buf_;
   TBuf<QuePosition::VECCALC> mask_down_buf_;
   TBuf<QuePosition::VECCALC> gathered_mask_buff_;
+  TBuf<QuePosition::VECCALC> diff_tbuf_;
 
   GlobalTensor<DataType> global_values_;
   GlobalTensor<uint32_t> global_idx_;
-  GlobalTensor<DataType> global_z_;
+  // Phase-1 gather destination. Aliases the kernel output for a plain gather,
+  // or a scratch buffer when `EnableDiff` (phase 2 reads it back).
+  GlobalTensor<DataType> global_gathered_;
+  // Fused-diff output (length `idx_in_len_ - 1`); only used when `EnableDiff`.
+  GlobalTensor<DataType> global_diff_out_;
 
   const uint32_t vec_core_num_;
   const uint32_t values_in_len_;
@@ -385,25 +509,32 @@ class KernelGatherSpmv {
  * @tparam ForceMixMode Indicates if kernel should schedule dummy cube
  * operations to make sure it runs in mix mode. Can be safely set to `false`
  * when running inside another mix mode kernel.
+ * @tparam EnableDiff When `true`, fuses `torch::diff` into the kernel: the
+ * output is `out[i] = gather[i + 1] - gather[i]` with length `idx_in_len - 1`,
+ * and `gathered_scratch` must point to a buffer of length `idx_in_len`.
  *
  * @param [in] values_in Pointer to input vector.
  * @param [in] idx_in Pointer to column indices input vector.
  * @param [in] z_out Pointer to output vector.
+ * @param [in] gathered_scratch Scratch buffer of length `idx_in_len` used to
+ * stage the gather when `EnableDiff`; ignored otherwise.
  * @param [in] idx_in_len length of the indices array
  * @param [in] val_in_len length of the val_len array
  * @param [in] tile_len Length of the tile processed in a single iteration.
  */
 
-template <bool ForceMixMode = true>
+template <bool ForceMixMode = true, bool EnableDiff = false,
+          typename DataType = float>
 __aicore__ inline void run_gather_spmv(GM_ADDR values_in, GM_ADDR idx_in,
-                                       GM_ADDR z_out, uint32_t idx_in_len,
-                                       uint32_t val_in_len, uint32_t tile_len) {
+                                       GM_ADDR z_out, GM_ADDR gathered_scratch,
+                                       uint32_t idx_in_len, uint32_t val_in_len,
+                                       uint32_t tile_len) {
   if constexpr (ForceMixMode) {
     exec_mode::EnableCubeCores();
   }
   if ASCEND_IS_AIV {
-    KernelGatherSpmv<float> op(idx_in_len, val_in_len, tile_len);
-    op.Init(values_in, idx_in, z_out);
+    KernelGatherSpmv<DataType, EnableDiff> op(idx_in_len, val_in_len, tile_len);
+    op.Init(values_in, idx_in, z_out, gathered_scratch);
     op.Process();
   }
 }
