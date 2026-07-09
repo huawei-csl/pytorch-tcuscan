@@ -85,8 +85,8 @@ ascendc_library(
   src/scan_multi_cube.cpp
   src/simple_pad.cpp
   src/cube_reduce.cpp
-  src/spmv.cpp
   src/spmv_ops_sparse.cpp
+  src/spmv_v2.cpp
   src/spmv_v2_multi_cube.cpp
   src/tri_inv_cube_col_sweep.cpp)
 
