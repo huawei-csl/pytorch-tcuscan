@@ -227,17 +227,16 @@ at::Tensor run_spmv_v2(const at::Tensor& vals, const at::Tensor& indptr,
  * @param [in] lower_strict pre-computed strict lower triangular all-ones matrix
  * (SxS, fp16)
  *
- * @note The per-block segment offsets (formerly a host `searchsorted`) are
- * computed on-device by each AI Core group.
  * @note Only fp16 is supported: the multi-cube block scan is a half-only
  * kernel.
  *
  * @return Dense result vector of the SpMV product A @ x
  */
-at::Tensor run_spmv_v2_multi_cube(
-    const at::Tensor& vals, const at::Tensor& indptr, const at::Tensor& cols,
-    const at::Tensor& x, const at::Tensor& upper,
-    const at::Tensor& lower_strict) {
+at::Tensor run_spmv_v2_multi_cube(const at::Tensor& vals,
+                                  const at::Tensor& indptr,
+                                  const at::Tensor& cols, const at::Tensor& x,
+                                  const at::Tensor& upper,
+                                  const at::Tensor& lower_strict) {
   const auto vals_dtype = vals.options().dtype();
   const auto x_dtype = x.options().dtype();
   TORCH_CHECK(vals_dtype == torch::kHalf && x_dtype == torch::kHalf,
@@ -266,10 +265,6 @@ at::Tensor run_spmv_v2_multi_cube(
       host_utils::CeilDiv(num_tiles, block_dim);
   const uint32_t block_len = max_num_tiles_per_block * align_size;
 
-  // The per-block segment offsets (formerly a host searchsorted over `indptr`)
-  // are now computed on-device: each AI Core group binary-searches the full
-  // `indptr` for its block boundaries. No host prep or offset array needed.
-
   const at::Tensor z =
       at::zeros({num_segments},
                 at::TensorOptions().dtype(torch::kFloat32).device(device));
@@ -291,16 +286,13 @@ at::Tensor run_spmv_v2_multi_cube(
 
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
-  // Pass the full `indptr` base (leading zero included); the kernel does the
-  // on-device searchsorted and applies the +1 segment slice internally.
   ACLRT_LAUNCH_KERNEL(spmv_v2_multi_cube_fp16)
   (block_dim, acl_stream, const_cast<void*>(vals.storage().data()),
    const_cast<void*>(cols.storage().data()),
    const_cast<void*>(upper.storage().data()),
    const_cast<void*>(lower_strict.storage().data()),
    const_cast<void*>(indptr.storage().data()),
-   const_cast<void*>(x.storage().data()),
-   const_cast<void*>(z.storage().data()),
+   const_cast<void*>(x.storage().data()), const_cast<void*>(z.storage().data()),
    const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
 
   aclrtFree(tiling_device);

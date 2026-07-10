@@ -36,9 +36,7 @@ using namespace tcuscan;
  * size \f$\textit{tile\_len} \times \textit{tile\_len}\f$.
  * @param [in] lower Pointer to a strict lower-triangular all-ones square matrix
  * of size \f$\textit{tile\_len} \times \textit{tile\_len}\f$.
- * @param [in] segm_ind_in Pointer to the full CSR row-pointer array (`indptr`,
- * including the leading zero). Each AI Core group binary-searches it to derive
- * its own per-block segment offset, so no precomputed offset array is needed.
+ * @param [in] segm_ind_in Pointer to the full CSR row-pointer array.
  * @param [in] x_in Pointer to the dense input vector.
  * @param [out] vec_out Pointer to the output vector.
  * @param [in,out] workspace Pointer to a memory region used as workspace.
@@ -95,15 +93,16 @@ __aicore__ inline void run_spmv_v2_multi_cube(
 
     // Fused searchsorted: each group derives its own two per-block segment
     // offsets by binary-searching the full indptr for its block boundaries
-    // `sstart[id] = min(id * block_len, vec_len)`. This reproduces the host
-    // `searchsorted(indptr, sstart)` (lower_bound) without a precomputed array.
+    // `sstart[id] = min(id * block_len, vec_len)`
     const uint32_t sstart_id = scalar::Min<uint32_t>(id * block_len, vec_len);
     const uint32_t sstart_next =
         scalar::Min<uint32_t>((id + 1) * block_len, vec_len);
-    int32_t segm_ind_offset = static_cast<int32_t>(
-        scalar::LowerBoundGM<int32_t>(segm_ind_in, num_segments + 1, sstart_id));
-    const int32_t next_offset = static_cast<int32_t>(scalar::LowerBoundGM<int32_t>(
-        segm_ind_in, num_segments + 1, sstart_next));
+    int32_t segm_ind_offset =
+        static_cast<int32_t>(scalar::LowerBoundGM<int32_t>(
+            segm_ind_in, num_segments + 1, sstart_id));
+    const int32_t next_offset =
+        static_cast<int32_t>(scalar::LowerBoundGM<int32_t>(
+            segm_ind_in, num_segments + 1, sstart_next));
     const int32_t num_segments_per_block = next_offset - segm_ind_offset;
 
     // The boundaries of each segment must overlap
@@ -124,8 +123,6 @@ __aicore__ inline void run_spmv_v2_multi_cube(
     KernelSegSumCubeRevert<OutputT, true /* SyncBefore */,
                            true /* UseAtomicWrite */>
         op(block_len, num_segments_per_block, tile_len, block_vec_offset);
-    // `segm_ind_in` is the full indptr base; the `+1` skips the leading zero
-    // (this offset was applied host-side before the searchsorted fusion).
     op.Init(spec_block_scan_ws,
             segm_ind_in + (segm_ind_offset + 1) * sizeof(int32_t),
             vec_out + segm_ind_offset * sizeof(OutputT));
