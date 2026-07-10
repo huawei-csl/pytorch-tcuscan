@@ -36,9 +36,10 @@ using namespace tcuscan;
  * size \f$\textit{tile\_len} \times \textit{tile\_len}\f$.
  * @param [in] lower Pointer to a strict lower-triangular all-ones square matrix
  * of size \f$\textit{tile\_len} \times \textit{tile\_len}\f$.
- * @param [in] segm_ind_in Pointer to the segment indices vector.
+ * @param [in] segm_ind_in Pointer to the full CSR row-pointer array (`indptr`,
+ * including the leading zero). Each AI Core group binary-searches it to derive
+ * its own per-block segment offset, so no precomputed offset array is needed.
  * @param [in] x_in Pointer to the dense input vector.
- * @param [in] segm_offset_per_block Pointer to segment index offset per block.
  * @param [out] vec_out Pointer to the output vector.
  * @param [in,out] workspace Pointer to a memory region used as workspace.
  * @param [in] vec_len Input vector length (number of non-zeros).
@@ -50,9 +51,9 @@ using namespace tcuscan;
 template <typename T>
 __aicore__ inline void run_spmv_v2_multi_cube(
     GM_ADDR vec_in, GM_ADDR cols_in, GM_ADDR upper_in, GM_ADDR lower_in,
-    GM_ADDR segm_ind_in, GM_ADDR x_in, GM_ADDR segm_offset_per_block,
-    GM_ADDR vec_out, GM_ADDR workspace, uint32_t vec_len, uint32_t num_segments,
-    uint32_t x_len, uint32_t tile_len, uint32_t block_len) {
+    GM_ADDR segm_ind_in, GM_ADDR x_in, GM_ADDR vec_out, GM_ADDR workspace,
+    uint32_t vec_len, uint32_t num_segments, uint32_t x_len, uint32_t tile_len,
+    uint32_t block_len) {
   using OutputT = tcuscan::cube_unit::CubeOutType_t<T>;
 
   const uint32_t align_size = tile_len * tile_len;
@@ -89,14 +90,20 @@ __aicore__ inline void run_spmv_v2_multi_cube(
   }
 
   if ASCEND_IS_AIV {
-    const uint32_t num_blocks = AscendC::GetBlockNum();
-
     // id is the id of each AI Core group (2 AIVs and 1 AIC core)
     const auto id = GetBlockIdx() / GetTaskRation();
-    int32_t segm_ind_offset =
-        scalar::GetGMValue<int32_t>(segm_offset_per_block, id, num_blocks + 1);
-    const int32_t next_offset = scalar::GetGMValue<int32_t>(
-        segm_offset_per_block, id + 1, num_blocks + 1);
+
+    // Fused searchsorted: each group derives its own two per-block segment
+    // offsets by binary-searching the full indptr for its block boundaries
+    // `sstart[id] = min(id * block_len, vec_len)`. This reproduces the host
+    // `searchsorted(indptr, sstart)` (lower_bound) without a precomputed array.
+    const uint32_t sstart_id = scalar::Min<uint32_t>(id * block_len, vec_len);
+    const uint32_t sstart_next =
+        scalar::Min<uint32_t>((id + 1) * block_len, vec_len);
+    int32_t segm_ind_offset = static_cast<int32_t>(
+        scalar::LowerBoundGM<int32_t>(segm_ind_in, num_segments + 1, sstart_id));
+    const int32_t next_offset = static_cast<int32_t>(scalar::LowerBoundGM<int32_t>(
+        segm_ind_in, num_segments + 1, sstart_next));
     const int32_t num_segments_per_block = next_offset - segm_ind_offset;
 
     // The boundaries of each segment must overlap
@@ -117,7 +124,10 @@ __aicore__ inline void run_spmv_v2_multi_cube(
     KernelSegSumCubeRevert<OutputT, true /* SyncBefore */,
                            true /* UseAtomicWrite */>
         op(block_len, num_segments_per_block, tile_len, block_vec_offset);
-    op.Init(spec_block_scan_ws, segm_ind_in + segm_ind_offset * sizeof(int32_t),
+    // `segm_ind_in` is the full indptr base; the `+1` skips the leading zero
+    // (this offset was applied host-side before the searchsorted fusion).
+    op.Init(spec_block_scan_ws,
+            segm_ind_in + (segm_ind_offset + 1) * sizeof(int32_t),
             vec_out + segm_ind_offset * sizeof(OutputT));
     op.Process();
   }
@@ -134,17 +144,17 @@ __aicore__ inline void run_spmv_v2_multi_cube(
  * @param [in] cols_in Pointer to the CSR column indices array.
  * @param [in] upper Pointer to an upper-triangular all-ones matrix.
  * @param [in] lower Pointer to a strict lower-triangular all-ones matrix.
- * @param [in] indptr Pointer to the segment indices vector (CSR row pointers).
+ * @param [in] indptr Pointer to the full CSR row-pointer array (`indptr`,
+ * including the leading zero).
  * @param [in] x_in Pointer to the dense input vector.
- * @param [in] segment_offsets Pointer to the segment offset per block.
  * @param [out] vec_out Pointer to the output vector.
  * @param [in,out] workspace Pointer to workspace.
  * @param [in] tiling_gm Pointer to the tiling buffer.
  */
 extern "C" __global__ __aicore__ void spmv_v2_multi_cube_fp16(
     GM_ADDR vec_in, GM_ADDR cols_in, GM_ADDR upper, GM_ADDR lower,
-    GM_ADDR indptr, GM_ADDR x_in, GM_ADDR segment_offsets, GM_ADDR vec_out,
-    GM_ADDR workspace, GM_ADDR tiling_gm) {
+    GM_ADDR indptr, GM_ADDR x_in, GM_ADDR vec_out, GM_ADDR workspace,
+    GM_ADDR tiling_gm) {
   tcuscan::SpMVTiling tiling;
   GetTilingData(&tiling, tiling_gm);
 
@@ -155,6 +165,6 @@ extern "C" __global__ __aicore__ void spmv_v2_multi_cube_fp16(
   const uint32_t block_len = tiling.block_len;
 
   run_spmv_v2_multi_cube<half>(vec_in, cols_in, upper, lower, indptr, x_in,
-                               segment_offsets, vec_out, workspace, vec_len,
-                               num_segments, x_len, tile_len, block_len);
+                               vec_out, workspace, vec_len, num_segments, x_len,
+                               tile_len, block_len);
 }

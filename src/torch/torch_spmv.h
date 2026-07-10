@@ -15,7 +15,6 @@
 #include "aclrtlaunch_spmv_v2_multi_cube_fp16.h"
 #include "torch_gather.h"
 #include "torch_scan.h"
-#include "torch_searchsorted.h"
 #include "torch_seg_ops.h"
 
 namespace tcuscan {
@@ -227,9 +226,9 @@ at::Tensor run_spmv_v2(const at::Tensor& vals, const at::Tensor& indptr,
  * @param [in] upper pre-computed upper triangular all-ones matrix (SxS, fp16)
  * @param [in] lower_strict pre-computed strict lower triangular all-ones matrix
  * (SxS, fp16)
- * @param [in] segm_offsets Segment start index offset per block. Optional; when
- * omitted it is computed internally from `indptr`.
  *
+ * @note The per-block segment offsets (formerly a host `searchsorted`) are
+ * computed on-device by each AI Core group.
  * @note Only fp16 is supported: the multi-cube block scan is a half-only
  * kernel.
  *
@@ -238,8 +237,7 @@ at::Tensor run_spmv_v2(const at::Tensor& vals, const at::Tensor& indptr,
 at::Tensor run_spmv_v2_multi_cube(
     const at::Tensor& vals, const at::Tensor& indptr, const at::Tensor& cols,
     const at::Tensor& x, const at::Tensor& upper,
-    const at::Tensor& lower_strict,
-    c10::optional<at::Tensor> segm_offsets = c10::nullopt) {
+    const at::Tensor& lower_strict) {
   const auto vals_dtype = vals.options().dtype();
   const auto x_dtype = x.options().dtype();
   TORCH_CHECK(vals_dtype == torch::kHalf && x_dtype == torch::kHalf,
@@ -268,19 +266,9 @@ at::Tensor run_spmv_v2_multi_cube(
       host_utils::CeilDiv(num_tiles, block_dim);
   const uint32_t block_len = max_num_tiles_per_block * align_size;
 
-  at::Tensor segm_offsets_;
-  if (segm_offsets.has_value()) {
-    segm_offsets_ = segm_offsets.value();
-  } else {
-    const at::Tensor sstart = torch::clamp(
-        torch::arange(
-            0, block_dim + 1,
-            torch::TensorOptions().dtype(torch::kInt32).device(device)) *
-            block_len,
-        c10::nullopt, static_cast<int32_t>(nnz));
-
-    segm_offsets_ = tcuscan::run_searchsorted(indptr, sstart);
-  }
+  // The per-block segment offsets (formerly a host searchsorted over `indptr`)
+  // are now computed on-device: each AI Core group binary-searches the full
+  // `indptr` for its block boundaries. No host prep or offset array needed.
 
   const at::Tensor z =
       at::zeros({num_segments},
@@ -301,20 +289,17 @@ at::Tensor run_spmv_v2_multi_cube(
   const at::Tensor workspace_tensor =
       tcuscan::alloc_zeros_workspace(workspace_size, device);
 
-  // Offset indptr by one element, since first element is always zero.
-  void* indptr_data = static_cast<void*>(
-      static_cast<uint8_t*>(const_cast<void*>(indptr.storage().data())) +
-      indptr.element_size());
-
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
+  // Pass the full `indptr` base (leading zero included); the kernel does the
+  // on-device searchsorted and applies the +1 segment slice internally.
   ACLRT_LAUNCH_KERNEL(spmv_v2_multi_cube_fp16)
   (block_dim, acl_stream, const_cast<void*>(vals.storage().data()),
    const_cast<void*>(cols.storage().data()),
    const_cast<void*>(upper.storage().data()),
    const_cast<void*>(lower_strict.storage().data()),
-   const_cast<void*>(indptr_data), const_cast<void*>(x.storage().data()),
-   const_cast<void*>(segm_offsets_.storage().data()),
+   const_cast<void*>(indptr.storage().data()),
+   const_cast<void*>(x.storage().data()),
    const_cast<void*>(z.storage().data()),
    const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
 

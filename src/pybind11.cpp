@@ -81,7 +81,6 @@ PYBIND11_MODULE(tcuscan_ops, m) {
         pybind11::arg("vals"), pybind11::arg("indptr"), pybind11::arg("cols"),
         pybind11::arg("x"), pybind11::arg("upper"),
         pybind11::arg("lower_strict"),
-        pybind11::arg("segm_offsets") = pybind11::none(),
         "Sparse Matrix-Vector Multiplication Using Multi-cube Segmented Sum");
   m.def("run_searchsorted", &tcuscan::run_searchsorted, pybind11::arg("sorted"),
         pybind11::arg("values"),
