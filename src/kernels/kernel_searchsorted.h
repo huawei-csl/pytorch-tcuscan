@@ -24,10 +24,19 @@ namespace tcuscan {
  * reads (it is typically far too large to stage in the Unified Buffer), so each
  * needle costs \f$O(\log(\textit{data\_len}))\f$ GM reads.
  *
- * The needles are independent, so they are distributed across the vector cores.
- * To keep concurrent output writes safe, each core owns a whole number of
- * `BLOCK`-sized (32-byte-aligned) output tiles, so two cores never share a GM
- * write granule.
+ * The needles are independent, so they are distributed across the vector cores
+ * in `BLOCK`-sized (32-byte-aligned) output tiles: each core searches a
+ * contiguous run of needles and writes them with one `CopyVecToGm`.
+ *
+ * Note on granularity: a finer one-needle-per-core scheme (each core writing a
+ * single result with `CopyScalarToGm`/`DataCopyPad`) is also correct -- masked
+ * sub-32-byte `DataCopyPad` stores are safe even when neighbouring cores hit
+ * the same cache line, the same idiom `KernelReduceTiles` uses. But it measured
+ * ~1us slower here: the runtime floor is fixed mix-mode launch + per-core MTE
+ * store overhead, not the serial binary search, so spreading a handful of
+ * needles over many cores only adds overhead. (A scalar `SetGMValue` per result
+ * would instead corrupt output -- its cache-line read-modify-write races
+ * between cores.) The block scheme keeps the core count near the sweet spot.
  *
  * @tparam T Data type of the sorted array and needle values. Only `int32_t` is
  * currently instantiated.
