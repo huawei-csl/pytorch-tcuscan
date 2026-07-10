@@ -26,9 +26,6 @@ namespace tcuscan {
  * for each needle `values[i]`, returns the first index `j` such that
  * `sorted[j] >= values[i]`.
  *
- * Runs asynchronously on the current NPU stream (no internal synchronization),
- * so it composes inside other host wrappers.
- *
  * @param sorted Sorted (ascending) int32 haystack tensor.
  * @param values int32 needle values.
  * @return int32 tensor of insertion indices, same length as `values`.

@@ -28,16 +28,6 @@ namespace tcuscan {
  * in `BLOCK`-sized (32-byte-aligned) output tiles: each core searches a
  * contiguous run of needles and writes them with one `CopyVecToGm`.
  *
- * Note on granularity: a finer one-needle-per-core scheme (each core writing a
- * single result with `CopyScalarToGm`/`DataCopyPad`) is also correct -- masked
- * sub-32-byte `DataCopyPad` stores are safe even when neighbouring cores hit
- * the same cache line, the same idiom `KernelReduceTiles` uses. But it measured
- * ~1us slower here: the runtime floor is fixed mix-mode launch + per-core MTE
- * store overhead, not the serial binary search, so spreading a handful of
- * needles over many cores only adds overhead. (A scalar `SetGMValue` per result
- * would instead corrupt output -- its cache-line read-modify-write races
- * between cores.) The block scheme keeps the core count near the sweet spot.
- *
  * @tparam T Data type of the sorted array and needle values. Only `int32_t` is
  * currently instantiated.
  */
@@ -60,8 +50,7 @@ class KernelSearchsorted {
         data_len_(data_len),
         num_values_(num_values),
         num_blocks_(scalar::CeilDiv(num_values_, BLOCK)),
-        max_num_blocks_per_core_(
-            scalar::CeilDiv(num_blocks_, vec_core_num_)) {}
+        max_num_blocks_per_core_(scalar::CeilDiv(num_blocks_, vec_core_num_)) {}
 
   /**
    * @brief Initialize global and local memory structures.

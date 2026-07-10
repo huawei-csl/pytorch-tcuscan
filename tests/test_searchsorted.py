@@ -42,9 +42,9 @@ def _run_and_check(sorted_cpu: torch.Tensor, values_cpu: torch.Tensor):
 
     assert output.dtype == torch.int32
     assert output.shape == values_npu.shape
-    assert torch.equal(output, reference), (
-        f"mismatch\n got: {output.cpu()}\n exp: {reference.cpu()}"
-    )
+    assert torch.equal(
+        output, reference
+    ), f"mismatch\n got: {output.cpu()}\n exp: {reference.cpu()}"
 
 
 @pytest.mark.parametrize("data_len", [1, 8, 127, 1024, 65537])
@@ -61,12 +61,8 @@ def test_tcuscan_searchsorted_random(data_len, num_values):
 def test_tcuscan_searchsorted_edges():
     # Contiguous run with duplicates; exercise below-min, above-max, exact ties,
     # and interior boundaries.
-    sorted_cpu = torch.tensor(
-        [0, 0, 2, 2, 2, 5, 9, 9, 10], dtype=torch.int32
-    )
-    values_cpu = torch.tensor(
-        [-1, 0, 1, 2, 3, 5, 8, 9, 10, 11], dtype=torch.int32
-    )
+    sorted_cpu = torch.tensor([0, 0, 2, 2, 2, 5, 9, 9, 10], dtype=torch.int32)
+    values_cpu = torch.tensor([-1, 0, 1, 2, 3, 5, 8, 9, 10, 11], dtype=torch.int32)
     _run_and_check(sorted_cpu, values_cpu)
 
 
