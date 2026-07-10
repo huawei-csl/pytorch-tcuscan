@@ -51,7 +51,20 @@ __aicore__ inline void run_spmv_v2(
   GM_ADDR const csr_products_ws = workspace;
   GM_ADDR const spec_block_scan_ws = workspace + pad_size;
 
-  const uint32_t csr_gather_tile_len = align_size > 1024 ? 1024 : align_size;
+  // Size the gather tile to the largest that fits in the vector core's Unified
+  // Buffer. Per `KernelCSRGather::Init`, the UB footprint is
+  // i.e. UB = x_len*sizeof(T) + tile*(BUFFER_NUM*(2*sizeof(T)+4) + 4), with
+  // BUFFER_NUM == 2. Solve for the tile and floor it to the UB alignment.
+  constexpr uint32_t TILE_BYTE_COST =
+      2 * (2 * sizeof(T) + sizeof(uint32_t)) + sizeof(uint32_t);
+  const uint32_t x_bytes = x_len * sizeof(T);
+  const uint32_t ub_bound_tile =
+      x_bytes < UB_SIZE_BYTES ? (UB_SIZE_BYTES - x_bytes) / TILE_BYTE_COST : 0;
+  // No point tiling larger than the whole padded vector; keep 32B UB alignment.
+  const uint32_t csr_gather_tile_len = scalar::AlignDown<uint32_t>(
+      scalar::Min<uint32_t>(ub_bound_tile, padded_vec_len),
+      UB_ALIGNMENT / sizeof(T));
+
   run_csr_gather<T, false>(vec_in, cols_in, x_in, csr_products_ws, vec_len,
                            x_len, csr_gather_tile_len);
 
