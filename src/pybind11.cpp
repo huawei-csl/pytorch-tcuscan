@@ -22,6 +22,7 @@
 #include "torch/torch_pad.h"
 #include "torch/torch_reduce.h"
 #include "torch/torch_scan.h"
+#include "torch/torch_searchsorted.h"
 #include "torch/torch_seg_ops.h"
 #include "torch/torch_sort.h"
 #include "torch/torch_split.h"
@@ -82,6 +83,9 @@ PYBIND11_MODULE(tcuscan_ops, m) {
         pybind11::arg("lower_strict"),
         pybind11::arg("segm_offsets") = pybind11::none(),
         "Sparse Matrix-Vector Multiplication Using Multi-cube Segmented Sum");
+  m.def("run_searchsorted", &tcuscan::run_searchsorted, pybind11::arg("sorted"),
+        pybind11::arg("values"),
+        "Binary search (lower_bound) into a sorted int32 array");
   m.def("run_copy", &tcuscan::run_copy, "Copy single core");
   m.def("run_scan_batch", &tcuscan::run_scan_batch, "Scan Batch");
   m.def("run_scan_single_core", &tcuscan::run_scan_single_core,

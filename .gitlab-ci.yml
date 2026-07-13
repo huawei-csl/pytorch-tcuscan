@@ -172,6 +172,12 @@ test_diff:
     - make setup_ci
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_diff
 
+test_searchsorted:
+  <<: *test_config
+  script:
+    - make setup_ci
+    - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_searchsorted
+
 test_mcscan:
   <<: *test_config
   script:
