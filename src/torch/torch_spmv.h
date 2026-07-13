@@ -15,7 +15,6 @@
 #include "aclrtlaunch_spmv_v2_multi_cube_fp16.h"
 #include "torch_gather.h"
 #include "torch_scan.h"
-#include "torch_searchsorted.h"
 #include "torch_seg_ops.h"
 
 namespace tcuscan {
@@ -176,7 +175,7 @@ at::Tensor run_spmv_v2(const at::Tensor& vals, const at::Tensor& indptr,
   const uint32_t workspace_size =
       padded_nnz * (input_elem_size + sizeof(float));
   const at::Tensor workspace_tensor =
-      tcuscan::alloc_workspace(workspace_size, device);
+      tcuscan::alloc_zeros_workspace(workspace_size, device);
 
   // Offset indptr by one element, since first element is always zero.
   void* indptr_data = static_cast<void*>(
@@ -265,20 +264,6 @@ at::Tensor run_spmv_v2_multi_cube(const at::Tensor& vals,
   const uint32_t max_num_tiles_per_block =
       host_utils::CeilDiv(num_tiles, block_dim);
   const uint32_t block_len = max_num_tiles_per_block * align_size;
-
-  at::Tensor segm_offsets_;
-  if (segm_offsets.has_value()) {
-    segm_offsets_ = segm_offsets.value();
-  } else {
-    const at::Tensor sstart = torch::clamp(
-        torch::arange(
-            0, block_dim + 1,
-            torch::TensorOptions().dtype(torch::kInt32).device(device)) *
-            block_len,
-        c10::nullopt, static_cast<int32_t>(nnz));
-
-    segm_offsets_ = tcuscan::run_searchsorted(indptr, sstart);
-  }
 
   const at::Tensor z =
       at::zeros({num_segments},
