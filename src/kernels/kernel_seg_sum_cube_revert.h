@@ -161,13 +161,22 @@ class KernelSegSumCubeRevert {
 
   /**
    * @brief Run the kernel.
+   *
+   * When @p SyncBefore is set, the cube unit signals one vector core per AI
+   * Core group, so only the first vector core reverts the speculation while the
+   * second one only consumes the synchronization signals. Otherwise both vector
+   * cores revert their own block, which the caller must have partitioned via
+   * @p vec_start_offset.
    */
   __aicore__ inline void Process() {
-    if (GetSubBlockIdx() == 0) {
-      PipelineProcessWithCube();
-    } else {
-      SyncWithCubeNoop();
+    if constexpr (SyncBefore) {
+      if (GetSubBlockIdx() != 0) {
+        SyncWithCubeNoop();
+        return;
+      }
     }
+
+    PipelineProcessWithCube();
   }
 
  private:
