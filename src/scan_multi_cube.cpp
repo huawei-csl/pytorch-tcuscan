@@ -79,6 +79,8 @@ __aicore__ inline void _run_scan_multi_cube(GM_ADDR input_vec, GM_ADDR lower,
 extern "C" __global__ __aicore__ void scan_multi_cube_fp16(
     GM_ADDR input_vec, GM_ADDR lower, GM_ADDR upper_strict, GM_ADDR output_vec,
     GM_ADDR workspace, GM_ADDR tiling_gm) {
+  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2);
+
   tcuscan::_run_scan_multi_cube<half>(input_vec, lower, upper_strict,
                                       output_vec, workspace, tiling_gm);
 }

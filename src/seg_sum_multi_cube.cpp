@@ -116,6 +116,8 @@ extern "C" __global__ __aicore__ void seg_sum_multi_cube_fp16(
     GM_ADDR vec_in, GM_ADDR upper, GM_ADDR lower, GM_ADDR indptr,
     GM_ADDR segment_offsets, GM_ADDR vec_out, GM_ADDR workspace,
     GM_ADDR tiling_gm) {
+  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2);
+
   tcuscan::SegSumMultiCubeTiling tiling;
   GetTilingData(&tiling, tiling_gm);
 

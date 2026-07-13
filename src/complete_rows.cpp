@@ -55,6 +55,8 @@ extern "C" __global__ __aicore__ void complete_rows_fp32(GM_ADDR input_vec,
                                                          GM_ADDR output_vec,
                                                          GM_ADDR workspace,
                                                          GM_ADDR tilingGm) {
+  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2);
+
   (void)workspace;
   tcuscan::run_complete_rows<float>(input_vec, input_sums, output_vec,
                                     tilingGm);
@@ -74,6 +76,8 @@ extern "C" __global__ __aicore__ void complete_rows_int32(GM_ADDR input_vec,
                                                           GM_ADDR output_vec,
                                                           GM_ADDR workspace,
                                                           GM_ADDR tilingGm) {
+  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2);
+
   (void)workspace;
   tcuscan::run_complete_rows<int32_t>(input_vec, input_sums, output_vec,
                                       tilingGm);

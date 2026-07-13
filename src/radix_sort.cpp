@@ -38,6 +38,8 @@ extern "C" __global__ __aicore__ void radix_sort_fp16(GM_ADDR in, GM_ADDR out,
                                                       GM_ADDR indices,
                                                       GM_ADDR workspace,
                                                       GM_ADDR tiling) {
+  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2);
+
   /// Indicates the order of sorting
   constexpr bool descending = false;
   tcuscan::RadixSortTiling tiling_data;
@@ -110,6 +112,8 @@ extern "C" __global__ __aicore__ void radix_sort_int16(GM_ADDR in, GM_ADDR out,
                                                        GM_ADDR indices,
                                                        GM_ADDR workspace,
                                                        GM_ADDR tiling) {
+  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2);
+
   /// Indicates the order of sorting
   constexpr bool descending = false;
   tcuscan::RadixSortTiling tiling_data;

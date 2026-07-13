@@ -22,6 +22,8 @@ extern "C" __global__ __aicore__ void mc_gather_fp32(GM_ADDR values_in,
                                                      GM_ADDR z_out,
                                                      GM_ADDR workspace,
                                                      GM_ADDR tiling_gm) {
+  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2);
+
   (void)workspace;
   tcuscan::McGatherTiling tiling;
   GetTilingData(&tiling, tiling_gm);
@@ -44,6 +46,8 @@ extern "C" __global__ __aicore__ void mc_gather_fp16(GM_ADDR values_in,
                                                      GM_ADDR z_out,
                                                      GM_ADDR workspace,
                                                      GM_ADDR tiling_gm) {
+  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2);
+
   (void)workspace;
   tcuscan::McGatherTiling tiling;
   GetTilingData(&tiling, tiling_gm);

@@ -21,6 +21,8 @@
 extern "C" __global__ __aicore__ void seg_scan_vec_single_core(
     GM_ADDR vec_in, GM_ADDR f_in, GM_ADDR vec_out, GM_ADDR workspace,
     GM_ADDR tilingGm) {
+  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2);
+
   (void)workspace;
   tcuscan::SegScanVecSingleCoreTiling tiling_data;
   GetTilingData(&tiling_data, tilingGm);

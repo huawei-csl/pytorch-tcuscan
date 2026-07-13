@@ -53,6 +53,8 @@ extern "C" __global__ __aicore__ void row_scan_fp16(GM_ADDR input_vec,
                                                     GM_ADDR output_vec,
                                                     GM_ADDR workspace,
                                                     GM_ADDR tilingGm) {
+  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2);
+
   (void)workspace;
   tcuscan::run_row_scan<half>(input_vec, output_vec, tilingGm);
 }

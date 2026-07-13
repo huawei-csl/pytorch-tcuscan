@@ -30,6 +30,8 @@ using namespace tcuscan;
 extern "C" __global__ __aicore__ void seg_sum_single_core_fp16(
     GM_ADDR vec_in, GM_ADDR indptr, GM_ADDR vec_out, GM_ADDR workspace,
     GM_ADDR tiling_gm) {
+  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2);
+
   tcuscan::SegSumSingleCoreTiling tiling;
   GetTilingData(&tiling, tiling_gm);
 
@@ -60,6 +62,8 @@ extern "C" __global__ __aicore__ void seg_sum_single_core_fp16(
 extern "C" __global__ __aicore__ void seg_sum_single_core_int8(
     GM_ADDR vec_in, GM_ADDR indptr, GM_ADDR vec_out, GM_ADDR workspace,
     GM_ADDR tiling_gm) {
+  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2);
+
   tcuscan::SegSumSingleCoreTiling tiling;
   GetTilingData(&tiling, tiling_gm);
 

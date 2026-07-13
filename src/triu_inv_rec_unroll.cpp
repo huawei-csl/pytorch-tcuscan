@@ -20,6 +20,8 @@
 
 extern "C" __global__ __aicore__ void triu_inv_rec_unroll_fp16(
     GM_ADDR vec_in, GM_ADDR vec_out, GM_ADDR workspace, GM_ADDR tiling) {
+  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2);
+
   TriuInvRecUnrollTiling tiling_data;
   tcuscan::GetTilingData(&tiling_data, tiling);
 

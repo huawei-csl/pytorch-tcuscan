@@ -22,6 +22,8 @@ extern "C" __global__ __aicore__ void scan_batch_fp16(GM_ADDR input_vec,
                                                       GM_ADDR output_vec,
                                                       GM_ADDR workspace,
                                                       GM_ADDR tiling) {
+  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2);
+
   using tcuscan::run_row_scan_kernel;
   using tcuscan::run_scan_batch_kernel;
 
@@ -60,6 +62,8 @@ extern "C" __global__ __aicore__ void scan_batch_fp32(GM_ADDR input_vec,
                                                       GM_ADDR output_vec,
                                                       GM_ADDR workspace,
                                                       GM_ADDR tiling) {
+  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2);
+
   using tcuscan::run_row_scan_kernel;
   using tcuscan::run_scan_batch_kernel;
 

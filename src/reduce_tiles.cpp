@@ -49,6 +49,8 @@ extern "C" __global__ __aicore__ void reduce_tiles_fp16(GM_ADDR input_vec,
                                                         GM_ADDR output_vec,
                                                         GM_ADDR workspace,
                                                         GM_ADDR tiling_gm) {
+  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2);
+
   tcuscan::ReduceTilesTiling tiling;
   GetTilingData(&tiling, tiling_gm);
 
@@ -71,6 +73,8 @@ extern "C" __global__ __aicore__ void reduce_tiles_int8(GM_ADDR input_vec,
                                                         GM_ADDR output_vec,
                                                         GM_ADDR workspace,
                                                         GM_ADDR tiling_gm) {
+  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2);
+
   tcuscan::ReduceTilesTiling tiling;
   GetTilingData(&tiling, tiling_gm);
 

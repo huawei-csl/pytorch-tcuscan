@@ -19,6 +19,8 @@
 extern "C" __global__ __aicore__ void gen_lower_fp16(GM_ADDR dst,
                                                      GM_ADDR workspace,
                                                      GM_ADDR tiling) {
+  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2);
+
   (void)workspace;
   tcuscan::GenLowerTiling tiling_data;
   GetTilingData(&tiling_data, tiling);
@@ -51,6 +53,8 @@ extern "C" __global__ __aicore__ void gen_lower_fp16(GM_ADDR dst,
 extern "C" __global__ __aicore__ void gen_lower_int8(GM_ADDR dst,
                                                      GM_ADDR workspace,
                                                      GM_ADDR tiling) {
+  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2);
+
   (void)workspace;
   tcuscan::GenLowerTiling tiling_data;
   GetTilingData(&tiling_data, tiling);

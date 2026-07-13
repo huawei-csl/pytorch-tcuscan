@@ -145,6 +145,8 @@ extern "C" __global__ __aicore__ void spmv_v2_multi_cube_fp16(
     GM_ADDR vec_in, GM_ADDR cols_in, GM_ADDR upper, GM_ADDR lower,
     GM_ADDR indptr, GM_ADDR x_in, GM_ADDR segment_offsets, GM_ADDR vec_out,
     GM_ADDR workspace, GM_ADDR tiling_gm) {
+  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2);
+
   tcuscan::SpMVTiling tiling;
   GetTilingData(&tiling, tiling_gm);
 

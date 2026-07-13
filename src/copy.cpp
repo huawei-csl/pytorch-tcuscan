@@ -20,6 +20,8 @@
 extern "C" __global__ __aicore__ void copy_fp16(GM_ADDR in, GM_ADDR out,
                                                 GM_ADDR workspace,
                                                 GM_ADDR tiling) {
+  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2);
+
   (void)workspace;
   tcuscan::CopyTiling tiling_data;
   GetTilingData(&tiling_data, tiling);
@@ -38,6 +40,8 @@ extern "C" __global__ __aicore__ void copy_fp16(GM_ADDR in, GM_ADDR out,
 extern "C" __global__ __aicore__ void copy_fp32(GM_ADDR in, GM_ADDR out,
                                                 GM_ADDR workspace,
                                                 GM_ADDR tiling) {
+  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2);
+
   (void)workspace;
   tcuscan::CopyTiling tiling_data;
   GetTilingData(&tiling_data, tiling);
