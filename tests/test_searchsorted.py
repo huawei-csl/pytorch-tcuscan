@@ -70,7 +70,8 @@ def test_tcuscan_searchsorted_csr_indptr_like():
     # Mimics the spmv_v2_multi_cube use: monotonic CSR row-pointer haystack and
     # a handful of block-boundary needles.
     nnz = 100000
-    num_segments = 4096
+    num_segments = 4000
+
     indptr = torch.sort(
         torch.randint(0, nnz, (num_segments,), dtype=torch.int32)
     ).values
