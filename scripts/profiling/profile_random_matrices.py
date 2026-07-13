@@ -444,15 +444,14 @@ def benchmark(  # noqa
     else:
         alpha_str = ""
     filename = f"random_matrices_{distr}_{op_name}_{dtype}_{ '' if (density is None) else str(density)}.csv"
+    write_header = not os.path.exists(filename) or os.path.getsize(filename) == 0
     with open(
         filename,
         "a",
         encoding="UTF-8",
     ) as fd:
-        global once
-        if once is True:
+        if write_header:
             fd.write(f"operator,dtype,size,nrow,{alpha_str}{density_str}time_us\n")
-            once = False
         time = fn(device)
         op_name = f"{op_name}" + f"{'' if (density is None) else '_' + str(density)}"
         density_str = "" if (density is None) else f"{density},"
@@ -463,8 +462,6 @@ def benchmark(  # noqa
         )
     fd.close()
 
-
-once = True
 
 if __name__ == "__main__":
 
