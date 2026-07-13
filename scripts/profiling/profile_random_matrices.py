@@ -463,7 +463,7 @@ def benchmark(  # noqa
     fd.close()
 
 
-if __name__ == "__main__":
+if __name__ == "__main__": #noqa
 
     parser = argparse.ArgumentParser(
         prog="torch_profile", description="Profiler for torch_npu operators"
