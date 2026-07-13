@@ -11,10 +11,16 @@
 
 #include "../tiling/heuristics/heuristics_histogram.h"
 #include "../tiling/tiling_histogram.h"
-#include "aclrtlaunch_histogram_fp16.h"
 #include "commons.h"
 #include "tiling/platform/platform_ascendc.h"
 #include "torch_npu/csrc/core/npu/NPUStream.h"
+
+// AscendC kernel entry points launched below with `<<<>>>`; defined in
+// histogram.cpp.
+extern "C" __global__ __aicore__ void histogram_fp16(__gm__ void* vec_in,
+                                                     __gm__ void* vec_out,
+                                                     __gm__ void* workspace,
+                                                     __gm__ void* tiling_gm);
 
 namespace tcuscan {
 
@@ -54,10 +60,10 @@ at::Tensor run_histogram(const at::Tensor& x, uint32_t num_bins) {
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
   if (dtype == at::kHalf) {
-    ACLRT_LAUNCH_KERNEL(histogram_fp16)
-    (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
-     const_cast<void*>(z.storage().data()),
-     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+    histogram_fp16<<<block_dim, nullptr, acl_stream>>>(
+        const_cast<void*>(x.storage().data()),
+        const_cast<void*>(z.storage().data()),
+        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else {
     /* Unsupported */
   }

@@ -11,12 +11,20 @@
 
 #include "../tiling/tiling_count_if.h"
 #include "../tiling/tiling_greater_equal.h"
-#include "aclrtlaunch_count_if_fp16.h"
-#include "aclrtlaunch_greater_equal_fp16.h"
 #include "commons.h"
 #include "tiling/platform/platform_ascendc.h"
 #include "torch_npu/csrc/core/npu/NPUStream.h"
 #include "workspace.h"
+
+// AscendC kernel entry points launched below with `<<<>>>`; defined in
+// compare.cpp.
+extern "C" __global__ __aicore__ void count_if_fp16(__gm__ void* vec_in,
+                                                    __gm__ void* vec_out,
+                                                    __gm__ void* workspace,
+                                                    __gm__ void* tiling_gm);
+extern "C" __global__ __aicore__ void greater_equal_fp16(
+    __gm__ void* vec_in, __gm__ void* vec_out, __gm__ void* workspace,
+    __gm__ void* tiling_gm);
 
 namespace tcuscan {
 
@@ -53,10 +61,10 @@ at::Tensor run_count_if(const at::Tensor& x, float pivot, uint32_t tile_len,
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
   if (dtype == at::kHalf) {
-    ACLRT_LAUNCH_KERNEL(count_if_fp16)
-    (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
-     const_cast<void*>(z.storage().data()),
-     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+    count_if_fp16<<<block_dim, nullptr, acl_stream>>>(
+        const_cast<void*>(x.storage().data()),
+        const_cast<void*>(z.storage().data()),
+        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else {
     /* Unsupported */
   }
@@ -93,10 +101,10 @@ at::Tensor run_greater_equal(const at::Tensor& x, float pivot,
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
   if (dtype == at::kHalf) {
-    ACLRT_LAUNCH_KERNEL(greater_equal_fp16)
-    (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
-     const_cast<void*>(z.storage().data()),
-     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+    greater_equal_fp16<<<block_dim, nullptr, acl_stream>>>(
+        const_cast<void*>(x.storage().data()),
+        const_cast<void*>(z.storage().data()),
+        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else {
     /* Not supported */
   }

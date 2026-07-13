@@ -13,16 +13,37 @@
 #include "../tiling/tiling_csr_gather.h"
 #include "../tiling/tiling_gather_spmv.h"
 #include "../tiling/tiling_mc_gather.h"
-#include "aclrtlaunch_csr_gather_fp16.h"
-#include "aclrtlaunch_csr_gather_fp32.h"
-#include "aclrtlaunch_csr_gather_int16.h"
-#include "aclrtlaunch_gather_spmv.h"
-#include "aclrtlaunch_mc_gather_fp16.h"
-#include "aclrtlaunch_mc_gather_fp32.h"
 #include "commons.h"
 #include "tiling/platform/platform_ascendc.h"
 #include "torch_npu/csrc/core/npu/NPUStream.h"
 #include "workspace.h"
+
+// AscendC kernel entry points launched below with `<<<>>>`; defined in
+// csr_gather.cpp, gather_spmv.cpp, mc_gather.cpp.
+extern "C" __global__ __aicore__ void csr_gather_fp16(
+    __gm__ void* values_in, __gm__ void* cols_in, __gm__ void* x_in,
+    __gm__ void* z_out, __gm__ void* workspace, __gm__ void* tiling_gm);
+extern "C" __global__ __aicore__ void csr_gather_fp32(
+    __gm__ void* values_in, __gm__ void* cols_in, __gm__ void* x_in,
+    __gm__ void* z_out, __gm__ void* workspace, __gm__ void* tiling_gm);
+extern "C" __global__ __aicore__ void csr_gather_int16(
+    __gm__ void* values_in, __gm__ void* cols_in, __gm__ void* x_in,
+    __gm__ void* z_out, __gm__ void* workspace, __gm__ void* tiling_gm);
+extern "C" __global__ __aicore__ void gather_spmv(__gm__ void* values_in,
+                                                  __gm__ void* cols_in,
+                                                  __gm__ void* vec_out,
+                                                  __gm__ void* workspace,
+                                                  __gm__ void* tilingGm);
+extern "C" __global__ __aicore__ void mc_gather_fp16(__gm__ void* values_in,
+                                                     __gm__ void* indexes_in,
+                                                     __gm__ void* z_out,
+                                                     __gm__ void* workspace,
+                                                     __gm__ void* tiling_gm);
+extern "C" __global__ __aicore__ void mc_gather_fp32(__gm__ void* values_in,
+                                                     __gm__ void* indexes_in,
+                                                     __gm__ void* z_out,
+                                                     __gm__ void* workspace,
+                                                     __gm__ void* tiling_gm);
 
 namespace tcuscan {
 
@@ -62,17 +83,17 @@ at::Tensor run_mc_gather(const at::Tensor& values, const at::Tensor& idxs,
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
   if (dtype == torch::kHalf) {
-    ACLRT_LAUNCH_KERNEL(mc_gather_fp16)
-    (block_dim, acl_stream, const_cast<void*>(values.storage().data()),
-     const_cast<void*>(idxs.storage().data()),
-     const_cast<void*>(z.storage().data()),
-     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+    mc_gather_fp16<<<block_dim, nullptr, acl_stream>>>(
+        const_cast<void*>(values.storage().data()),
+        const_cast<void*>(idxs.storage().data()),
+        const_cast<void*>(z.storage().data()),
+        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else {
-    ACLRT_LAUNCH_KERNEL(mc_gather_fp32)
-    (block_dim, acl_stream, const_cast<void*>(values.storage().data()),
-     const_cast<void*>(idxs.storage().data()),
-     const_cast<void*>(z.storage().data()),
-     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+    mc_gather_fp32<<<block_dim, nullptr, acl_stream>>>(
+        const_cast<void*>(values.storage().data()),
+        const_cast<void*>(idxs.storage().data()),
+        const_cast<void*>(z.storage().data()),
+        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   }
 
   aclrtFree(tiling_device);
@@ -143,26 +164,26 @@ at::Tensor run_csr_gather(const at::Tensor& values, const at::Tensor& cols,
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
   if (dtype == torch::kHalf) {
-    ACLRT_LAUNCH_KERNEL(csr_gather_fp16)
-    (block_dim, acl_stream, const_cast<void*>(values.storage().data()),
-     const_cast<void*>(cols.storage().data()),
-     const_cast<void*>(x.storage().data()),
-     const_cast<void*>(z.storage().data()),
-     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+    csr_gather_fp16<<<block_dim, nullptr, acl_stream>>>(
+        const_cast<void*>(values.storage().data()),
+        const_cast<void*>(cols.storage().data()),
+        const_cast<void*>(x.storage().data()),
+        const_cast<void*>(z.storage().data()),
+        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else if (dtype == torch::kInt16) {
-    ACLRT_LAUNCH_KERNEL(csr_gather_int16)
-    (block_dim, acl_stream, const_cast<void*>(values.storage().data()),
-     const_cast<void*>(cols.storage().data()),
-     const_cast<void*>(x.storage().data()),
-     const_cast<void*>(z.storage().data()),
-     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+    csr_gather_int16<<<block_dim, nullptr, acl_stream>>>(
+        const_cast<void*>(values.storage().data()),
+        const_cast<void*>(cols.storage().data()),
+        const_cast<void*>(x.storage().data()),
+        const_cast<void*>(z.storage().data()),
+        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else if (dtype == torch::kFloat) {
-    ACLRT_LAUNCH_KERNEL(csr_gather_fp32)
-    (block_dim, acl_stream, const_cast<void*>(values.storage().data()),
-     const_cast<void*>(cols.storage().data()),
-     const_cast<void*>(x.storage().data()),
-     const_cast<void*>(z.storage().data()),
-     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+    csr_gather_fp32<<<block_dim, nullptr, acl_stream>>>(
+        const_cast<void*>(values.storage().data()),
+        const_cast<void*>(cols.storage().data()),
+        const_cast<void*>(x.storage().data()),
+        const_cast<void*>(z.storage().data()),
+        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   }
 
   aclrtFree(tiling_device);
@@ -201,11 +222,11 @@ at::Tensor run_gather_spmv(const at::Tensor& values, const at::Tensor& idxs,
 
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
-  ACLRT_LAUNCH_KERNEL(gather_spmv)
-  (block_dim, acl_stream, const_cast<void*>(values.storage().data()),
-   const_cast<void*>(idxs.storage().data()),
-   const_cast<void*>(z.storage().data()),
-   const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+  gather_spmv<<<block_dim, nullptr, acl_stream>>>(
+      const_cast<void*>(values.storage().data()),
+      const_cast<void*>(idxs.storage().data()),
+      const_cast<void*>(z.storage().data()),
+      const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   aclrtFree(tiling_device);
   aclrtSynchronizeStream(acl_stream);
 

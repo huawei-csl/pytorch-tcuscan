@@ -12,12 +12,22 @@
 #include <torch/extension.h>
 
 #include "../tiling/tiling_split.h"
-#include "aclrtlaunch_split_ind_uint16.h"
-#include "aclrtlaunch_split_uint16.h"
 #include "commons.h"
 #include "tiling/platform/platform_ascendc.h"
 #include "torch_npu/csrc/core/npu/NPUStream.h"
 #include "workspace.h"
+
+// AscendC kernel entry points launched below with `<<<>>>`; defined in
+// split.cpp.
+extern "C" __global__ __aicore__ void split_ind_uint16(
+    __gm__ void* vec_in, __gm__ void* mask_in, __gm__ void* indices_in,
+    __gm__ void* vec_out, __gm__ void* indices_out, __gm__ void* workspace,
+    __gm__ void* tiling);
+extern "C" __global__ __aicore__ void split_uint16(__gm__ void* in,
+                                                   __gm__ void* mask,
+                                                   __gm__ void* out,
+                                                   __gm__ void* workspace,
+                                                   __gm__ void* tiling);
 
 namespace tcuscan {
 
@@ -64,11 +74,11 @@ at::Tensor run_split(const at::Tensor& x, const at::Tensor& mask, int S) {
       tcuscan::alloc_workspace(user_workspace_size, device);
 
   if (dtype == torch::kHalf or dtype == torch::kInt16) {
-    ACLRT_LAUNCH_KERNEL(split_uint16)
-    (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
-     const_cast<void*>(mask.storage().data()),
-     const_cast<void*>(z.storage().data()),
-     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+    split_uint16<<<block_dim, nullptr, acl_stream>>>(
+        const_cast<void*>(x.storage().data()),
+        const_cast<void*>(mask.storage().data()),
+        const_cast<void*>(z.storage().data()),
+        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   }
 
   aclrtFree(tiling_device);
@@ -127,13 +137,13 @@ std::tuple<at::Tensor, at::Tensor> run_split_ind(const at::Tensor& x,
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
   if (dtype == torch::kHalf or dtype == torch::kInt16) {
-    ACLRT_LAUNCH_KERNEL(split_ind_uint16)
-    (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
-     const_cast<void*>(mask.storage().data()),
-     const_cast<void*>(indices_in.storage().data()),
-     const_cast<void*>(vec_out.storage().data()),
-     const_cast<void*>(indices_out.storage().data()),
-     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+    split_ind_uint16<<<block_dim, nullptr, acl_stream>>>(
+        const_cast<void*>(x.storage().data()),
+        const_cast<void*>(mask.storage().data()),
+        const_cast<void*>(indices_in.storage().data()),
+        const_cast<void*>(vec_out.storage().data()),
+        const_cast<void*>(indices_out.storage().data()),
+        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   }
 
   aclrtFree(tiling_device);

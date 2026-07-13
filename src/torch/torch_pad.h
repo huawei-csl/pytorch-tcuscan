@@ -12,10 +12,16 @@
 
 #include "../host_utils.h"
 #include "../tiling/tiling_simple_pad.h"
-#include "aclrtlaunch_simple_pad_fp16.h"
 #include "commons.h"
 #include "tiling/platform/platform_ascendc.h"
 #include "torch_npu/csrc/core/npu/NPUStream.h"
+
+// AscendC kernel entry points launched below with `<<<>>>`; defined in
+// simple_pad.cpp.
+extern "C" __global__ __aicore__ void simple_pad_fp16(__gm__ void* vec_in,
+                                                      __gm__ void* vec_out,
+                                                      __gm__ void* workspace,
+                                                      __gm__ void* tiling);
 
 namespace tcuscan {
 
@@ -39,10 +45,10 @@ at::Tensor run_simple_pad(const at::Tensor& x, const uint32_t align_len) {
 
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
-  ACLRT_LAUNCH_KERNEL(simple_pad_fp16)
-  (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
-   const_cast<void*>(z.storage().data()),
-   const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+  simple_pad_fp16<<<block_dim, nullptr, acl_stream>>>(
+      const_cast<void*>(x.storage().data()),
+      const_cast<void*>(z.storage().data()),
+      const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
 
   aclrtFree(tiling_device);
 

@@ -3,19 +3,16 @@
 # LICENSE in the root of the software repository:
 # https://github.com/huawei-csl/pytorch-tcuscan/ for the full License text.
 # --------------------------------------------------------------------------------#
-# Builds the same targets as CMakeLists.txt -- scan_kernels, vector_kernels,
-# split_kernels and the tcuscan_ops python extension -- but can drive them with
-# either kernel toolchain:
+# Builds scan_kernels, vector_kernels, split_kernels and the tcuscan_ops python
+# extension with either kernel toolchain:
 #
-# -DUSE_ASC_LANGUAGE=OFF (default)  legacy ascendc.cmake, as in CMakeLists.txt
-# -DUSE_ASC_LANGUAGE=ON             ASC language (find_package(ASC)), as in
-# cann/ops-sparse
+# -DUSE_ASC_LANGUAGE=ON (default)  ASC language (find_package(ASC)), as in
+# cann/ops-sparse -DUSE_ASC_LANGUAGE=OFF           legacy ascendc.cmake
 #
-# NOTE: with USE_ASC_LANGUAGE=ON the three kernel libraries build, but
-# tcuscan_ops does not: the ASC ascendc_library does not code-generate the
-# aclrtlaunch_<kernel>.h headers that src/torch/*.h include for
-# ACLRT_LAUNCH_KERNEL(...). Migrating the host wrappers to `<<<>>>` launches is
-# a prerequisite for dropping the legacy path.
+# The host wrappers in src/torch/*.h launch kernels with `<<<>>>`, so they no
+# longer depend on the code-generated aclrtlaunch_<kernel>.h headers that only
+# the legacy path emits. Both toolchains now build every target, and the legacy
+# path can be dropped once it is no longer needed for comparison.
 
 cmake_minimum_required(VERSION 3.16.0)
 
@@ -82,6 +79,13 @@ if(USE_ASC_LANGUAGE)
   endif()
   find_package(ASC REQUIRED)
   enable_language(ASC)
+
+  # CMakeASCInformation.cmake derives CMAKE_ASC_CREATE_SHARED_MODULE from
+  # CMAKE_ASC_CREATE_SHARED_LIBRARY before that one is defined, so it ends up
+  # empty and MODULE targets (the pybind11 extension) fail to generate.
+  if(NOT CMAKE_ASC_CREATE_SHARED_MODULE)
+    set(CMAKE_ASC_CREATE_SHARED_MODULE "${CMAKE_ASC_CREATE_SHARED_LIBRARY}")
+  endif()
 else()
   if(EXISTS ${ASCEND_CANN_PACKAGE_PATH}/tools/tikcpp/ascendc_kernel_cmake)
     set(ASCENDC_CMAKE_DIR
@@ -131,6 +135,10 @@ message("***********************************************************")
 # ========= kernel libraries =========
 # Settings shared by every kernel library, whichever toolchain compiled it.
 function(tcuscan_kernel_library_setup target_name)
+  # tcuscan_ops is linked with RUNPATH $ORIGIN/build/lib, so the kernel
+  # libraries have to land there whichever toolchain built them.
+  set_target_properties(${target_name} PROPERTIES LIBRARY_OUTPUT_DIRECTORY
+                                                  ${CMAKE_BINARY_DIR}/lib)
   ascendc_compile_definitions(${target_name} PRIVATE -DHAVE_WORKSPACE
                               -DHAVE_TILING)
   ascendc_include_directories(${target_name} PRIVATE
@@ -198,7 +206,31 @@ ascendc_library(split_kernels SHARED src/radix_sort.cpp src/compress.cpp
 tcuscan_kernel_library_setup(split_kernels)
 
 # ========= python extension =========
-pybind11_add_module(tcuscan_ops src/pybind11.cpp)
+# torch_scan_cpu.cpp stays a plain C++ source: it is OpenMP host code and the
+# ASC compiler ships no OpenMP runtime.
+find_package(OpenMP REQUIRED COMPONENTS CXX)
+
+if(USE_ASC_LANGUAGE)
+  # The host wrappers in src/torch/*.h launch kernels with `<<<>>>`, which only
+  # the ASC compiler understands, so the translation unit that includes them has
+  # to be compiled as ASC rather than plain C++.
+  set_source_files_properties(src/pybind11.cpp PROPERTIES LANGUAGE ASC)
+endif()
+
+pybind11_add_module(tcuscan_ops src/pybind11.cpp src/torch/torch_scan_cpu.cpp)
+
+if(USE_ASC_LANGUAGE)
+  target_compile_options(
+    tcuscan_ops PRIVATE $<$<COMPILE_LANGUAGE:ASC>:--npu-arch=${NPU_ARCH}
+                        -std=c++17>)
+  # Mixed ASC/CXX sources: link with the ASC driver so the kernel launch stubs
+  # in pybind11.cpp resolve.
+  set_target_properties(tcuscan_ops PROPERTIES LINKER_LANGUAGE ASC)
+endif()
+
+# Link the OpenMP runtime explicitly rather than through OpenMP::OpenMP_CXX,
+# whose -fopenmp link flag the ASC driver does not accept.
+target_link_libraries(tcuscan_ops PRIVATE ${OpenMP_CXX_LIBRARIES})
 
 target_link_libraries(
   tcuscan_ops

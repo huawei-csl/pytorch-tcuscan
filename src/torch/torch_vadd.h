@@ -12,10 +12,17 @@
 
 #include "../host_utils.h"
 #include "../tiling/tiling_vadd.h"
-#include "aclrtlaunch_vadd_custom.h"
 #include "commons.h"
 #include "tiling/platform/platform_ascendc.h"
 #include "torch_npu/csrc/core/npu/NPUStream.h"
+
+// AscendC kernel entry points launched below with `<<<>>>`; defined in
+// vadd.cpp.
+extern "C" __global__ __aicore__ void vadd_custom(__gm__ void* x,
+                                                  __gm__ void* y,
+                                                  __gm__ void* z,
+                                                  __gm__ void* workspace,
+                                                  __gm__ void* tilingGm);
 
 namespace tcuscan {
 
@@ -38,10 +45,11 @@ at::Tensor run_add(const at::Tensor& x, const at::Tensor& y) {
 
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
-  ACLRT_LAUNCH_KERNEL(vadd_custom)
-  (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
-   const_cast<void*>(y.storage().data()), const_cast<void*>(z.storage().data()),
-   const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+  vadd_custom<<<block_dim, nullptr, acl_stream>>>(
+      const_cast<void*>(x.storage().data()),
+      const_cast<void*>(y.storage().data()),
+      const_cast<void*>(z.storage().data()),
+      const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
 
   aclrtFree(tiling_device);
 
