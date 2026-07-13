@@ -71,7 +71,6 @@ def test_tcuscan_searchsorted_csr_indptr_like():
     # a handful of block-boundary needles.
     nnz = 100000
     num_segments = 4000
-
     indptr = torch.sort(
         torch.randint(0, nnz, (num_segments,), dtype=torch.int32)
     ).values
