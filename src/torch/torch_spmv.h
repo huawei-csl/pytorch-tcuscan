@@ -260,13 +260,21 @@ at::Tensor run_spmv_v2_multi_cube(
   const uint32_t align_size = tile_len * tile_len;
   const uint32_t num_tiles = host_utils::CeilDiv(nnz, align_size);
 
+  // The segmented sum runs on both vector cores of every AI Core group, so the
+  // non-zeros are split into `vec_cores_per_cube * block_dim` blocks of
+  // `block_len` non-zeros each, one per vector core.
+  const uint32_t vec_cores_per_cube =
+      ascendc_platform->GetCoreNumAiv() / ascendc_platform->GetCoreNumAic();
   uint32_t block_dim = ascendc_platform->GetCoreNumAic();
-  if (num_tiles < block_dim) {
-    block_dim = num_tiles;
+  const uint32_t max_block_dim =
+      host_utils::CeilDiv(num_tiles, vec_cores_per_cube);
+  if (max_block_dim < block_dim) {
+    block_dim = max_block_dim;
   }
-  const uint32_t max_num_tiles_per_block =
-      host_utils::CeilDiv(num_tiles, block_dim);
-  const uint32_t block_len = max_num_tiles_per_block * align_size;
+  const uint32_t num_vec_blocks = vec_cores_per_cube * block_dim;
+  const uint32_t max_num_tiles_per_vec_block =
+      host_utils::CeilDiv(num_tiles, num_vec_blocks);
+  const uint32_t block_len = max_num_tiles_per_vec_block * align_size;
 
   at::Tensor segm_offsets_;
   if (segm_offsets.has_value()) {
@@ -274,7 +282,7 @@ at::Tensor run_spmv_v2_multi_cube(
   } else {
     const at::Tensor sstart = torch::clamp(
         torch::arange(
-            0, block_dim + 1,
+            0, num_vec_blocks + 1,
             torch::TensorOptions().dtype(torch::kInt32).device(device)) *
             block_len,
         c10::nullopt, static_cast<int32_t>(nnz));
