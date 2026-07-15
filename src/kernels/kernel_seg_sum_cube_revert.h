@@ -206,7 +206,8 @@ class KernelSegSumCubeRevert {
 
       if constexpr (SyncBefore) {
         sync::WaitCrossFlag(sync::FLAG_C2V);  // workspace tile is ready
-        pipe_barrier(PIPE_ALL);  // ensure all local pipes flushed before TLOAD
+        // pipe_barrier(PIPE_ALL);  // ensure all local pipes flushed before
+        // TLOAD
       }
 
       const uint32_t num_elems_to_process =
