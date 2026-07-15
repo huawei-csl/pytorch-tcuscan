@@ -23,6 +23,10 @@ pep8:
     - D212 # Multi-line docstring summary should start at the first line
     - D213 # Multi-line docstring summary should start at the second line
 
+mccabe:
+  options:
+    max-complexity: 20
+
 pylint:
   run: true
   options:
