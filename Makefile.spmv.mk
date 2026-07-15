@@ -113,8 +113,8 @@ profile_fp16_spmv_real_multi_cube:
 profile_fp16_spmv_v2_real:
 	$(foreach MATRIX,$(SPARSE_MATRICES), python3 ${PROFILING_SCRIPTS_PATH}/profile_sparse_matrices.py --bench spmv_v2 --s 128  --matrixpath ${SPARSE_SUITE_HOME}/${MATRIX} --dtype fp16;)
 
-profile_fp32_spmv_ops_sparse_real:
-	$(foreach MATRIX,$(SPARSE_MATRICES), python3 ${PROFILING_SCRIPTS_PATH}/profile_sparse_matrices.py --bench spmv_ops_sparse --s 128  --matrixpath ${SPARSE_SUITE_HOME}/${MATRIX} --dtype fp32;)
+profile_fp16_spmv_ops_sparse_real:
+	$(foreach MATRIX,$(SPARSE_MATRICES), python3 ${PROFILING_SCRIPTS_PATH}/profile_sparse_matrices.py --bench spmv_ops_sparse --s 128  --matrixpath ${SPARSE_SUITE_HOME}/${MATRIX} --dtype fp16;)
 
 profile_fp16_spmv_v2_multi_cube_real:
 	$(foreach MATRIX,$(ALENEX_MATRICES), python3 ${PROFILING_SCRIPTS_PATH}/profile_sparse_matrices.py --bench spmv_v2_multi_cube --s 128  --matrixpath ${SPARSE_SUITE_HOME}/${MATRIX} --dtype fp16;)

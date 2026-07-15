@@ -433,7 +433,7 @@ def spmv_ops_sparse_benchmark(device: Device, B: csr_matrix, dtype: torch.dtype)
             vals_npu, idx_npu, col_npu, vec_npu, alpha=2.0, beta=0.5, y=y_npu
         )
 
-    return _run_benchmark(device, run_spmv_ops_sparse), len(vals)
+    return _run_benchmark(device, run_spmv_ops_sparse), B.nnz, B.shape[0]
 
 
 def spmv_v2_multi_cube_benchmark(device: Device, B: csr_matrix, s: int):
