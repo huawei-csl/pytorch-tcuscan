@@ -171,6 +171,17 @@ class KernelSegSumCubeRevert {
   }
 
  private:
+  /**
+   * @brief Returns true if the output tile is the first or last tile. This is
+   * used to determine if atomics must be used for writing the output tile to
+   * global memory.
+   *
+   * @return True if the output tile is the first or last tile, false otherwise.
+   */
+  __aicore__ inline bool isFirstOrLastTile() {
+    return (out_offset_ == 0) || is_last_tile_;
+  }
+
   __aicore__ inline void SyncWithCubeNoop() {
     for (uint32_t tile_idx = 0; tile_idx < num_tiles_; tile_idx++) {
       if constexpr (SyncBefore) {
@@ -189,6 +200,8 @@ class KernelSegSumCubeRevert {
     uint32_t segm_end = segm_ind_lt.GetValue(segm_idx) - vec_start_offset_;
 
     for (uint32_t tile_idx = 0; tile_idx < num_tiles_; tile_idx++) {
+      is_last_tile_ = (tile_idx == num_tiles_ - 1);
+
       if constexpr (SyncBefore) {
         sync::SyncGroup<sync::GroupSyncDirection::FULL>();
       }
@@ -230,12 +243,16 @@ class KernelSegSumCubeRevert {
     const uint32_t tail_len = out_idx + 1;
     out_q_.template EnQue<T>(vec_out_lt);
     if constexpr (UseAtomicWrite) {
-      AscendC::PipeBarrier<PIPE_ALL>();
-      AscendC::SetAtomicAdd<T>();
+      if (isFirstOrLastTile()) {
+        AscendC::PipeBarrier<PIPE_ALL>();
+        AscendC::SetAtomicAdd<T>();
+      }
     }
     copy::CopyVecToGm(global_out_[out_offset_], out_q_, tail_len);
     if constexpr (UseAtomicWrite) {
-      AscendC::SetAtomicNone();
+      if (isFirstOrLastTile()) {
+        AscendC::SetAtomicNone();
+      }
     }
   }
 
@@ -257,6 +274,7 @@ class KernelSegSumCubeRevert {
 
   uint32_t segments_offset_ = 0;
   uint32_t out_offset_ = 0;
+  bool is_last_tile_ = false;
 };
 
 }  // namespace tcuscan
