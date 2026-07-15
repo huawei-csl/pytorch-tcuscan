@@ -185,7 +185,9 @@ class KernelSegSumCubeRevert {
   __aicore__ inline void SyncWithCubeNoop() {
     for (uint32_t tile_idx = 0; tile_idx < num_tiles_; tile_idx++) {
       if constexpr (SyncBefore) {
-        sync::SyncGroup<sync::GroupSyncDirection::FULL>();
+        sync::WaitCrossFlag(sync::FLAG_C2V);  // workspace tile is ready
+        sync::SetCrossFlag<PIPE_MTE3>(
+            sync::FLAG_V2C);  // signal Cube: workspace slot freed
       }
     }
   }
@@ -203,7 +205,8 @@ class KernelSegSumCubeRevert {
       is_last_tile_ = (tile_idx == num_tiles_ - 1);
 
       if constexpr (SyncBefore) {
-        sync::SyncGroup<sync::GroupSyncDirection::FULL>();
+        sync::WaitCrossFlag(sync::FLAG_C2V);  // workspace tile is ready
+        pipe_barrier(PIPE_ALL);  // ensure all local pipes flushed before TLOAD
       }
 
       const uint32_t num_elems_to_process =
@@ -232,6 +235,10 @@ class KernelSegSumCubeRevert {
       accumulation += vec_in_lt.GetValue(num_elems_to_process - 1);
 
       in_q_.template FreeTensor<T>(vec_in_lt);
+      if constexpr (SyncBefore) {
+        sync::SetCrossFlag<PIPE_MTE3>(
+            sync::FLAG_V2C);  // signal Cube: workspace slot freed
+      }
       in_offset += num_elems_to_process;
     }
 
