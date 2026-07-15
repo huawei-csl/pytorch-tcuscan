@@ -195,14 +195,19 @@ class KernelSegSumVecRevert {
     for (uint32_t matrix_tile_idx = 0; matrix_tile_idx < num_tiles_;
          matrix_tile_idx++) {
       if constexpr (SyncBefore) {
-        sync::WaitCrossFlag(sync::FLAG_C2V);  // workspace tile is ready
-        pipe_barrier(PIPE_ALL);  // ensure all local pipes flushed before TLOAD
+        // workspace tile is ready
+        sync::WaitCrossFlag(sync::FLAG_C2V);
+        // pipe_barrier(PIPE_ALL);
       }
 
       const uint32_t num_elems_to_copy =
           scalar::NextTileLen(matrix_tile_len_, global_in_offset, vec_len_);
       copy::CopyGmToVec(in_q_, global_in_[global_in_offset], num_elems_to_copy);
       LocalTensor<T> vec_in_lt = in_q_.template DeQue<T>();
+      if constexpr (SyncBefore) {
+        // Vec signals Cube: workspace slot freed
+        sync::SetCrossFlag<PIPE_MTE3>(sync::FLAG_V2C);
+      }
 
       uint32_t matrix_tile_offset = 0;
       uint32_t num_elems_to_process =
@@ -241,10 +246,6 @@ class KernelSegSumVecRevert {
       }
 
       in_q_.template FreeTensor<T>(vec_in_lt);
-      if constexpr (SyncBefore) {
-        sync::SetCrossFlag<PIPE_MTE3>(
-            sync::FLAG_V2C);  // signal Cube: workspace slot freed
-      }
     }
 
     segm_q_.template FreeTensor<uint32_t>(segm_ind_lt);

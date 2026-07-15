@@ -215,6 +215,11 @@ class KernelSegSumCubeRevert {
       copy::CopyGmToVec(in_q_, global_in_[in_offset], num_elems_to_process);
       LocalTensor<T> vec_in_lt = in_q_.template DeQue<T>();
 
+      if constexpr (SyncBefore) {
+        sync::SetCrossFlag<PIPE_MTE3>(
+            sync::FLAG_V2C);  // signal Cube: workspace slot freed
+      }
+
       while (segm_end < in_offset + num_elems_to_process) {
         // Last segment value. Zero if lies on tile boundary.
         const bool is_on_end_of_tile = segm_end == in_offset;
@@ -235,10 +240,6 @@ class KernelSegSumCubeRevert {
       accumulation += vec_in_lt.GetValue(num_elems_to_process - 1);
 
       in_q_.template FreeTensor<T>(vec_in_lt);
-      if constexpr (SyncBefore) {
-        sync::SetCrossFlag<PIPE_MTE3>(
-            sync::FLAG_V2C);  // signal Cube: workspace slot freed
-      }
       in_offset += num_elems_to_process;
     }
 
