@@ -15,6 +15,19 @@ using namespace AscendC;
 
 namespace tcuscan {
 
+/// @brief True when AscendC::Nz2NdParams carries the NZ->ND enable flag.
+///
+/// On dav-c310 (__NPU_ARCH__ 3510/5102) the struct drops `nz2ndEn` and
+/// `originalNSize`; the NZ->ND conversion is selected through the FixpipeConfig
+/// template parameter instead. This must gate the preprocessor rather than an
+/// `if constexpr`, because the member names are looked up even in a discarded
+/// branch.
+#if defined(__NPU_ARCH__) && ((__NPU_ARCH__ == 3510) || (__NPU_ARCH__ == 5102))
+#define TCUSCAN_FIXPIPE_HAS_NZ2ND_FLAG 0
+#else
+#define TCUSCAN_FIXPIPE_HAS_NZ2ND_FLAG 1
+#endif
+
 /// @brief Number of bytes for a required alignment in UB.
 constexpr uint16_t UB_ALIGNMENT = 32;
 /// @brief Number of bytes for the UB size (A2A3).
@@ -560,10 +573,12 @@ __aicore__ inline void CopyCL0ToGlobal(
   params.burstLen = width * fractal_size * sizeof(DataType) / DATA_BLOCK_SIZE;
   params.dstStride = height;
 
+#if TCUSCAN_FIXPIPE_HAS_NZ2ND_FLAG
   Nz2NdParams nz2nd_params;
   nz2nd_params.nz2ndEn = true;
   nz2nd_params.originalNSize = height;
   params.nz2ndParams = nz2nd_params;
+#endif
 
   Fixpipe(global, lt, params);
 

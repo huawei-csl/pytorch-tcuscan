@@ -66,6 +66,21 @@ compile_%:
 		-Wno-ignored-attributes \
 		src/$*.cpp \
 		-o libkernel_$*.so
+compile_a5_%:
+	mkdir -p build/lib/
+	bisheng -fPIC -shared -xcce -O2 -std=c++17 \
+		-Isrc/kernel \
+		-I$(ASCEND_TOOLKIT_HOME)/$(ARCH)-linux/tikcpp/tikcfw \
+		-I$(ASCEND_TOOLKIT_HOME)/$(ARCH)-linux/asc/include/interface \
+		-I$(ASCEND_TOOLKIT_HOME)/$(ARCH)-linux/asc/impl/basic_api \
+		--cce-aicore-arch=dav-c310 \
+		-mllvm -cce-aicore-stack-size=0x8000 \
+		-mllvm -cce-aicore-record-overflow=true \
+		-mllvm -cce-aicore-addr-transform \
+		-mllvm -cce-aicore-function-stack-size=0x8000 \
+		-Wno-ignored-attributes \
+		src/$*.cpp \
+		-o build/lib/libkernel_$*.so
 
 build_tidy: build-tidy.sh
 	./build-tidy.sh -v ${ASCEND_DEVICE}
