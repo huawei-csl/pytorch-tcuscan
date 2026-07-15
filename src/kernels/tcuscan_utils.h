@@ -1134,6 +1134,9 @@ __aicore__ inline void EmptyQ(Q& q) {
 
 namespace sync {
 
+constexpr int32_t FLAG_C2V = 0;  // Cube → Vec: workspace tile written
+constexpr int32_t FLAG_V2C = 1;  // Vec → Cube: workspace tile consumed
+
 /**
  * @brief Used to specifies the direction of synchronization when synchronizing
  * cube and vectors within a single group.
@@ -1261,6 +1264,13 @@ __aicore__ inline void ScalarWaitForVec() {
   SetFlag<HardEvent::V_S>(event_id);
   WaitFlag<HardEvent::V_S>(event_id);
 }
+
+template <pipe_t Pipe>
+__aicore__ inline void SetCrossFlag(int32_t flag) {
+  constexpr auto VEC_NUM = 2;
+  ffts_cross_core_sync(Pipe, 1 | (VEC_NUM << 4) | (flag << 8));
+}
+__aicore__ inline void WaitCrossFlag(int32_t flag) { wait_flag_dev(flag); }
 
 }  // namespace sync
 

@@ -105,9 +105,17 @@ class KernelRowScan {
 
     LoadBToL0();
     for (uint32_t idx = 0; idx < num_tiles_to_process; ++idx) {
+      if constexpr (SyncAfter) {
+        if (idx > 0) {
+          sync::WaitCrossFlag(sync::FLAG_V2C);
+        }
+      }
       CubeIter(idx);
       if constexpr (SyncAfter) {
-        sync::SyncGroup<sync::GroupSyncDirection::FULL>();
+        pipe_barrier(
+            PIPE_ALL);  // FIX: wait for DMA to complete before signaling Vec
+        sync::SetCrossFlag<PIPE_FIX>(
+            sync::FLAG_C2V);  // signal Vec: workspace tile is ready
       }
     }
     queue::FreeFromQ<InputT>(b2_q_);

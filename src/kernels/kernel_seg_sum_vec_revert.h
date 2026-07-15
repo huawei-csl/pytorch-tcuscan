@@ -175,7 +175,9 @@ class KernelSegSumVecRevert {
   __aicore__ inline void SyncWithCubeNoop() {
     for (uint32_t tile_idx = 0; tile_idx < num_tiles_; tile_idx++) {
       if constexpr (SyncBefore) {
-        sync::SyncGroup<sync::GroupSyncDirection::FULL>();
+        sync::WaitCrossFlag(sync::FLAG_C2V);  // workspace tile is ready
+        sync::SetCrossFlag<PIPE_MTE3>(
+            sync::FLAG_V2C);  // signal Cube: workspace slot freed
       }
     }
   }
@@ -193,7 +195,8 @@ class KernelSegSumVecRevert {
     for (uint32_t matrix_tile_idx = 0; matrix_tile_idx < num_tiles_;
          matrix_tile_idx++) {
       if constexpr (SyncBefore) {
-        sync::SyncGroup<sync::GroupSyncDirection::FULL>();
+        sync::WaitCrossFlag(sync::FLAG_C2V);  // workspace tile is ready
+        pipe_barrier(PIPE_ALL);  // ensure all local pipes flushed before TLOAD
       }
 
       const uint32_t num_elems_to_copy =
@@ -238,6 +241,10 @@ class KernelSegSumVecRevert {
       }
 
       in_q_.template FreeTensor<T>(vec_in_lt);
+      if constexpr (SyncBefore) {
+        sync::SetCrossFlag<PIPE_MTE3>(
+            sync::FLAG_V2C);  // signal Cube: workspace slot freed
+      }
     }
 
     segm_q_.template FreeTensor<uint32_t>(segm_ind_lt);
