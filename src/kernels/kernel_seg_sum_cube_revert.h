@@ -185,7 +185,9 @@ class KernelSegSumCubeRevert {
   __aicore__ inline void SyncWithCubeNoop() {
     for (uint32_t tile_idx = 0; tile_idx < num_tiles_; tile_idx++) {
       if constexpr (SyncBefore) {
-        sync::SyncGroup<sync::GroupSyncDirection::FULL>();
+        sync::WaitCrossFlag(sync::FLAG_C2V);  // workspace tile is ready
+        sync::SetCrossFlag<PIPE_MTE3>(
+            sync::FLAG_V2C);  // signal Cube: workspace slot freed
       }
     }
   }
@@ -203,7 +205,9 @@ class KernelSegSumCubeRevert {
       is_last_tile_ = (tile_idx == num_tiles_ - 1);
 
       if constexpr (SyncBefore) {
-        sync::SyncGroup<sync::GroupSyncDirection::FULL>();
+        sync::WaitCrossFlag(sync::FLAG_C2V);  // workspace tile is ready
+        // pipe_barrier(PIPE_ALL);  // ensure all local pipes flushed before
+        // TLOAD
       }
 
       const uint32_t num_elems_to_process =
@@ -211,6 +215,11 @@ class KernelSegSumCubeRevert {
 
       copy::CopyGmToVec(in_q_, global_in_[in_offset], num_elems_to_process);
       LocalTensor<T> vec_in_lt = in_q_.template DeQue<T>();
+
+      if constexpr (SyncBefore) {
+        sync::SetCrossFlag<PIPE_MTE3>(
+            sync::FLAG_V2C);  // signal Cube: workspace slot freed
+      }
 
       while (segm_end < in_offset + num_elems_to_process) {
         // Last segment value. Zero if lies on tile boundary.
