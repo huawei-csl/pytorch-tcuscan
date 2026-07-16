@@ -56,7 +56,7 @@ pypackage:
 # This is useful for development and debugging of individual kernels.
 compile_%:
 	bisheng -fPIC -shared -xcce -O2 -std=c++17 \
-		-Isrc/kernel \
+		-Isrc/kernel -Isrc\
 		-I$(ASCEND_TOOLKIT_HOME)/$(ARCH)-linux/tikcpp/tikcfw \
 		-I$(ASCEND_TOOLKIT_HOME)/$(ARCH)-linux/asc/include/interface \
 		-I$(ASCEND_TOOLKIT_HOME)/$(ARCH)-linux/asc/impl/basic_api \
@@ -66,10 +66,11 @@ compile_%:
 		-Wno-ignored-attributes \
 		src/$*.cpp \
 		-o libkernel_$*.so
+
 compile_a5_%:
 	mkdir -p build/lib/
 	bisheng -fPIC -shared -xcce -O2 -std=c++17 \
-		-Isrc/kernel \
+		-Isrc/kernel -Isrc\
 		-I$(ASCEND_TOOLKIT_HOME)/$(ARCH)-linux/tikcpp/tikcfw \
 		-I$(ASCEND_TOOLKIT_HOME)/$(ARCH)-linux/asc/include/interface \
 		-I$(ASCEND_TOOLKIT_HOME)/$(ARCH)-linux/asc/impl/basic_api \
