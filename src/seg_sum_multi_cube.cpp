@@ -51,7 +51,7 @@ __aicore__ inline void run_seg_sum_multi_cube(
   run_pad_kernel<T, false>(vec_in, padded_input, vec_len, align_size);
 
   sync::SyncGroup<sync::GroupSyncDirection::FULL>();
-  sync::SyncAllCores();
+  AscendC::SyncAll<false /*isAIVOnly*/>();
 
   if ASCEND_IS_AIC {
     KernelBlockScan<T, /* SyncAfter*/ true> op_cube(padded_vec_len, tile_len);

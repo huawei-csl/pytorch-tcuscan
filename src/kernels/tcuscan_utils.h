@@ -1228,29 +1228,6 @@ __aicore__ inline void SyncGroup() {
 }
 
 /**
- * @brief Synchronize all vector and all cube cores.
- *
- * This function provides an inter-AIV and inter-AIC synchronization.
- * If called from vector cores, will synchronize all vector cores, if called
- * from cube cores, will synchronize all cube cores.
- * The synchronization between vector and cube cores is not guaranteed, for that
- * `SyncGroup` should be used.
- */
-__aicore__ inline void SyncAllCores() {
-  const int mode = 0;
-  if ASCEND_IS_AIV {
-    const int flag_id = 13;
-    ffts_cross_core_sync(PIPE_MTE3, GetSyncConf(mode, flag_id));
-    wait_flag_dev(flag_id);
-  }
-  if ASCEND_IS_AIC {
-    const int flag_id = 14;
-    ffts_cross_core_sync(PIPE_FIX, GetSyncConf(mode, flag_id));
-    wait_flag_dev(flag_id);
-  }
-}
-
-/**
  * @brief Makes scalar unit wait for vector unit.
  *
  * Scalar unit continues execution only after all previous vector operations

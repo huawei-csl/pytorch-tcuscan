@@ -56,7 +56,7 @@ __aicore__ inline void run_spmv_v2(
                            x_len, csr_gather_tile_len);
 
   sync::SyncGroup<sync::GroupSyncDirection::FULL>();
-  sync::SyncAllCores();
+  AscendC::SyncAll<false /*isAIVOnly*/>();
 
   if ASCEND_IS_AIC {
     KernelRowScan<T> op_cube(tile_len, tile_len, padded_vec_len);
@@ -65,7 +65,7 @@ __aicore__ inline void run_spmv_v2(
   }
 
   sync::SyncGroup<sync::GroupSyncDirection::FULL>();
-  sync::SyncAllCores();
+  AscendC::SyncAll<false /*isAIVOnly*/>();
   AscendC::PipeBarrier<PIPE_ALL>();
 
   if ASCEND_IS_AIV {
