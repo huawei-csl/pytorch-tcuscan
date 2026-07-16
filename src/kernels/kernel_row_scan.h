@@ -238,7 +238,7 @@ __aicore__ inline void run_row_scan_kernel(GM_ADDR input_vec,
                                    vector_align_size, vector_align_size);
     }
 
-    sync::SyncAllCores();
+    AscendC::SyncAll<false /*isAIVOnly*/>();
     sync::SyncGroup<sync::GroupSyncDirection::FULL>();
     PipeBarrier<PIPE_ALL>();
 
@@ -249,7 +249,7 @@ __aicore__ inline void run_row_scan_kernel(GM_ADDR input_vec,
       op_cube.Process();
     }
 
-    sync::SyncAllCores();
+    AscendC::SyncAll<false /*isAIVOnly*/>();
     sync::SyncGroup<sync::GroupSyncDirection::FULL>();
     PipeBarrier<PIPE_ALL>();
 
