@@ -18,22 +18,15 @@
 #include "torch_npu/csrc/core/npu/NPUStream.h"
 #include "workspace.h"
 
-// AscendC kernel entry points launched below with `<<<>>>`; defined in
-// topk.cpp.
-extern "C" __global__ __aicore__ void topk_fp16(__gm__ void* vec_in,
-                                                __gm__ void* vec_out,
-                                                __gm__ void* indices_out,
-                                                __gm__ void* workspace,
-                                                __gm__ void* tiling_ptr);
-extern "C" __global__ __aicore__ void topk_int16(__gm__ void* vec_in,
-                                                 __gm__ void* vec_out,
-                                                 __gm__ void* indices_out,
-                                                 __gm__ void* workspace,
-                                                 __gm__ void* tiling_ptr);
-extern "C" __global__ __aicore__ void topk_pivot_fp16(__gm__ void* vec_in,
-                                                      __gm__ void* vec_out,
-                                                      __gm__ void* workspace,
-                                                      __gm__ void* tiling_ptr);
+extern "C" void launch_topk_fp16(uint32_t blockDim, void* stream, void* vec_in,
+                                 void* vec_out, void* indices_out,
+                                 void* workspace, void* tiling_ptr);
+extern "C" void launch_topk_int16(uint32_t blockDim, void* stream, void* vec_in,
+                                  void* vec_out, void* indices_out,
+                                  void* workspace, void* tiling_ptr);
+extern "C" void launch_topk_pivot_fp16(uint32_t blockDim, void* stream,
+                                       void* vec_in, void* vec_out,
+                                       void* workspace, void* tiling_ptr);
 
 namespace tcuscan {
 
@@ -76,8 +69,8 @@ at::Tensor run_topk_pivot_fp16(const at::Tensor& x, uint32_t k,
 
   uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
 
-  topk_pivot_fp16<<<block_dim, nullptr, acl_stream>>>(
-      const_cast<void*>(x.storage().data()),
+  launch_topk_pivot_fp16(
+      block_dim, acl_stream, const_cast<void*>(x.storage().data()),
       const_cast<void*>(vec_out.storage().data()),
       const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
 
@@ -142,8 +135,8 @@ std::tuple<at::Tensor, at::Tensor> run_topk_int16(const at::Tensor& x,
 
   uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
 
-  topk_int16<<<block_dim, nullptr, acl_stream>>>(
-      const_cast<void*>(x.storage().data()),
+  launch_topk_int16(
+      block_dim, acl_stream, const_cast<void*>(x.storage().data()),
       const_cast<void*>(vec_out.storage().data()),
       const_cast<void*>(indices_out.storage().data()),
       const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
@@ -210,11 +203,11 @@ std::tuple<at::Tensor, at::Tensor> run_topk_fp16(const at::Tensor& x,
 
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
-  topk_fp16<<<block_dim, nullptr, acl_stream>>>(
-      const_cast<void*>(x.storage().data()),
-      const_cast<void*>(vec_out.storage().data()),
-      const_cast<void*>(indices_out.storage().data()),
-      const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+  launch_topk_fp16(block_dim, acl_stream, const_cast<void*>(x.storage().data()),
+                   const_cast<void*>(vec_out.storage().data()),
+                   const_cast<void*>(indices_out.storage().data()),
+                   const_cast<void*>(workspace_tensor.storage().data()),
+                   tiling_device);
 
   aclrtFree(tiling_device);
   aclrtSynchronizeStream(acl_stream);

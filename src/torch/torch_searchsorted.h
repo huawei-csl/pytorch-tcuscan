@@ -15,13 +15,9 @@
 #include "tiling/platform/platform_ascendc.h"
 #include "torch_npu/csrc/core/npu/NPUStream.h"
 
-// AscendC kernel entry points launched below with `<<<>>>`; defined in
-// searchsorted.cpp.
-extern "C" __global__ __aicore__ void searchsorted_int32(__gm__ void* sorted,
-                                                         __gm__ void* values,
-                                                         __gm__ void* out,
-                                                         __gm__ void* workspace,
-                                                         __gm__ void* tilingGm);
+extern "C" void launch_searchsorted_int32(uint32_t blockDim, void* stream,
+                                          void* sorted, void* values, void* out,
+                                          void* workspace, void* tilingGm);
 
 namespace tcuscan {
 
@@ -72,8 +68,8 @@ at::Tensor run_searchsorted(const at::Tensor& sorted,
 
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
-  searchsorted_int32<<<block_dim, nullptr, acl_stream>>>(
-      const_cast<void*>(sorted.storage().data()),
+  launch_searchsorted_int32(
+      block_dim, acl_stream, const_cast<void*>(sorted.storage().data()),
       const_cast<void*>(values.storage().data()),
       const_cast<void*>(out.storage().data()),
       const_cast<void*>(workspace_tensor.storage().data()), tiling_device);

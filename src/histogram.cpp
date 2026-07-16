@@ -36,3 +36,20 @@ extern "C" __global__ __aicore__ void histogram_fp16(GM_ADDR vec_in,
   tcuscan::run_histogram<half>(vec_in, vec_out, vec_len, tile_len, num_bins,
                                x_min, x_max);
 }
+
+/**
+ * @brief Call the `histogram` kernel for FP16 data type.
+ *
+ * @param [in] blockDim Number of blocks for the kernel launch.
+ * @param [in] stream CUDA stream.
+ * @param [in] vec_in Pointer to an input buffer.
+ * @param [in] vec_out Pointer to an output buffer.
+ * @param [in] workspace Pointer to workspace.
+ * @param [in] tiling_gm Pointer to the tiling buffer.
+ */
+extern "C" void launch_histogram_fp16(uint32_t blockDim, void* stream,
+                                      uint8_t* vec_in, uint8_t* vec_out,
+                                      uint8_t* workspace, uint8_t* tiling_gm) {
+  histogram_fp16<<<blockDim, nullptr, stream>>>(vec_in, vec_out, workspace,
+                                                tiling_gm);
+}

@@ -51,3 +51,37 @@ extern "C" __global__ __aicore__ void diff_fp32(GM_ADDR vec_in, GM_ADDR vec_out,
   tcuscan::run_diff<true, float>(vec_in, vec_out, tiling.vec_len,
                                  tiling.tile_len);
 }
+
+/**
+ * @brief Call the `diff` kernel for FP16 data type.
+ *
+ * @param [in] blockDim Number of blocks for the kernel launch.
+ * @param [in] stream CUDA stream.
+ * @param [in] vec_in Pointer to the input vector.
+ * @param [in] vec_out Pointer to the output vector.
+ * @param [in] workspace Pointer to workspace.
+ * @param [in] tilingGm Pointer to the tiling buffer.
+ */
+extern "C" void launch_diff_fp16(uint32_t blockDim, void* stream,
+                                 uint8_t* vec_in, uint8_t* vec_out,
+                                 uint8_t* workspace, uint8_t* tilingGm) {
+  diff_fp16<<<blockDim, nullptr, stream>>>(vec_in, vec_out, workspace,
+                                           tilingGm);
+}
+
+/**
+ * @brief Call the `diff` kernel for FP32 data type.
+ *
+ * @param [in] blockDim Number of blocks for the kernel launch.
+ * @param [in] stream CUDA stream.
+ * @param [in] vec_in Pointer to the input vector.
+ * @param [in] vec_out Pointer to the output vector.
+ * @param [in] workspace Pointer to workspace.
+ * @param [in] tilingGm Pointer to the tiling buffer.
+ */
+extern "C" void launch_diff_fp32(uint32_t blockDim, void* stream,
+                                 uint8_t* vec_in, uint8_t* vec_out,
+                                 uint8_t* workspace, uint8_t* tilingGm) {
+  diff_fp32<<<blockDim, nullptr, stream>>>(vec_in, vec_out, workspace,
+                                           tilingGm);
+}

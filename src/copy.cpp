@@ -48,3 +48,35 @@ extern "C" __global__ __aicore__ void copy_fp32(GM_ADDR in, GM_ADDR out,
   tcuscan::run_copy<float>(in, out, tiling_data.num_elems,
                            tiling_data.tile_size);
 }
+
+/**
+ * @brief Call the `copy` kernel for FP16 data type.
+ *
+ * @param [in] blockDim Number of blocks for the kernel launch.
+ * @param [in] stream CUDA stream.
+ * @param [in] in Pointer to an input buffer.
+ * @param [in] out Pointer to an output buffer.
+ * @param [in] workspace Pointer to workspace.
+ * @param [in] tiling Pointer to the tiling buffer.
+ */
+extern "C" void launch_copy_fp16(uint32_t blockDim, void* stream, uint8_t* in,
+                                 uint8_t* out, uint8_t* workspace,
+                                 uint8_t* tiling) {
+  copy_fp16<<<blockDim, nullptr, stream>>>(in, out, workspace, tiling);
+}
+
+/**
+ * @brief Call the `copy` kernel for FP32 data type.
+ *
+ * @param [in] blockDim Number of blocks for the kernel launch.
+ * @param [in] stream CUDA stream.
+ * @param [in] in Pointer to an input buffer.
+ * @param [in] out Pointer to an output buffer.
+ * @param [in] workspace Pointer to workspace.
+ * @param [in] tiling Pointer to the tiling buffer.
+ */
+extern "C" void launch_copy_fp32(uint32_t blockDim, void* stream, uint8_t* in,
+                                 uint8_t* out, uint8_t* workspace,
+                                 uint8_t* tiling) {
+  copy_fp32<<<blockDim, nullptr, stream>>>(in, out, workspace, tiling);
+}

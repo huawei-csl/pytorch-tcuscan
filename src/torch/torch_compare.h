@@ -16,15 +16,12 @@
 #include "torch_npu/csrc/core/npu/NPUStream.h"
 #include "workspace.h"
 
-// AscendC kernel entry points launched below with `<<<>>>`; defined in
-// compare.cpp.
-extern "C" __global__ __aicore__ void count_if_fp16(__gm__ void* vec_in,
-                                                    __gm__ void* vec_out,
-                                                    __gm__ void* workspace,
-                                                    __gm__ void* tiling_gm);
-extern "C" __global__ __aicore__ void greater_equal_fp16(
-    __gm__ void* vec_in, __gm__ void* vec_out, __gm__ void* workspace,
-    __gm__ void* tiling_gm);
+extern "C" void launch_count_if_fp16(uint32_t blockDim, void* stream,
+                                     void* vec_in, void* vec_out,
+                                     void* workspace, void* tiling_gm);
+extern "C" void launch_greater_equal_fp16(uint32_t blockDim, void* stream,
+                                          void* vec_in, void* vec_out,
+                                          void* workspace, void* tiling_gm);
 
 namespace tcuscan {
 
@@ -61,8 +58,8 @@ at::Tensor run_count_if(const at::Tensor& x, float pivot, uint32_t tile_len,
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
   if (dtype == at::kHalf) {
-    count_if_fp16<<<block_dim, nullptr, acl_stream>>>(
-        const_cast<void*>(x.storage().data()),
+    launch_count_if_fp16(
+        block_dim, acl_stream, const_cast<void*>(x.storage().data()),
         const_cast<void*>(z.storage().data()),
         const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else {
@@ -101,8 +98,8 @@ at::Tensor run_greater_equal(const at::Tensor& x, float pivot,
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
   if (dtype == at::kHalf) {
-    greater_equal_fp16<<<block_dim, nullptr, acl_stream>>>(
-        const_cast<void*>(x.storage().data()),
+    launch_greater_equal_fp16(
+        block_dim, acl_stream, const_cast<void*>(x.storage().data()),
         const_cast<void*>(z.storage().data()),
         const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else {

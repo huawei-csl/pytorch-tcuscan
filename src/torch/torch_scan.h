@@ -22,48 +22,50 @@
 #include "torch_scan_cpu.h"
 #include "workspace.h"
 
-// AscendC kernel entry points launched below with `<<<>>>`; defined in
-// block_scan.cpp, row_scan.cpp, scan_batch.cpp, scan_multi_core.cpp,
 // scan_multi_cube.cpp, scan_single_core.cpp.
-extern "C" __global__ __aicore__ void block_scan_fp16(
-    __gm__ void* input_vec, __gm__ void* lower, __gm__ void* upper_strict,
-    __gm__ void* output_vec, __gm__ void* workspace, __gm__ void* tilingGm);
-extern "C" __global__ __aicore__ void row_scan_fp16(__gm__ void* input_vec,
-                                                    __gm__ void* output_vec,
-                                                    __gm__ void* workspace,
-                                                    __gm__ void* tilingGm);
-extern "C" __global__ __aicore__ void scan_batch_fp16(__gm__ void* input_vec,
-                                                      __gm__ void* output_vec,
-                                                      __gm__ void* workspace,
-                                                      __gm__ void* tiling);
-extern "C" __global__ __aicore__ void scan_batch_fp32(__gm__ void* input_vec,
-                                                      __gm__ void* output_vec,
-                                                      __gm__ void* workspace,
-                                                      __gm__ void* tiling);
-extern "C" __global__ __aicore__ void scan_multi_core_fp16(
-    __gm__ void* input_vec, __gm__ void* output_vec, __gm__ void* workspace,
-    __gm__ void* tilingGm);
-extern "C" __global__ __aicore__ void scan_multi_core_fp16_no_l2(
-    __gm__ void* input_vec, __gm__ void* output_vec, __gm__ void* workspace,
-    __gm__ void* tilingGm);
-extern "C" __global__ __aicore__ void scan_multi_core_int8(
-    __gm__ void* input_vec, __gm__ void* output_vec, __gm__ void* workspace,
-    __gm__ void* tilingGm);
-extern "C" __global__ __aicore__ void scan_multi_core_int8_no_l2(
-    __gm__ void* input_vec, __gm__ void* output_vec, __gm__ void* workspace,
-    __gm__ void* tilingGm);
-extern "C" __global__ __aicore__ void scan_multi_cube_fp16(
-    __gm__ void* input_vec, __gm__ void* lower, __gm__ void* upper_strict,
-    __gm__ void* output_vec, __gm__ void* workspace, __gm__ void* tiling_gm);
-extern "C" __global__ __aicore__ void scan_single_core_fp16(
-    __gm__ void* vec_in, __gm__ void* vec_out, __gm__ void* workspace,
-    __gm__ void* tilingGm);
-extern "C" __global__ __aicore__ void scan_single_core_fp32(
-    __gm__ void* vec_in, __gm__ void* vec_out, __gm__ void* workspace,
-    __gm__ void* tilingGm);
-extern "C" __global__ __aicore__ void scan_single_core_int8(
-    __gm__ void* vec_in, __gm__ void* vec_out, __gm__ void* workspace,
-    __gm__ void* tilingGm);
+extern "C" void launch_block_scan_fp16(uint32_t blockDim, void* stream,
+                                       void* input_vec, void* lower,
+                                       void* upper_strict, void* output_vec,
+                                       void* workspace, void* tilingGm);
+extern "C" void launch_row_scan_fp16(uint32_t blockDim, void* stream,
+                                     void* input_vec, void* output_vec,
+                                     void* workspace, void* tilingGm);
+extern "C" void launch_scan_batch_fp16(uint32_t blockDim, void* stream,
+                                       void* input_vec, void* output_vec,
+                                       void* workspace, void* tiling);
+extern "C" void launch_scan_batch_fp32(uint32_t blockDim, void* stream,
+                                       void* input_vec, void* output_vec,
+                                       void* workspace, void* tiling);
+extern "C" void launch_scan_multi_core_fp16(uint32_t blockDim, void* stream,
+                                            void* input_vec, void* output_vec,
+                                            void* workspace, void* tilingGm);
+extern "C" void launch_scan_multi_core_fp16_no_l2(uint32_t blockDim,
+                                                  void* stream, void* input_vec,
+                                                  void* output_vec,
+                                                  void* workspace,
+                                                  void* tilingGm);
+extern "C" void launch_scan_multi_core_int8(uint32_t blockDim, void* stream,
+                                            void* input_vec, void* output_vec,
+                                            void* workspace, void* tilingGm);
+extern "C" void launch_scan_multi_core_int8_no_l2(uint32_t blockDim,
+                                                  void* stream, void* input_vec,
+                                                  void* output_vec,
+                                                  void* workspace,
+                                                  void* tilingGm);
+extern "C" void launch_scan_multi_cube_fp16(uint32_t blockDim, void* stream,
+                                            void* input_vec, void* lower,
+                                            void* upper_strict,
+                                            void* output_vec, void* workspace,
+                                            void* tiling_gm);
+extern "C" void launch_scan_single_core_fp16(uint32_t blockDim, void* stream,
+                                             void* vec_in, void* vec_out,
+                                             void* workspace, void* tilingGm);
+extern "C" void launch_scan_single_core_fp32(uint32_t blockDim, void* stream,
+                                             void* vec_in, void* vec_out,
+                                             void* workspace, void* tilingGm);
+extern "C" void launch_scan_single_core_int8(uint32_t blockDim, void* stream,
+                                             void* vec_in, void* vec_out,
+                                             void* workspace, void* tilingGm);
 
 namespace tcuscan {
 
@@ -108,8 +110,8 @@ at::Tensor run_scan_single_core(const at::Tensor& x, int S,
         tcuscan::get_workspace_size<int8_t>(tiling);
     const at::Tensor workspace_tensor =
         alloc_zeros_workspace(user_workspace_size, device);
-    scan_single_core_int8<<<1 /* single core*/, nullptr, acl_stream>>>(
-        const_cast<void*>(x.storage().data()),
+    launch_scan_single_core_int8(
+        1 /* single core*/, acl_stream, const_cast<void*>(x.storage().data()),
         const_cast<void*>(z.storage().data()),
         const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else if (dtype == torch::kHalf) {
@@ -117,8 +119,8 @@ at::Tensor run_scan_single_core(const at::Tensor& x, int S,
         tcuscan::get_workspace_size<int16_t>(tiling);
     const at::Tensor workspace_tensor =
         alloc_zeros_workspace(user_workspace_size, device);
-    scan_single_core_fp16<<<1 /* single core*/, nullptr, acl_stream>>>(
-        const_cast<void*>(x.storage().data()),
+    launch_scan_single_core_fp16(
+        1 /* single core*/, acl_stream, const_cast<void*>(x.storage().data()),
         const_cast<void*>(z.storage().data()),
         const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else if (dtype == torch::kFloat32) {
@@ -126,8 +128,8 @@ at::Tensor run_scan_single_core(const at::Tensor& x, int S,
         tcuscan::get_workspace_size<float>(tiling);
     const at::Tensor workspace_tensor =
         alloc_zeros_workspace(user_workspace_size, device);
-    scan_single_core_fp32<<<1 /* single core*/, nullptr, acl_stream>>>(
-        const_cast<void*>(x.storage().data()),
+    launch_scan_single_core_fp32(
+        1 /* single core*/, acl_stream, const_cast<void*>(x.storage().data()),
         const_cast<void*>(z.storage().data()),
         const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else {
@@ -182,8 +184,8 @@ at::Tensor run_scan_batch(const at::Tensor& x, int S) {
         tcuscan::get_workspace_size<int16_t>(tiling);
     const at::Tensor workspace_tensor =
         alloc_workspace(user_workspace_size, device);
-    scan_batch_fp16<<<block_dim, nullptr, acl_stream>>>(
-        const_cast<void*>(x.storage().data()),
+    launch_scan_batch_fp16(
+        block_dim, acl_stream, const_cast<void*>(x.storage().data()),
         const_cast<void*>(z.storage().data()),
         const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else if (dtype == torch::kFloat32) {
@@ -191,8 +193,8 @@ at::Tensor run_scan_batch(const at::Tensor& x, int S) {
         tcuscan::get_workspace_size<float>(tiling);
     const at::Tensor workspace_tensor =
         alloc_zeros_workspace(user_workspace_size, device);
-    scan_batch_fp32<<<block_dim, nullptr, acl_stream>>>(
-        const_cast<void*>(x.storage().data()),
+    launch_scan_batch_fp32(
+        block_dim, acl_stream, const_cast<void*>(x.storage().data()),
         const_cast<void*>(z.storage().data()),
         const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else {
@@ -249,8 +251,8 @@ at::Tensor run_scan_multi_core(const at::Tensor& x, int S) {
         tcuscan::get_workspace_size<int16_t>(tiling);
     const at::Tensor workspace_tensor =
         alloc_workspace(user_workspace_size, device);
-    scan_multi_core_fp16<<<block_dim, nullptr, acl_stream>>>(
-        const_cast<void*>(x.storage().data()),
+    launch_scan_multi_core_fp16(
+        block_dim, acl_stream, const_cast<void*>(x.storage().data()),
         const_cast<void*>(z.storage().data()),
         const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else {
@@ -259,8 +261,8 @@ at::Tensor run_scan_multi_core(const at::Tensor& x, int S) {
     const at::Tensor workspace_tensor =
         alloc_workspace(user_workspace_size, device);
 
-    scan_multi_core_int8<<<block_dim, nullptr, acl_stream>>>(
-        const_cast<void*>(x.storage().data()),
+    launch_scan_multi_core_int8(
+        block_dim, acl_stream, const_cast<void*>(x.storage().data()),
         const_cast<void*>(z.storage().data()),
         const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   }
@@ -310,8 +312,8 @@ at::Tensor run_scan_multi_core_no_l2(const at::Tensor& x, int S) {
         tcuscan::get_workspace_size<int16_t>(tiling);
     const at::Tensor workspace_tensor =
         alloc_workspace(user_workspace_size, device);
-    scan_multi_core_fp16_no_l2<<<block_dim, nullptr, acl_stream>>>(
-        const_cast<void*>(x.storage().data()),
+    launch_scan_multi_core_fp16_no_l2(
+        block_dim, acl_stream, const_cast<void*>(x.storage().data()),
         const_cast<void*>(z.storage().data()),
         const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else {
@@ -320,8 +322,8 @@ at::Tensor run_scan_multi_core_no_l2(const at::Tensor& x, int S) {
     const at::Tensor workspace_tensor =
         tcuscan::alloc_workspace(user_workspace_size, device);
 
-    scan_multi_core_int8_no_l2<<<block_dim, nullptr, acl_stream>>>(
-        const_cast<void*>(x.storage().data()),
+    launch_scan_multi_core_int8_no_l2(
+        block_dim, acl_stream, const_cast<void*>(x.storage().data()),
         const_cast<void*>(z.storage().data()),
         const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   }
@@ -367,8 +369,8 @@ at::Tensor run_row_scan(const at::Tensor& x, int S) {
 
   if (dtype == torch::kHalf) {
     const at::Tensor workspace_tensor = alloc_workspace(0, device);
-    row_scan_fp16<<<block_dim, nullptr, acl_stream>>>(
-        const_cast<void*>(x.storage().data()),
+    launch_row_scan_fp16(
+        block_dim, acl_stream, const_cast<void*>(x.storage().data()),
         const_cast<void*>(z.storage().data()),
         const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else {
@@ -419,8 +421,8 @@ at::Tensor run_block_scan(const at::Tensor& x, const at::Tensor& upper,
 
   if (dtype == torch::kHalf) {
     const at::Tensor workspace_tensor = tcuscan::alloc_workspace(0, device);
-    block_scan_fp16<<<block_dim, nullptr, acl_stream>>>(
-        const_cast<void*>(x.storage().data()),
+    launch_block_scan_fp16(
+        block_dim, acl_stream, const_cast<void*>(x.storage().data()),
         const_cast<void*>(upper.storage().data()),
         const_cast<void*>(lower_strict.storage().data()),
         const_cast<void*>(z.storage().data()),
@@ -480,8 +482,8 @@ at::Tensor run_scan_multi_cube(const at::Tensor& x, const at::Tensor& upper,
         tcuscan::get_workspace_size<int16_t>(tiling);
     const at::Tensor workspace_tensor =
         alloc_workspace(user_workspace_size, device);
-    scan_multi_cube_fp16<<<block_dim, nullptr, acl_stream>>>(
-        const_cast<void*>(x.storage().data()),
+    launch_scan_multi_cube_fp16(
+        block_dim, acl_stream, const_cast<void*>(x.storage().data()),
         const_cast<void*>(upper.storage().data()),
         const_cast<void*>(lower_strict.storage().data()),
         const_cast<void*>(z.storage().data()),

@@ -16,14 +16,10 @@
 #include "tiling/platform/platform_ascendc.h"
 #include "torch_npu/csrc/core/npu/NPUStream.h"
 
-// AscendC kernel entry points launched below with `<<<>>>`; defined in
-// gen_lower.cpp.
-extern "C" __global__ __aicore__ void gen_lower_fp16(__gm__ void* dst,
-                                                     __gm__ void* workspace,
-                                                     __gm__ void* tiling);
-extern "C" __global__ __aicore__ void gen_lower_int8(__gm__ void* dst,
-                                                     __gm__ void* workspace,
-                                                     __gm__ void* tiling);
+extern "C" void launch_gen_lower_fp16(uint32_t blockDim, void* stream,
+                                      void* dst, void* workspace, void* tiling);
+extern "C" void launch_gen_lower_int8(uint32_t blockDim, void* stream,
+                                      void* dst, void* workspace, void* tiling);
 
 namespace tcuscan {
 
@@ -50,12 +46,12 @@ at::Tensor run_gen_lower(uint32_t matrix_size, const at::Device& device,
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
   if (dtype == at::kHalf) {
-    gen_lower_fp16<<<block_dim, nullptr, acl_stream>>>(
-        const_cast<void*>(z.storage().data()),
+    launch_gen_lower_fp16(
+        block_dim, acl_stream, const_cast<void*>(z.storage().data()),
         const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else if (dtype == at::kChar) {
-    gen_lower_int8<<<block_dim, nullptr, acl_stream>>>(
-        const_cast<void*>(z.storage().data()),
+    launch_gen_lower_int8(
+        block_dim, acl_stream, const_cast<void*>(z.storage().data()),
         const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   }
 

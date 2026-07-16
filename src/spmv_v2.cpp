@@ -182,3 +182,51 @@ extern "C" __global__ __aicore__ void spmv_v2_fp32(
                      vec_out, workspace, vec_len, num_segments, x_len, tile_len,
                      block_len);
 }
+
+/**
+ * @brief Call the `spmv_v2` kernel for FP16 data type.
+ *
+ * @param [in] blockDim Number of blocks for the kernel launch.
+ * @param [in] stream CUDA stream.
+ * @param [in] vec_in Pointer to an input buffer.
+ * @param [in] cols_in Pointer to an input buffer.
+ * @param [in] indptr Pointer to an input buffer.
+ * @param [in] x_in Pointer to an input buffer.
+ * @param [in] segment_offsets Pointer to an input buffer.
+ * @param [in] vec_out Pointer to an output buffer.
+ * @param [in] workspace Pointer to workspace.
+ * @param [in] tiling_gm Pointer to the tiling buffer.
+ */
+extern "C" void launch_spmv_v2_fp16(uint32_t blockDim, void* stream,
+                                    uint8_t* vec_in, uint8_t* cols_in,
+                                    uint8_t* indptr, uint8_t* x_in,
+                                    uint8_t* segment_offsets, uint8_t* vec_out,
+                                    uint8_t* workspace, uint8_t* tiling_gm) {
+  spmv_v2_fp16<<<blockDim, nullptr, stream>>>(vec_in, cols_in, indptr, x_in,
+                                              segment_offsets, vec_out,
+                                              workspace, tiling_gm);
+}
+
+/**
+ * @brief Call the `spmv_v2` kernel for FP32 data type.
+ *
+ * @param [in] blockDim Number of blocks for the kernel launch.
+ * @param [in] stream CUDA stream.
+ * @param [in] vec_in Pointer to an input buffer.
+ * @param [in] cols_in Pointer to an input buffer.
+ * @param [in] indptr Pointer to an input buffer.
+ * @param [in] x_in Pointer to an input buffer.
+ * @param [in] segment_offsets Pointer to an input buffer.
+ * @param [in] vec_out Pointer to an output buffer.
+ * @param [in] workspace Pointer to workspace.
+ * @param [in] tiling_gm Pointer to the tiling buffer.
+ */
+extern "C" void launch_spmv_v2_fp32(uint32_t blockDim, void* stream,
+                                    uint8_t* vec_in, uint8_t* cols_in,
+                                    uint8_t* indptr, uint8_t* x_in,
+                                    uint8_t* segment_offsets, uint8_t* vec_out,
+                                    uint8_t* workspace, uint8_t* tiling_gm) {
+  spmv_v2_fp32<<<blockDim, nullptr, stream>>>(vec_in, cols_in, indptr, x_in,
+                                              segment_offsets, vec_out,
+                                              workspace, tiling_gm);
+}

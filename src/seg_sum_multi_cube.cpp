@@ -130,3 +130,26 @@ extern "C" __global__ __aicore__ void seg_sum_multi_cube_fp16(
                                vec_out, workspace, vec_len, num_segments,
                                matmul_size, block_len);
 }
+
+/**
+ * @brief Call the `seg_sum_multi_cube` kernel for FP16 data type.
+ *
+ * @param [in] blockDim Number of blocks for the kernel launch.
+ * @param [in] stream CUDA stream.
+ * @param [in] vec_in Pointer to an input buffer.
+ * @param [in] upper Pointer to an input buffer.
+ * @param [in] lower Pointer to an input buffer.
+ * @param [in] indptr Pointer to an input buffer.
+ * @param [in] segment_offsets Pointer to an input buffer.
+ * @param [in] vec_out Pointer to an output buffer.
+ * @param [in] workspace Pointer to workspace.
+ * @param [in] tiling_gm Pointer to the tiling buffer.
+ */
+extern "C" void launch_seg_sum_multi_cube_fp16(
+    uint32_t blockDim, void* stream, uint8_t* vec_in, uint8_t* upper,
+    uint8_t* lower, uint8_t* indptr, uint8_t* segment_offsets, uint8_t* vec_out,
+    uint8_t* workspace, uint8_t* tiling_gm) {
+  seg_sum_multi_cube_fp16<<<blockDim, nullptr, stream>>>(
+      vec_in, upper, lower, indptr, segment_offsets, vec_out, workspace,
+      tiling_gm);
+}

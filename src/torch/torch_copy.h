@@ -15,16 +15,10 @@
 #include "tiling/platform/platform_ascendc.h"
 #include "torch_npu/csrc/core/npu/NPUStream.h"
 
-// AscendC kernel entry points launched below with `<<<>>>`; defined in
-// copy.cpp.
-extern "C" __global__ __aicore__ void copy_fp16(__gm__ void* in,
-                                                __gm__ void* out,
-                                                __gm__ void* workspace,
-                                                __gm__ void* tiling);
-extern "C" __global__ __aicore__ void copy_fp32(__gm__ void* in,
-                                                __gm__ void* out,
-                                                __gm__ void* workspace,
-                                                __gm__ void* tiling);
+extern "C" void launch_copy_fp16(uint32_t blockDim, void* stream, void* in,
+                                 void* out, void* workspace, void* tiling);
+extern "C" void launch_copy_fp32(uint32_t blockDim, void* stream, void* in,
+                                 void* out, void* workspace, void* tiling);
 
 namespace tcuscan {
 
@@ -53,13 +47,13 @@ at::Tensor run_copy(const at::Tensor& x, int s) {
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
   if (dtype == at::kFloat) {
-    copy_fp32<<<1 /* single core*/, nullptr, acl_stream>>>(
-        const_cast<void*>(x.storage().data()),
+    launch_copy_fp32(
+        1 /* single core*/, acl_stream, const_cast<void*>(x.storage().data()),
         const_cast<void*>(z.storage().data()),
         const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else {
-    copy_fp16<<<1 /* single core*/, nullptr, acl_stream>>>(
-        const_cast<void*>(x.storage().data()),
+    launch_copy_fp16(
+        1 /* single core*/, acl_stream, const_cast<void*>(x.storage().data()),
         const_cast<void*>(z.storage().data()),
         const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   }

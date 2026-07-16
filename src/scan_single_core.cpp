@@ -95,3 +95,57 @@ extern "C" __global__ __aicore__ void scan_single_core_fp32(GM_ADDR vec_in,
   tcuscan::run_scan_single_core<float>(vec_in, lower, vec_out, vec_len,
                                        matmul_size, usrWorkspace, running_sum);
 }
+
+/**
+ * @brief Call the `scan_single_core` kernel for INT8 data type.
+ *
+ * @param [in] blockDim Number of blocks for the kernel launch.
+ * @param [in] stream CUDA stream.
+ * @param [in] vec_in Pointer to an input buffer.
+ * @param [in] vec_out Pointer to an output buffer.
+ * @param [in] workspace Pointer to workspace.
+ * @param [in] tilingGm Pointer to the tiling buffer.
+ */
+extern "C" void launch_scan_single_core_int8(uint32_t blockDim, void* stream,
+                                             uint8_t* vec_in, uint8_t* vec_out,
+                                             uint8_t* workspace,
+                                             uint8_t* tilingGm) {
+  scan_single_core_int8<<<blockDim, nullptr, stream>>>(vec_in, vec_out,
+                                                       workspace, tilingGm);
+}
+
+/**
+ * @brief Call the `scan_single_core` kernel for FP16 data type.
+ *
+ * @param [in] blockDim Number of blocks for the kernel launch.
+ * @param [in] stream CUDA stream.
+ * @param [in] vec_in Pointer to an input buffer.
+ * @param [in] vec_out Pointer to an output buffer.
+ * @param [in] workspace Pointer to workspace.
+ * @param [in] tilingGm Pointer to the tiling buffer.
+ */
+extern "C" void launch_scan_single_core_fp16(uint32_t blockDim, void* stream,
+                                             uint8_t* vec_in, uint8_t* vec_out,
+                                             uint8_t* workspace,
+                                             uint8_t* tilingGm) {
+  scan_single_core_fp16<<<blockDim, nullptr, stream>>>(vec_in, vec_out,
+                                                       workspace, tilingGm);
+}
+
+/**
+ * @brief Call the `scan_single_core` kernel for FP32 data type.
+ *
+ * @param [in] blockDim Number of blocks for the kernel launch.
+ * @param [in] stream CUDA stream.
+ * @param [in] vec_in Pointer to an input buffer.
+ * @param [in] vec_out Pointer to an output buffer.
+ * @param [in] workspace Pointer to workspace.
+ * @param [in] tilingGm Pointer to the tiling buffer.
+ */
+extern "C" void launch_scan_single_core_fp32(uint32_t blockDim, void* stream,
+                                             uint8_t* vec_in, uint8_t* vec_out,
+                                             uint8_t* workspace,
+                                             uint8_t* tilingGm) {
+  scan_single_core_fp32<<<blockDim, nullptr, stream>>>(vec_in, vec_out,
+                                                       workspace, tilingGm);
+}

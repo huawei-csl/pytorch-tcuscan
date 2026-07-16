@@ -34,3 +34,23 @@ extern "C" __global__ __aicore__ void seg_scan_vec_single_core(
     op_vec.Process();
   }
 }
+
+/**
+ * @brief Launch the `seg_scan_vec_single_core` kernel.
+ *
+ * @param [in] blockDim Number of blocks for the kernel launch.
+ * @param [in] stream CUDA stream.
+ * @param [in] vec_in Pointer to an input buffer.
+ * @param [in] f_in Pointer to an input buffer.
+ * @param [in] vec_out Pointer to an output buffer.
+ * @param [in] workspace Pointer to workspace.
+ * @param [in] tilingGm Pointer to the tiling buffer.
+ */
+extern "C" void launch_seg_scan_vec_single_core(uint32_t blockDim, void* stream,
+                                                uint8_t* vec_in, uint8_t* f_in,
+                                                uint8_t* vec_out,
+                                                uint8_t* workspace,
+                                                uint8_t* tilingGm) {
+  seg_scan_vec_single_core<<<blockDim, nullptr, stream>>>(vec_in, f_in, vec_out,
+                                                          workspace, tilingGm);
+}

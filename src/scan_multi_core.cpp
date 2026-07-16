@@ -161,3 +161,75 @@ extern "C" __global__ __aicore__ void scan_multi_core_int8_no_l2(
   tcuscan::_run_scan_multi_core_no_l2_split<int8_t>(input_vec, output_vec,
                                                     workspace, tilingGm);
 }
+
+/**
+ * @brief Call the `scan_multi_core` kernel for FP16 data type.
+ *
+ * @param [in] blockDim Number of blocks for the kernel launch.
+ * @param [in] stream CUDA stream.
+ * @param [in] input_vec Pointer to an input buffer.
+ * @param [in] output_vec Pointer to an output buffer.
+ * @param [in] workspace Pointer to workspace.
+ * @param [in] tilingGm Pointer to the tiling buffer.
+ */
+extern "C" void launch_scan_multi_core_fp16(uint32_t blockDim, void* stream,
+                                            uint8_t* input_vec,
+                                            uint8_t* output_vec,
+                                            uint8_t* workspace,
+                                            uint8_t* tilingGm) {
+  scan_multi_core_fp16<<<blockDim, nullptr, stream>>>(input_vec, output_vec,
+                                                      workspace, tilingGm);
+}
+
+/**
+ * @brief Call the `scan_multi_core` kernel for INT8 data type.
+ *
+ * @param [in] blockDim Number of blocks for the kernel launch.
+ * @param [in] stream CUDA stream.
+ * @param [in] input_vec Pointer to an input buffer.
+ * @param [in] output_vec Pointer to an output buffer.
+ * @param [in] workspace Pointer to workspace.
+ * @param [in] tilingGm Pointer to the tiling buffer.
+ */
+extern "C" void launch_scan_multi_core_int8(uint32_t blockDim, void* stream,
+                                            uint8_t* input_vec,
+                                            uint8_t* output_vec,
+                                            uint8_t* workspace,
+                                            uint8_t* tilingGm) {
+  scan_multi_core_int8<<<blockDim, nullptr, stream>>>(input_vec, output_vec,
+                                                      workspace, tilingGm);
+}
+
+/**
+ * @brief Launch the `scan_multi_core_fp16_no_l2` kernel.
+ *
+ * @param [in] blockDim Number of blocks for the kernel launch.
+ * @param [in] stream CUDA stream.
+ * @param [in] input_vec Pointer to an input buffer.
+ * @param [in] output_vec Pointer to an output buffer.
+ * @param [in] workspace Pointer to workspace.
+ * @param [in] tilingGm Pointer to the tiling buffer.
+ */
+extern "C" void launch_scan_multi_core_fp16_no_l2(
+    uint32_t blockDim, void* stream, uint8_t* input_vec, uint8_t* output_vec,
+    uint8_t* workspace, uint8_t* tilingGm) {
+  scan_multi_core_fp16_no_l2<<<blockDim, nullptr, stream>>>(
+      input_vec, output_vec, workspace, tilingGm);
+}
+
+/**
+ * @brief Launch the `scan_multi_core_int8_no_l2` kernel.
+ *
+ * @param [in] blockDim Number of blocks for the kernel launch.
+ * @param [in] stream CUDA stream.
+ * @param [in] input_vec Pointer to an input buffer.
+ * @param [in] output_vec Pointer to an output buffer.
+ * @param [in] workspace Pointer to workspace.
+ * @param [in] tilingGm Pointer to the tiling buffer.
+ */
+extern "C" void launch_scan_multi_core_int8_no_l2(
+    uint32_t blockDim, void* stream, uint8_t* input_vec, uint8_t* output_vec,
+    uint8_t* workspace, uint8_t* tilingGm) {
+  scan_multi_core_int8_no_l2<<<blockDim, nullptr, stream>>>(
+      input_vec, output_vec, workspace, tilingGm);
+}

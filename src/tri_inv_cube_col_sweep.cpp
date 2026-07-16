@@ -43,3 +43,20 @@ extern "C" __global__ __aicore__ void tri_inv_cube_col_sweep_fp16(
     op.Process();
   }
 }
+
+/**
+ * @brief Call the `tri_inv_cube_col_sweep` kernel for FP16 data type.
+ *
+ * @param [in] blockDim Number of blocks for the kernel launch.
+ * @param [in] stream CUDA stream.
+ * @param [in] vec_in Pointer to an input buffer.
+ * @param [in] vec_out Pointer to an output buffer.
+ * @param [in] workspace Pointer to workspace.
+ * @param [in] tiling_gm Pointer to the tiling buffer.
+ */
+extern "C" void launch_tri_inv_cube_col_sweep_fp16(
+    uint32_t blockDim, void* stream, uint8_t* vec_in, uint8_t* vec_out,
+    uint8_t* workspace, uint8_t* tiling_gm) {
+  tri_inv_cube_col_sweep_fp16<<<blockDim, nullptr, stream>>>(
+      vec_in, vec_out, workspace, tiling_gm);
+}

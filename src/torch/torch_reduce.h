@@ -20,36 +20,34 @@
 #include "torch_npu/csrc/core/npu/NPUStream.h"
 #include "workspace.h"
 
-// AscendC kernel entry points launched below with `<<<>>>`; defined in
-// complete_blocks.cpp, complete_rows.cpp, cube_reduce.cpp, reduce_tiles.cpp.
-extern "C" __global__ __aicore__ void complete_blocks_fp32(
-    __gm__ void* input_vec, __gm__ void* input_sums, __gm__ void* output_vec,
-    __gm__ void* workspace, __gm__ void* tiling_gm);
-extern "C" __global__ __aicore__ void complete_blocks_int32(
-    __gm__ void* input_vec, __gm__ void* input_sums, __gm__ void* output_vec,
-    __gm__ void* workspace, __gm__ void* tiling_gm);
-extern "C" __global__ __aicore__ void complete_rows_fp32(
-    __gm__ void* input_vec, __gm__ void* input_sums, __gm__ void* output_vec,
-    __gm__ void* workspace, __gm__ void* tilingGm);
-extern "C" __global__ __aicore__ void complete_rows_int32(
-    __gm__ void* input_vec, __gm__ void* input_sums, __gm__ void* output_vec,
-    __gm__ void* workspace, __gm__ void* tilingGm);
-extern "C" __global__ __aicore__ void cube_reduce_fp16(__gm__ void* vec_in,
-                                                       __gm__ void* vec_out,
-                                                       __gm__ void* workspace,
-                                                       __gm__ void* tiling_gm);
-extern "C" __global__ __aicore__ void cube_reduce_int8(__gm__ void* vec_in,
-                                                       __gm__ void* vec_out,
-                                                       __gm__ void* workspace,
-                                                       __gm__ void* tiling_gm);
-extern "C" __global__ __aicore__ void reduce_tiles_fp16(__gm__ void* input_vec,
-                                                        __gm__ void* output_vec,
-                                                        __gm__ void* workspace,
-                                                        __gm__ void* tiling_gm);
-extern "C" __global__ __aicore__ void reduce_tiles_int8(__gm__ void* input_vec,
-                                                        __gm__ void* output_vec,
-                                                        __gm__ void* workspace,
-                                                        __gm__ void* tiling_gm);
+extern "C" void launch_complete_blocks_fp32(uint32_t blockDim, void* stream,
+                                            void* input_vec, void* input_sums,
+                                            void* output_vec, void* workspace,
+                                            void* tiling_gm);
+extern "C" void launch_complete_blocks_int32(uint32_t blockDim, void* stream,
+                                             void* input_vec, void* input_sums,
+                                             void* output_vec, void* workspace,
+                                             void* tiling_gm);
+extern "C" void launch_complete_rows_fp32(uint32_t blockDim, void* stream,
+                                          void* input_vec, void* input_sums,
+                                          void* output_vec, void* workspace,
+                                          void* tilingGm);
+extern "C" void launch_complete_rows_int32(uint32_t blockDim, void* stream,
+                                           void* input_vec, void* input_sums,
+                                           void* output_vec, void* workspace,
+                                           void* tilingGm);
+extern "C" void launch_cube_reduce_fp16(uint32_t blockDim, void* stream,
+                                        void* vec_in, void* vec_out,
+                                        void* workspace, void* tiling_gm);
+extern "C" void launch_cube_reduce_int8(uint32_t blockDim, void* stream,
+                                        void* vec_in, void* vec_out,
+                                        void* workspace, void* tiling_gm);
+extern "C" void launch_reduce_tiles_fp16(uint32_t blockDim, void* stream,
+                                         void* input_vec, void* output_vec,
+                                         void* workspace, void* tiling_gm);
+extern "C" void launch_reduce_tiles_int8(uint32_t blockDim, void* stream,
+                                         void* input_vec, void* output_vec,
+                                         void* workspace, void* tiling_gm);
 
 namespace tcuscan {
 
@@ -80,13 +78,13 @@ at::Tensor run_reduce_tiles(const at::Tensor& x, uint32_t tile_len,
   const at::Tensor workspace_tensor = alloc_workspace(0, device);
 
   if (dtype == torch::kInt8) {
-    reduce_tiles_int8<<<num_blocks, nullptr, acl_stream>>>(
-        const_cast<void*>(x.storage().data()),
+    launch_reduce_tiles_int8(
+        num_blocks, acl_stream, const_cast<void*>(x.storage().data()),
         const_cast<void*>(z.storage().data()),
         const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else if (dtype == torch::kHalf) {
-    reduce_tiles_fp16<<<num_blocks, nullptr, acl_stream>>>(
-        const_cast<void*>(x.storage().data()),
+    launch_reduce_tiles_fp16(
+        num_blocks, acl_stream, const_cast<void*>(x.storage().data()),
         const_cast<void*>(z.storage().data()),
         const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   }
@@ -125,8 +123,8 @@ at::Tensor run_cube_reduce(const at::Tensor& x, uint32_t num_blocks) {
     const uint32_t workspace_size = tcuscan::get_workspace_size<int8_t>(tiling);
     const at::Tensor workspace_tensor = alloc_workspace(workspace_size, device);
     auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
-    cube_reduce_int8<<<num_blocks, nullptr, acl_stream>>>(
-        const_cast<void*>(x.storage().data()),
+    launch_cube_reduce_int8(
+        num_blocks, acl_stream, const_cast<void*>(x.storage().data()),
         const_cast<void*>(z.storage().data()),
         const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
 
@@ -138,8 +136,8 @@ at::Tensor run_cube_reduce(const at::Tensor& x, uint32_t num_blocks) {
         tcuscan::get_workspace_size<int16_t>(tiling);
     const at::Tensor workspace_tensor = alloc_workspace(workspace_size, device);
     auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
-    cube_reduce_fp16<<<num_blocks, nullptr, acl_stream>>>(
-        const_cast<void*>(x.storage().data()),
+    launch_cube_reduce_fp16(
+        num_blocks, acl_stream, const_cast<void*>(x.storage().data()),
         const_cast<void*>(z.storage().data()),
         const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
     aclrtFree(tiling_device);
@@ -186,14 +184,14 @@ at::Tensor run_complete_rows(const at::Tensor& x, const at::Tensor& sums,
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
   if (dtype == torch::kLong) {
-    complete_rows_int32<<<block_dim, nullptr, acl_stream>>>(
-        const_cast<void*>(x.storage().data()),
+    launch_complete_rows_int32(
+        block_dim, acl_stream, const_cast<void*>(x.storage().data()),
         const_cast<void*>(sums.storage().data()),
         const_cast<void*>(z.storage().data()),
         const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else if (dtype == torch::kFloat) {
-    complete_rows_fp32<<<block_dim, nullptr, acl_stream>>>(
-        const_cast<void*>(x.storage().data()),
+    launch_complete_rows_fp32(
+        block_dim, acl_stream, const_cast<void*>(x.storage().data()),
         const_cast<void*>(sums.storage().data()),
         const_cast<void*>(z.storage().data()),
         const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
@@ -235,14 +233,14 @@ at::Tensor run_complete_blocks(const at::Tensor& x, const at::Tensor& sums,
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
   if (dtype == torch::kFloat) {
-    complete_blocks_fp32<<<num_blocks, nullptr, acl_stream>>>(
-        const_cast<void*>(x.storage().data()),
+    launch_complete_blocks_fp32(
+        num_blocks, acl_stream, const_cast<void*>(x.storage().data()),
         const_cast<void*>(sums.storage().data()),
         const_cast<void*>(z.storage().data()),
         const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else if (dtype == torch::kInt32) {
-    complete_blocks_int32<<<num_blocks, nullptr, acl_stream>>>(
-        const_cast<void*>(x.storage().data()),
+    launch_complete_blocks_int32(
+        num_blocks, acl_stream, const_cast<void*>(x.storage().data()),
         const_cast<void*>(sums.storage().data()),
         const_cast<void*>(z.storage().data()),
         const_cast<void*>(workspace_tensor.storage().data()), tiling_device);

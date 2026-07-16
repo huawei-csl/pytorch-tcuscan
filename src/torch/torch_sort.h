@@ -17,18 +17,12 @@
 #include "torch_npu/csrc/core/npu/NPUStream.h"
 #include "workspace.h"
 
-// AscendC kernel entry points launched below with `<<<>>>`; defined in
-// radix_sort.cpp.
-extern "C" __global__ __aicore__ void radix_sort_fp16(__gm__ void* in,
-                                                      __gm__ void* out,
-                                                      __gm__ void* indices,
-                                                      __gm__ void* workspace,
-                                                      __gm__ void* tiling);
-extern "C" __global__ __aicore__ void radix_sort_int16(__gm__ void* in,
-                                                       __gm__ void* out,
-                                                       __gm__ void* indices,
-                                                       __gm__ void* workspace,
-                                                       __gm__ void* tiling);
+extern "C" void launch_radix_sort_fp16(uint32_t blockDim, void* stream,
+                                       void* in, void* out, void* indices,
+                                       void* workspace, void* tiling);
+extern "C" void launch_radix_sort_int16(uint32_t blockDim, void* stream,
+                                        void* in, void* out, void* indices,
+                                        void* workspace, void* tiling);
 
 namespace tcuscan {
 
@@ -75,14 +69,14 @@ std::tuple<at::Tensor, at::Tensor> run_radix_sort(const at::Tensor& x, int S) {
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
   if (dtype == torch::kHalf) {
-    radix_sort_fp16<<<block_dim, nullptr, acl_stream>>>(
-        const_cast<void*>(x.storage().data()),
+    launch_radix_sort_fp16(
+        block_dim, acl_stream, const_cast<void*>(x.storage().data()),
         const_cast<void*>(vec_out.storage().data()),
         const_cast<void*>(indices_out.storage().data()),
         const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else if (dtype == torch::kInt16) {
-    radix_sort_int16<<<block_dim, nullptr, acl_stream>>>(
-        const_cast<void*>(x.storage().data()),
+    launch_radix_sort_int16(
+        block_dim, acl_stream, const_cast<void*>(x.storage().data()),
         const_cast<void*>(vec_out.storage().data()),
         const_cast<void*>(indices_out.storage().data()),
         const_cast<void*>(workspace_tensor.storage().data()), tiling_device);

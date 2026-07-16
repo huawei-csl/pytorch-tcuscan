@@ -19,43 +19,44 @@
 #include "torch_reduce.h"
 #include "workspace.h"
 
-// AscendC kernel entry points launched below with `<<<>>>`; defined in
-// compress.cpp.
-extern "C" __global__ __aicore__ void compress_fp16(__gm__ void* x,
-                                                    __gm__ void* mask,
-                                                    __gm__ void* z,
-                                                    __gm__ void* workspace,
-                                                    __gm__ void* tiling_gm);
-extern "C" __global__ __aicore__ void compress_fp32(__gm__ void* x,
-                                                    __gm__ void* mask,
-                                                    __gm__ void* z,
-                                                    __gm__ void* workspace,
-                                                    __gm__ void* tiling_gm);
-extern "C" __global__ __aicore__ void compress_ind_fp16(
-    __gm__ void* vec_in, __gm__ void* indices_in, __gm__ void* mask,
-    __gm__ void* num_ones_per_block, __gm__ void* vec_out,
-    __gm__ void* indices_out, __gm__ void* workspace, __gm__ void* tiling_gm);
-extern "C" __global__ __aicore__ void compress_ind_fp32(
-    __gm__ void* vec_in, __gm__ void* indices_in, __gm__ void* mask,
-    __gm__ void* num_ones_per_block, __gm__ void* vec_out,
-    __gm__ void* indices_out, __gm__ void* workspace, __gm__ void* tiling_gm);
-extern "C" __global__ __aicore__ void compress_ind_no_arange_fp16(
-    __gm__ void* vec_in, __gm__ void* mask, __gm__ void* num_ones_per_block,
-    __gm__ void* vec_out, __gm__ void* indices_out, __gm__ void* workspace,
-    __gm__ void* tiling_gm);
-extern "C" __global__ __aicore__ void compress_ind_no_arange_fp32(
-    __gm__ void* vec_in, __gm__ void* mask, __gm__ void* num_ones_per_block,
-    __gm__ void* vec_out, __gm__ void* indices_out, __gm__ void* workspace,
-    __gm__ void* tiling_gm);
-extern "C" __global__ __aicore__ void compress_with_sums_fp16(
-    __gm__ void* x, __gm__ void* mask, __gm__ void* num_ones_per_block,
-    __gm__ void* z, __gm__ void* workspace, __gm__ void* tiling_gm);
-extern "C" __global__ __aicore__ void compress_with_sums_fp32(
-    __gm__ void* x, __gm__ void* mask, __gm__ void* num_ones_per_block,
-    __gm__ void* z, __gm__ void* workspace, __gm__ void* tiling_gm);
-extern "C" __global__ __aicore__ void where_fp16(
-    __gm__ void* mask_in, __gm__ void* num_ones_per_block, __gm__ void* vec_out,
-    __gm__ void* workspace, __gm__ void* tiling_gm);
+extern "C" void launch_compress_fp16(uint32_t blockDim, void* stream, void* x,
+                                     void* mask, void* z, void* workspace,
+                                     void* tiling_gm);
+extern "C" void launch_compress_fp32(uint32_t blockDim, void* stream, void* x,
+                                     void* mask, void* z, void* workspace,
+                                     void* tiling_gm);
+extern "C" void launch_compress_ind_fp16(uint32_t blockDim, void* stream,
+                                         void* vec_in, void* indices_in,
+                                         void* mask, void* num_ones_per_block,
+                                         void* vec_out, void* indices_out,
+                                         void* workspace, void* tiling_gm);
+extern "C" void launch_compress_ind_fp32(uint32_t blockDim, void* stream,
+                                         void* vec_in, void* indices_in,
+                                         void* mask, void* num_ones_per_block,
+                                         void* vec_out, void* indices_out,
+                                         void* workspace, void* tiling_gm);
+extern "C" void launch_compress_ind_no_arange_fp16(
+    uint32_t blockDim, void* stream, void* vec_in, void* mask,
+    void* num_ones_per_block, void* vec_out, void* indices_out, void* workspace,
+    void* tiling_gm);
+extern "C" void launch_compress_ind_no_arange_fp32(
+    uint32_t blockDim, void* stream, void* vec_in, void* mask,
+    void* num_ones_per_block, void* vec_out, void* indices_out, void* workspace,
+    void* tiling_gm);
+extern "C" void launch_compress_with_sums_fp16(uint32_t blockDim, void* stream,
+                                               void* x, void* mask,
+                                               void* num_ones_per_block,
+                                               void* z, void* workspace,
+                                               void* tiling_gm);
+extern "C" void launch_compress_with_sums_fp32(uint32_t blockDim, void* stream,
+                                               void* x, void* mask,
+                                               void* num_ones_per_block,
+                                               void* z, void* workspace,
+                                               void* tiling_gm);
+extern "C" void launch_where_fp16(uint32_t blockDim, void* stream,
+                                  void* mask_in, void* num_ones_per_block,
+                                  void* vec_out, void* workspace,
+                                  void* tiling_gm);
 
 namespace tcuscan {
 
@@ -105,15 +106,15 @@ at::Tensor run_compress(const at::Tensor& x, const at::Tensor& mask, int S) {
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
   if (dtype == torch::kHalf or dtype == torch::kInt16) {
-    compress_with_sums_fp16<<<block_dim, nullptr, acl_stream>>>(
-        const_cast<void*>(x.storage().data()),
+    launch_compress_with_sums_fp16(
+        block_dim, acl_stream, const_cast<void*>(x.storage().data()),
         const_cast<void*>(mask.storage().data()),
         const_cast<void*>(num_ones_per_block.storage().data()),
         const_cast<void*>(z.storage().data()),
         const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else {
-    compress_with_sums_fp32<<<block_dim, nullptr, acl_stream>>>(
-        const_cast<void*>(x.storage().data()),
+    launch_compress_with_sums_fp32(
+        block_dim, acl_stream, const_cast<void*>(x.storage().data()),
         const_cast<void*>(mask.storage().data()),
         const_cast<void*>(num_ones_per_block.storage().data()),
         const_cast<void*>(z.storage().data()),
@@ -170,14 +171,14 @@ at::Tensor run_compress_pos(const at::Tensor& x, const at::Tensor& mask,
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
   if (dtype == torch::kHalf or dtype == torch::kInt16) {
-    compress_fp16<<<block_dim, nullptr, acl_stream>>>(
-        const_cast<void*>(x.storage().data()),
+    launch_compress_fp16(
+        block_dim, acl_stream, const_cast<void*>(x.storage().data()),
         const_cast<void*>(mask.storage().data()),
         const_cast<void*>(z.storage().data()),
         const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else {
-    compress_fp32<<<block_dim, nullptr, acl_stream>>>(
-        const_cast<void*>(x.storage().data()),
+    launch_compress_fp32(
+        block_dim, acl_stream, const_cast<void*>(x.storage().data()),
         const_cast<void*>(mask.storage().data()),
         const_cast<void*>(z.storage().data()),
         const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
@@ -242,8 +243,8 @@ std::tuple<at::Tensor, at::Tensor> run_compress_ind(
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
   if (dtype == torch::kHalf or dtype == torch::kInt16) {
-    compress_ind_fp16<<<block_dim, nullptr, acl_stream>>>(
-        const_cast<void*>(x.storage().data()),
+    launch_compress_ind_fp16(
+        block_dim, acl_stream, const_cast<void*>(x.storage().data()),
         const_cast<void*>(indices_in.storage().data()),
         const_cast<void*>(mask.storage().data()),
         const_cast<void*>(num_ones_per_block.storage().data()),
@@ -251,8 +252,8 @@ std::tuple<at::Tensor, at::Tensor> run_compress_ind(
         const_cast<void*>(indices_out.storage().data()),
         const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else {
-    compress_ind_fp32<<<block_dim, nullptr, acl_stream>>>(
-        const_cast<void*>(x.storage().data()),
+    launch_compress_ind_fp32(
+        block_dim, acl_stream, const_cast<void*>(x.storage().data()),
         const_cast<void*>(indices_in.storage().data()),
         const_cast<void*>(mask.storage().data()),
         const_cast<void*>(num_ones_per_block.storage().data()),
@@ -315,16 +316,16 @@ std::tuple<at::Tensor, at::Tensor> run_compress_ind_no_arange(
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
   if (dtype == torch::kHalf or dtype == torch::kInt16) {
-    compress_ind_no_arange_fp16<<<block_dim, nullptr, acl_stream>>>(
-        const_cast<void*>(x.storage().data()),
+    launch_compress_ind_no_arange_fp16(
+        block_dim, acl_stream, const_cast<void*>(x.storage().data()),
         const_cast<void*>(mask.storage().data()),
         const_cast<void*>(num_ones_per_block.storage().data()),
         const_cast<void*>(z.storage().data()),
         const_cast<void*>(indices_out.storage().data()),
         const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else {
-    compress_ind_no_arange_fp32<<<block_dim, nullptr, acl_stream>>>(
-        const_cast<void*>(x.storage().data()),
+    launch_compress_ind_no_arange_fp32(
+        block_dim, acl_stream, const_cast<void*>(x.storage().data()),
         const_cast<void*>(mask.storage().data()),
         const_cast<void*>(num_ones_per_block.storage().data()),
         const_cast<void*>(z.storage().data()),
@@ -412,8 +413,8 @@ at::Tensor run_where(const at::Tensor& x, float pivot, int S) {
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
   if (dtype == at::kHalf) {
-    where_fp16<<<block_dim, nullptr, acl_stream>>>(
-        const_cast<void*>(mask.storage().data()),
+    launch_where_fp16(
+        block_dim, acl_stream, const_cast<void*>(mask.storage().data()),
         const_cast<void*>(num_ones_per_block.storage().data()),
         const_cast<void*>(z.storage().data()),
         const_cast<void*>(workspace_tensor.storage().data()), tiling_device);

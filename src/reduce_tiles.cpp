@@ -84,3 +84,41 @@ extern "C" __global__ __aicore__ void reduce_tiles_int8(GM_ADDR input_vec,
   tcuscan::run_reduce_tiles<int8_t>(input_vec, output_vec, workspace, vec_len,
                                     tile_len);
 }
+
+/**
+ * @brief Call the `reduce_tiles` kernel for FP16 data type.
+ *
+ * @param [in] blockDim Number of blocks for the kernel launch.
+ * @param [in] stream CUDA stream.
+ * @param [in] input_vec Pointer to an input buffer.
+ * @param [in] output_vec Pointer to an output buffer.
+ * @param [in] workspace Pointer to workspace.
+ * @param [in] tiling_gm Pointer to the tiling buffer.
+ */
+extern "C" void launch_reduce_tiles_fp16(uint32_t blockDim, void* stream,
+                                         uint8_t* input_vec,
+                                         uint8_t* output_vec,
+                                         uint8_t* workspace,
+                                         uint8_t* tiling_gm) {
+  reduce_tiles_fp16<<<blockDim, nullptr, stream>>>(input_vec, output_vec,
+                                                   workspace, tiling_gm);
+}
+
+/**
+ * @brief Call the `reduce_tiles` kernel for INT8 data type.
+ *
+ * @param [in] blockDim Number of blocks for the kernel launch.
+ * @param [in] stream CUDA stream.
+ * @param [in] input_vec Pointer to an input buffer.
+ * @param [in] output_vec Pointer to an output buffer.
+ * @param [in] workspace Pointer to workspace.
+ * @param [in] tiling_gm Pointer to the tiling buffer.
+ */
+extern "C" void launch_reduce_tiles_int8(uint32_t blockDim, void* stream,
+                                         uint8_t* input_vec,
+                                         uint8_t* output_vec,
+                                         uint8_t* workspace,
+                                         uint8_t* tiling_gm) {
+  reduce_tiles_int8<<<blockDim, nullptr, stream>>>(input_vec, output_vec,
+                                                   workspace, tiling_gm);
+}

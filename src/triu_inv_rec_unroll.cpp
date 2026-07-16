@@ -28,3 +28,22 @@ extern "C" __global__ __aicore__ void triu_inv_rec_unroll_fp16(
   run_triu_inv_rec_unroll<half>(vec_in, vec_out, tiling_data.matrix_size,
                                 tiling_data.num_blocks, workspace);
 }
+
+/**
+ * @brief Call the `triu_inv_rec_unroll` kernel for FP16 data type.
+ *
+ * @param [in] blockDim Number of blocks for the kernel launch.
+ * @param [in] stream CUDA stream.
+ * @param [in] vec_in Pointer to an input buffer.
+ * @param [in] vec_out Pointer to an output buffer.
+ * @param [in] workspace Pointer to workspace.
+ * @param [in] tiling Pointer to the tiling buffer.
+ */
+extern "C" void launch_triu_inv_rec_unroll_fp16(uint32_t blockDim, void* stream,
+                                                uint8_t* vec_in,
+                                                uint8_t* vec_out,
+                                                uint8_t* workspace,
+                                                uint8_t* tiling) {
+  triu_inv_rec_unroll_fp16<<<blockDim, nullptr, stream>>>(vec_in, vec_out,
+                                                          workspace, tiling);
+}

@@ -17,12 +17,9 @@
 #include "torch_npu/csrc/core/npu/NPUStream.h"
 #include "workspace.h"
 
-// AscendC kernel entry points launched below with `<<<>>>`; defined in
-// matmul_cce.cpp.
-extern "C" __global__ __aicore__ void matmul_cce(__gm__ void* a, __gm__ void* b,
-                                                 __gm__ void* c,
-                                                 __gm__ void* workspace,
-                                                 __gm__ void* tiling);
+extern "C" void launch_matmul_cce(uint32_t blockDim, void* stream, void* x,
+                                  void* y, void* z, void* workspace,
+                                  void* tiling_gm);
 
 namespace tcuscan {
 
@@ -54,9 +51,9 @@ at::Tensor matmul_cce(at::Tensor a, at::Tensor b) {
 
   // Qualified: the enclosing host wrapper tcuscan::matmul_cce would otherwise
   // hide the kernel of the same name.
-  ::matmul_cce<<<block_dim, nullptr, acl_stream>>>(
-      a_ptr, b_ptr, c_ptr, const_cast<void*>(workspace_tensor.storage().data()),
-      tiling_device);
+  ::launch_matmul_cce(block_dim, acl_stream, a_ptr, b_ptr, c_ptr,
+                      const_cast<void*>(workspace_tensor.storage().data()),
+                      tiling_device);
   aclrtSynchronizeStream(acl_stream);
   aclrtFree(tiling_device);
 
