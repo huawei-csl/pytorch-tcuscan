@@ -399,6 +399,43 @@ def spmv_v2_benchmark(device: Device, B: csr_matrix, s: int):
     return _run_benchmark(device, run_spmv_v2), B.nnz, B.shape[0]
 
 
+def spmv_ops_sparse_benchmark(device: Device, B: csr_matrix, dtype: torch.dtype):
+    """
+    Benchmark spmv_ops_sparse kernel (row-parallel SpMV from ops-sparse).
+
+    Computes y = alpha * A @ x + beta * y.
+
+    Args:
+        device: Device to run benchmark on.
+        B: Input CSR Matrix
+        dtype: Torch dtype for values/vector (torch.float16 or torch.float32).
+
+    Returns:
+        Average time in microseconds.
+    """
+    rng = np.random.default_rng(seed=42)
+    nrow, ncol = B.shape
+    vals = torch.from_numpy((B.data).astype(np.float32)).to(dtype)
+    idx = torch.from_numpy((B.indptr).astype(np.int32))
+    cols = torch.from_numpy((B.indices).astype(np.int32))
+    vector = torch.from_numpy(rng.uniform(1, 9, ncol).astype(np.float32)).to(dtype)
+    y0 = torch.from_numpy(rng.uniform(1, 9, nrow).astype(np.float32)).to(dtype)
+    vals_npu = vals.npu()
+    idx_npu = idx.npu()
+    col_npu = cols.npu()
+    vec_npu = vector.npu()
+    y_npu = y0.npu()
+
+    torch.npu.synchronize()
+
+    def run_spmv_ops_sparse():
+        _ = tcuscan_ops.run_spmv_ops_sparse(
+            vals_npu, idx_npu, col_npu, vec_npu, alpha=2.0, beta=0.5, y=y_npu
+        )
+
+    return _run_benchmark(device, run_spmv_ops_sparse), B.nnz, B.shape[0]
+
+
 def spmv_v2_multi_cube_benchmark(device: Device, B: csr_matrix, s: int):
     """
     Benchmark TCUSCAN SpMV v2 multi-cube kernel (segmented-sum based).
@@ -543,6 +580,7 @@ if __name__ == "__main__":
             "spmv",
             "spmv_v2",
             "spmv_multi_cube",
+            "spmv_ops_sparse",
             "spmv_v2_multi_cube",
             "csr_gather",
             "gather_spmv",
@@ -648,6 +686,15 @@ if __name__ == "__main__":
                 B=B,
                 s=s,
             ),
+            bench_name,
+        )
+    elif bench == "spmv_ops_sparse" and dtype in ["fp16", "fp32"]:
+        bench_name = fullpath.split("/")[-1]
+        benchmark(
+            device,
+            "spmv_ops_sparse",
+            dtype,
+            partial(spmv_ops_sparse_benchmark, B=B, dtype=STR_TO_DTYPE[dtype]),
             bench_name,
         )
     elif bench == "spmv_v2_multi_cube" and dtype in ["fp16"]:

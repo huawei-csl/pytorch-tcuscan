@@ -27,6 +27,7 @@
 #include "torch/torch_sort.h"
 #include "torch/torch_split.h"
 #include "torch/torch_spmv.h"
+#include "torch/torch_spmv_ops_sparse.h"
 #include "torch/torch_topk.h"
 #include "torch/torch_vadd.h"
 
@@ -77,6 +78,14 @@ PYBIND11_MODULE(tcuscan_ops, m) {
         "Sparse Matrix-Vector Multiplication Using Segmented Sum");
   m.def("run_spmv_multi_cube", &tcuscan::run_spmv_multi_cube,
         "Sparse Matrix-Vector Multiplication Using Multi-cube Scan");
+  m.def("run_spmv_ops_sparse", &tcuscan::run_spmv_ops_sparse,
+        pybind11::arg("vals"), pybind11::arg("indptr"), pybind11::arg("cols"),
+        pybind11::arg("x"), pybind11::arg("alpha") = 1.0,
+        pybind11::arg("beta") = 0.0, pybind11::arg("trans") = false,
+        pybind11::arg("num_cols") = pybind11::none(),
+        pybind11::arg("y") = pybind11::none(),
+        "Row-parallel CSR Sparse Matrix-Vector Multiplication "
+        "(y = alpha*A@x + beta*y), migrated from CANN ops-sparse");
   m.def("run_spmv_v2_multi_cube", &tcuscan::run_spmv_v2_multi_cube,
         pybind11::arg("vals"), pybind11::arg("indptr"), pybind11::arg("cols"),
         pybind11::arg("x"), pybind11::arg("upper"),
