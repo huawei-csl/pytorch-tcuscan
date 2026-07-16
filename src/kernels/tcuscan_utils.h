@@ -568,19 +568,40 @@ __aicore__ inline void CopyCL0ToGlobal(
 
   LocalTensor<DataType> lt = src_q.template DeQue<DataType>();
 
+#if TCUSCAN_FIXPIPE_HAS_NZ2ND_FLAG
+  // Pre-dav-c310: the legacy DMA-style Fixpipe overload takes the generic
+  // FixpipeParams<T>, and the NZ->ND conversion is requested through the
+  // nz2ndEn flag on the params struct.
   FixpipeParams<DataType> params;
   params.cburstNum = height;
   params.burstLen = width * fractal_size * sizeof(DataType) / DATA_BLOCK_SIZE;
   params.dstStride = height;
 
-#if TCUSCAN_FIXPIPE_HAS_NZ2ND_FLAG
   Nz2NdParams nz2nd_params;
   nz2nd_params.nz2ndEn = true;
   nz2nd_params.originalNSize = height;
   params.nz2ndParams = nz2nd_params;
-#endif
 
   Fixpipe(global, lt, params);
+#else
+  // dav-c310 (A5): the generic FixpipeParams<T> overload no longer exists. The
+  // L0C->GM copy is described with FixpipeParamsArch3510 (matmul-style nSize /
+  // mSize / strides), and the NZ->ND conversion is selected through the
+  // CFG_ROW_MAJOR FixpipeConfig template parameter instead of an nz2ndEn flag.
+  // Field mapping follows the CANN matmul copy-out utility (row-major output).
+  FixpipeParamsArch3510<CO2Layout::ROW_MAJOR> params;
+  params.nSize = width;
+  params.mSize = height;
+  // Source stride in L0C is the M dimension aligned up to a fractal.
+  params.srcStride = (height + fractal_size - 1) / fractal_size * fractal_size;
+  // Row stride of the contiguous row-major output matrix.
+  params.dstStride = width;
+  // Single ND matrix (ndNum == 1); the ND strides are unused in that case.
+  params.params = Nz2NdParams(/*ndNum=*/1, /*srcNdStride=*/height,
+                              /*dstNdStride=*/height);
+
+  Fixpipe<DataType, DataType, CFG_ROW_MAJOR>(global, lt, params);
+#endif
 
   src_q.FreeTensor(lt);
 }
