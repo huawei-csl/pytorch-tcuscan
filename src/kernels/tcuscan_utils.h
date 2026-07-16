@@ -23,9 +23,9 @@ namespace tcuscan {
 /// `if constexpr`, because the member names are looked up even in a discarded
 /// branch.
 #if defined(__NPU_ARCH__) && ((__NPU_ARCH__ == 3510) || (__NPU_ARCH__ == 5102))
-#define TCUSCAN_FIXPIPE_HAS_NZ2ND_FLAG 0
+#define TCUSCAN_IS_DAV_C220_ARCH 0
 #else
-#define TCUSCAN_FIXPIPE_HAS_NZ2ND_FLAG 1
+#define TCUSCAN_IS_DAV_C220_ARCH 1
 #endif
 
 /// @brief Number of bytes for a required alignment in UB.
@@ -568,7 +568,7 @@ __aicore__ inline void CopyCL0ToGlobal(
 
   LocalTensor<DataType> lt = src_q.template DeQue<DataType>();
 
-#if TCUSCAN_FIXPIPE_HAS_NZ2ND_FLAG
+#if TCUSCAN_IS_DAV_C220_ARCH
   // Pre-dav-c310: the legacy DMA-style Fixpipe overload takes the generic
   // FixpipeParams<T>, and the NZ->ND conversion is requested through the
   // nz2ndEn flag on the params struct.
@@ -1226,7 +1226,9 @@ __aicore__ inline int GetSyncConf(int mode, int flag_id) {
  */
 template <GroupSyncDirection Dir = GroupSyncDirection::FULL>
 __aicore__ inline void SyncGroup() {
-  const int mode = 2;
+#if TCUSCAN_IS_DAV_C220_ARCH
+
+  constexpr int mode = 2;
 
   if constexpr (Dir == GroupSyncDirection::CUBE_WAIT_FOR_VEC) {
     const int AIV_SET_FLAG_ID = 11;
@@ -1261,6 +1263,9 @@ __aicore__ inline void SyncGroup() {
     }
     return;
   }
+#else
+// TODO(anastasios): Fix this for David!
+#endif
 }
 
 /**
