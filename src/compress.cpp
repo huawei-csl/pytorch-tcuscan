@@ -27,7 +27,7 @@ extern "C" __global__ __aicore__ void compress_fp16(GM_ADDR x, GM_ADDR mask,
                                                     GM_ADDR z,
                                                     GM_ADDR workspace,
                                                     GM_ADDR tiling_gm) {
-  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2);
+  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_AIV_ONLY);
 
   tcuscan::CompressTiling tiling;
   GetTilingData(&tiling, tiling_gm);
@@ -51,7 +51,7 @@ extern "C" __global__ __aicore__ void compress_fp32(GM_ADDR x, GM_ADDR mask,
                                                     GM_ADDR z,
                                                     GM_ADDR workspace,
                                                     GM_ADDR tiling_gm) {
-  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2);
+  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_AIV_ONLY);
 
   tcuscan::CompressTiling tiling;
   GetTilingData(&tiling, tiling_gm);
@@ -78,7 +78,7 @@ extern "C" __global__ __aicore__ void compress_ind_fp16(
     GM_ADDR vec_in, GM_ADDR indices_in, GM_ADDR mask,
     GM_ADDR num_ones_per_block, GM_ADDR vec_out, GM_ADDR indices_out,
     GM_ADDR workspace, GM_ADDR tiling_gm) {
-  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2);
+  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_AIV_ONLY);
 
   (void)workspace;
   tcuscan::CompressTiling tiling;

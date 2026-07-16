@@ -58,7 +58,7 @@ __aicore__ inline void run_block_scan(GM_ADDR input_vec, GM_ADDR lower,
 extern "C" __global__ __aicore__ void block_scan_fp16(
     GM_ADDR input_vec, GM_ADDR lower, GM_ADDR upper_strict, GM_ADDR output_vec,
     GM_ADDR workspace, GM_ADDR tilingGm) {
-  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2);
+  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_AIC_ONLY);
 
   (void)workspace;
   tcuscan::run_block_scan<half>(input_vec, lower, upper_strict, output_vec,

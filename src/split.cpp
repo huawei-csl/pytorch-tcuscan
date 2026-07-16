@@ -23,7 +23,7 @@ extern "C" __global__ __aicore__ void split_uint16(GM_ADDR in, GM_ADDR mask,
                                                    GM_ADDR out,
                                                    GM_ADDR workspace,
                                                    GM_ADDR tiling) {
-  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2);
+  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_AIV_ONLY);
 
   constexpr bool zeros_first = false;
   tcuscan::SplitTiling tiling_data;
@@ -49,7 +49,7 @@ extern "C" __global__ __aicore__ void split_uint16(GM_ADDR in, GM_ADDR mask,
 extern "C" __global__ __aicore__ void split_ind_uint16(
     GM_ADDR vec_in, GM_ADDR mask_in, GM_ADDR indices_in, GM_ADDR vec_out,
     GM_ADDR indices_out, GM_ADDR workspace, GM_ADDR tiling) {
-  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2);
+  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_AIV_ONLY);
 
   constexpr bool zeros_first = false;
   tcuscan::SplitTiling tiling_data;

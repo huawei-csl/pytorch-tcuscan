@@ -22,7 +22,7 @@ extern "C" __global__ __aicore__ void searchsorted_int32(GM_ADDR sorted,
                                                          GM_ADDR out,
                                                          GM_ADDR workspace,
                                                          GM_ADDR tilingGm) {
-  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2);
+  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_AIC_ONLY);
 
   (void)workspace;
   tcuscan::SearchsortedTiling tiling;
