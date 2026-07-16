@@ -79,7 +79,7 @@ __aicore__ inline void run_spmv_v2_multi_cube(
                            x_len, csr_gather_tile_len);
 
   sync::SyncGroup<sync::GroupSyncDirection::FULL>();
-  sync::SyncAllCores();
+  AscendC::SyncAll<false /*isAIVOnly*/>();
 
   if ASCEND_IS_AIC {
     KernelBlockScan<T, true /* SyncAfter */> op_cube(padded_vec_len, tile_len);
