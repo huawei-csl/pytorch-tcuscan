@@ -223,9 +223,6 @@ if(USE_ASC_LANGUAGE)
   target_compile_options(
     tcuscan_ops PRIVATE $<$<COMPILE_LANGUAGE:ASC>:--npu-arch=${NPU_ARCH}
                         -std=c++17>)
-  # Mixed ASC/CXX sources: link with the ASC driver so the kernel launch stubs
-  # in pybind11.cpp resolve.
-  set_target_properties(tcuscan_ops PROPERTIES LINKER_LANGUAGE ASC)
 endif()
 
 # Link the OpenMP runtime explicitly rather than through OpenMP::OpenMP_CXX,
