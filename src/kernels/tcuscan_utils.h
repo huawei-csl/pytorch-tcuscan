@@ -1503,6 +1503,37 @@ __aicore__ inline T GetGMValue(GM_ADDR addr, uint32_t offset,
 }
 
 /**
+ * @brief Binary search (lower_bound) of @p value into a sorted GM array.
+ *
+ * Reproduces `torch.searchsorted(sorted, value, side='left')`: returns the
+ * first index `j` such that `sorted[j] >= value` (equivalently, the count of
+ * elements `< value`). The haystack is read one element at a time from global
+ * memory via `GetGMValue`, so no Unified Buffer staging is required.
+ *
+ * @tparam T Data type of the sorted array and search value.
+ *
+ * @param [in] sorted Pointer to the sorted (ascending) array in global memory.
+ * @param [in] len Number of elements in @p sorted.
+ * @param [in] value Value to search for.
+ * @return Insertion index in `[0, len]`.
+ */
+template <typename T>
+__aicore__ inline uint32_t LowerBoundGM(GM_ADDR sorted, uint32_t len, T value) {
+  uint32_t lo = 0;
+  uint32_t hi = len;
+  while (lo < hi) {
+    const uint32_t mid = lo + (hi - lo) / 2;
+    const T pivot = GetGMValue<T>(sorted, mid, len);
+    if (pivot < value) {
+      lo = mid + 1;
+    } else {
+      hi = mid;
+    }
+  }
+  return lo;
+}
+
+/**
  * @brief Sets a scalar value to global memory.
  *
  * @tparam T Data type.
