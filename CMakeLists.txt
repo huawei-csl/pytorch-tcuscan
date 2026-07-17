@@ -139,8 +139,6 @@ function(tcuscan_kernel_library_setup target_name)
   # libraries have to land there whichever toolchain built them.
   set_target_properties(${target_name} PROPERTIES LIBRARY_OUTPUT_DIRECTORY
                                                   ${CMAKE_BINARY_DIR}/lib)
-  ascendc_compile_definitions(${target_name} PRIVATE -DHAVE_WORKSPACE
-                              -DHAVE_TILING)
   ascendc_include_directories(${target_name} PRIVATE
                               ${CMAKE_CURRENT_SOURCE_DIR}/src)
   if(USE_ASC_LANGUAGE)
