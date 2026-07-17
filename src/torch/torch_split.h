@@ -40,7 +40,7 @@ namespace tcuscan {
 at::Tensor run_split(const at::Tensor& x, const at::Tensor& mask, int S) {
   const auto ascendc_platform =
       platform_ascendc::PlatformAscendCManager::GetInstance();
-  auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
+
   const at::Device device = x.options().device();
   const auto dtype = x.options().dtype();
 
@@ -70,6 +70,7 @@ at::Tensor run_split(const at::Tensor& x, const at::Tensor& mask, int S) {
   const at::Tensor workspace_tensor =
       tcuscan::alloc_workspace(user_workspace_size, device);
 
+  auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
   if (dtype == torch::kHalf or dtype == torch::kInt16) {
     launch_split_uint16(
         block_dim, acl_stream, const_cast<void*>(x.storage().data()),
@@ -79,7 +80,6 @@ at::Tensor run_split(const at::Tensor& x, const at::Tensor& mask, int S) {
   }
 
   aclrtFree(tiling_device);
-  aclrtSynchronizeStream(acl_stream);
 
   return z;
 }
