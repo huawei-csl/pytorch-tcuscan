@@ -1,11 +1,23 @@
 cmake_minimum_required(VERSION 3.16.0)
 project(tcuscan)
-
+set(LINUX TRUE)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_BUILD_TYPE "Release") # "Debug"
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(PIP_INSTALL "True if building via pip" OFF)
+
+set(BASE_MODE
+    "MEMORY"
+    CACHE STRING "Base addressing mode: MEMORY or REGISTER")
+set_property(CACHE BASE_MODE PROPERTY STRINGS "MEMORY" "REGISTER")
+
+find_program(CCACHE_PROGRAM ccache)
+if(CCACHE_PROGRAM)
+  set(CMAKE_C_COMPILER_LAUNCHER ${CCACHE_PROGRAM})
+  set(CMAKE_CXX_COMPILER_LAUNCHER ${CCACHE_PROGRAM})
+endif()
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter Development)
 find_package(pybind11 CONFIG REQUIRED)
@@ -15,9 +27,6 @@ find_package(Torch REQUIRED)
 set(SOC_VERSION
     "Ascend910B4"
     CACHE STRING "system on chip type")
-set(ASCEND_CANN_PACKAGE_PATH
-    "/usr/local/Ascend/ascend-toolkit/latest"
-    CACHE PATH "ASCEND CANN package installation directory")
 set(RUN_MODE
     "npu"
     CACHE STRING "run mode: npu")
@@ -27,6 +36,32 @@ set(CMAKE_BUILD_TYPE
 set(CMAKE_INSTALL_PREFIX
     "${CMAKE_CURRENT_LIST_DIR}/out"
     CACHE STRING "path for install()" FORCE)
+
+if(DEFINED ASCEND_CANN_PACKAGE_PATH)
+  # already set via -D on the cmake command line
+elseif(DEFINED ENV{ASCEND_HOME_PATH})
+  set(ASCEND_CANN_PACKAGE_PATH
+      "$ENV{ASCEND_HOME_PATH}"
+      CACHE PATH "ASCEND CANN package installation directory" FORCE)
+else()
+  set(ASCEND_CANN_PACKAGE_PATH
+      "/usr/local/Ascend/ascend-toolkit/latest"
+      CACHE PATH "ASCEND CANN package installation directory")
+endif()
+
+set(ASCEND_DRIVER_PATH /usr/local/Ascend/driver)
+
+set(CMAKE_COMPILER bisheng)
+set(CMAKE_C_COMPILER ${CMAKE_COMPILER})
+set(CMAKE_CXX_COMPILER ${CMAKE_COMPILER})
+
+add_compile_options(-D_FORTIFY_SOURCE=2 -O2 -Wno-macro-redefined
+                    -Wno-ignored-attributes -fstack-protector-strong)
+
+add_link_options(-s -Wl,-z,relro -Wl,-z,now)
+
+include_directories(${ASCEND_CANN_PACKAGE_PATH}/include
+                    ${ASCEND_DRIVER_PATH}/kernel/inc)
 
 if(EXISTS ${ASCEND_CANN_PACKAGE_PATH}/tools/tikcpp/ascendc_kernel_cmake)
   set(ASCENDC_CMAKE_DIR
@@ -44,6 +79,23 @@ else()
 endif()
 
 include(${ASCENDC_CMAKE_DIR}/ascendc.cmake)
+
+add_compile_options(-D_FORTIFY_SOURCE=2 -O2 -std=c++17 -Wno-macro-redefined
+                    -Wno-ignored-attributes -fstack-protector-strong)
+
+add_link_options(-s -Wl,-z,relro -Wl,-z,now)
+
+set(CMAKE_CPP_COMPILE_OPTIONS -xc++ "SHELL:-include stdint.h"
+                              "SHELL:-include stddef.h")
+include(FetchContent)
+
+# Pin to v9.0.0; set GIT_TAG to "8.5.0" to use default CANN 8.5.0 headers
+FetchContent_Declare(
+  libpto_isa_headers
+  GIT_REPOSITORY https://gitcode.com/cann/pto-isa.git
+  GIT_TAG v9.0.0)
+
+FetchContent_Populate(libpto_isa_headers)
 
 # TORCH_NPU_PATH is the location where PyTorch Ascend Adapter (torch_npu) is
 # installed.
@@ -93,8 +145,18 @@ ascendc_library(
 
 ascendc_compile_definitions(scan_kernels PRIVATE -DHAVE_WORKSPACE -DHAVE_TILING)
 
-ascendc_include_directories(scan_kernels PRIVATE
-                            ${CMAKE_CURRENT_SOURCE_DIR}/src)
+if(BASE_MODE STREQUAL "MEMORY")
+  ascendc_compile_definitions(scan_kernels PRIVATE -DMEMORY_BASE)
+elseif(BASE_MODE STREQUAL "REGISTER")
+  ascendc_compile_definitions(scan_kernels PRIVATE -DREGISTER_BASE)
+else()
+  message(FATAL_ERROR "BASE_MODE must be MEMORY or REGISTER, got: ${BASE_MODE}")
+endif()
+
+ascendc_include_directories(
+  scan_kernels PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
+  ${libpto_isa_headers_SOURCE_DIR}/include
+  ${libpto_isa_headers_SOURCE_DIR}/include/pto/common)
 
 target_link_libraries(scan_kernels PRIVATE ascendcl c_sec tiling_api register
                                            platform ascendalog)
@@ -122,8 +184,10 @@ ascendc_library(
 ascendc_compile_definitions(vector_kernels PRIVATE -DHAVE_WORKSPACE
                             -DHAVE_TILING)
 
-ascendc_include_directories(vector_kernels PRIVATE
-                            ${CMAKE_CURRENT_SOURCE_DIR}/src)
+ascendc_include_directories(
+  vector_kernels PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
+  ${ASCEND_CANN_PACKAGE_PATH}/include
+  ${ASCEND_CANN_PACKAGE_PATH}/include/pto/common)
 
 target_link_libraries(vector_kernels PRIVATE ascendcl c_sec tiling_api register
                                              platform ascendalog)
@@ -136,8 +200,10 @@ ascendc_library(split_kernels SHARED src/radix_sort.cpp src/compress.cpp
 ascendc_compile_definitions(split_kernels PRIVATE -DHAVE_WORKSPACE
                             -DHAVE_TILING)
 
-ascendc_include_directories(split_kernels PRIVATE
-                            ${CMAKE_CURRENT_SOURCE_DIR}/src)
+ascendc_include_directories(
+  split_kernels PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
+  ${ASCEND_CANN_PACKAGE_PATH}/include
+  ${ASCEND_CANN_PACKAGE_PATH}/include/pto/common)
 
 target_link_libraries(split_kernels PRIVATE ascendcl c_sec tiling_api register
                                             platform ascendalog)
