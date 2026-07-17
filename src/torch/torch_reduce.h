@@ -62,7 +62,7 @@ namespace tcuscan {
  */
 at::Tensor run_reduce_tiles(const at::Tensor& x, uint32_t tile_len,
                             uint32_t num_blocks) {
-  auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
+
   const at::Device device = x.options().device();
   const auto dtype = x.options().dtype();
   const auto dtype_out =
@@ -77,6 +77,7 @@ at::Tensor run_reduce_tiles(const at::Tensor& x, uint32_t tile_len,
   uint8_t* tiling_device = alloc_copy_tiling(tiling);
   const at::Tensor workspace_tensor = alloc_workspace(0, device);
 
+  auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
   if (dtype == torch::kInt8) {
     launch_reduce_tiles_int8(
         num_blocks, acl_stream, const_cast<void*>(x.storage().data()),
