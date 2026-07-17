@@ -12,17 +12,12 @@
 
 #include "../tiling/heuristics/heuristics_radix_sort.h"
 #include "../tiling/tiling_radix_sort.h"
+#include "aclrtlaunch_radix_sort_fp16.h"
+#include "aclrtlaunch_radix_sort_int16.h"
 #include "commons.h"
 #include "tiling/platform/platform_ascendc.h"
 #include "torch_npu/csrc/core/npu/NPUStream.h"
 #include "workspace.h"
-
-extern "C" void launch_radix_sort_fp16(uint32_t blockDim, void* stream,
-                                       void* in, void* out, void* indices,
-                                       void* workspace, void* tiling);
-extern "C" void launch_radix_sort_int16(uint32_t blockDim, void* stream,
-                                        void* in, void* out, void* indices,
-                                        void* workspace, void* tiling);
 
 namespace tcuscan {
 
@@ -69,17 +64,17 @@ std::tuple<at::Tensor, at::Tensor> run_radix_sort(const at::Tensor& x, int S) {
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
   if (dtype == torch::kHalf) {
-    launch_radix_sort_fp16(
-        block_dim, acl_stream, const_cast<void*>(x.storage().data()),
-        const_cast<void*>(vec_out.storage().data()),
-        const_cast<void*>(indices_out.storage().data()),
-        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+    ACLRT_LAUNCH_KERNEL(radix_sort_fp16)
+    (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
+     const_cast<void*>(vec_out.storage().data()),
+     const_cast<void*>(indices_out.storage().data()),
+     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else if (dtype == torch::kInt16) {
-    launch_radix_sort_int16(
-        block_dim, acl_stream, const_cast<void*>(x.storage().data()),
-        const_cast<void*>(vec_out.storage().data()),
-        const_cast<void*>(indices_out.storage().data()),
-        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+    ACLRT_LAUNCH_KERNEL(radix_sort_int16)
+    (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
+     const_cast<void*>(vec_out.storage().data()),
+     const_cast<void*>(indices_out.storage().data()),
+     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   }
 
   aclrtFree(tiling_device);

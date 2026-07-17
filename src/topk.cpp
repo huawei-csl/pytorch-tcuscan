@@ -26,8 +26,6 @@ extern "C" __global__ __aicore__ void topk_int16(GM_ADDR vec_in,
                                                  GM_ADDR indices_out,
                                                  GM_ADDR workspace,
                                                  GM_ADDR tiling_ptr) {
-  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2);
-
   tcuscan::TopKTiling tiling;
   GetTilingData(&tiling, tiling_ptr);
 
@@ -52,8 +50,6 @@ extern "C" __global__ __aicore__ void topk_fp16(GM_ADDR vec_in, GM_ADDR vec_out,
                                                 GM_ADDR indices_out,
                                                 GM_ADDR workspace,
                                                 GM_ADDR tiling_ptr) {
-  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2);
-
   tcuscan::TopKTiling tiling;
   GetTilingData(&tiling, tiling_ptr);
 
@@ -76,8 +72,6 @@ extern "C" __global__ __aicore__ void topk_pivot_fp16(GM_ADDR vec_in,
                                                       GM_ADDR vec_out,
                                                       GM_ADDR workspace,
                                                       GM_ADDR tiling_ptr) {
-  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2);
-
   (void)workspace;
   tcuscan::TopKPivotTiling tiling;
   GetTilingData(&tiling, tiling_ptr);
@@ -85,60 +79,4 @@ extern "C" __global__ __aicore__ void topk_pivot_fp16(GM_ADDR vec_in,
   tcuscan::run_topk_pivot<false, half>(vec_in, vec_out, tiling.num_elems,
                                        tiling.num_samples, tiling.k_inner,
                                        tiling.k_outer);
-}
-
-/**
- * @brief Call the `topk` kernel for INT16 data type.
- *
- * @param [in] blockDim Number of blocks for the kernel launch.
- * @param [in] stream CUDA stream.
- * @param [in] vec_in Pointer to an input buffer.
- * @param [in] vec_out Pointer to an output buffer.
- * @param [in] indices_out Pointer to an output buffer.
- * @param [in] workspace Pointer to workspace.
- * @param [in] tiling_ptr Pointer to the tiling buffer.
- */
-extern "C" void launch_topk_int16(uint32_t blockDim, void* stream,
-                                  uint8_t* vec_in, uint8_t* vec_out,
-                                  uint8_t* indices_out, uint8_t* workspace,
-                                  uint8_t* tiling_ptr) {
-  topk_int16<<<blockDim, nullptr, stream>>>(vec_in, vec_out, indices_out,
-                                            workspace, tiling_ptr);
-}
-
-/**
- * @brief Call the `topk` kernel for FP16 data type.
- *
- * @param [in] blockDim Number of blocks for the kernel launch.
- * @param [in] stream CUDA stream.
- * @param [in] vec_in Pointer to an input buffer.
- * @param [in] vec_out Pointer to an output buffer.
- * @param [in] indices_out Pointer to an output buffer.
- * @param [in] workspace Pointer to workspace.
- * @param [in] tiling_ptr Pointer to the tiling buffer.
- */
-extern "C" void launch_topk_fp16(uint32_t blockDim, void* stream,
-                                 uint8_t* vec_in, uint8_t* vec_out,
-                                 uint8_t* indices_out, uint8_t* workspace,
-                                 uint8_t* tiling_ptr) {
-  topk_fp16<<<blockDim, nullptr, stream>>>(vec_in, vec_out, indices_out,
-                                           workspace, tiling_ptr);
-}
-
-/**
- * @brief Call the `topk_pivot` kernel for FP16 data type.
- *
- * @param [in] blockDim Number of blocks for the kernel launch.
- * @param [in] stream CUDA stream.
- * @param [in] vec_in Pointer to an input buffer.
- * @param [in] vec_out Pointer to an output buffer.
- * @param [in] workspace Pointer to workspace.
- * @param [in] tiling_ptr Pointer to the tiling buffer.
- */
-extern "C" void launch_topk_pivot_fp16(uint32_t blockDim, void* stream,
-                                       uint8_t* vec_in, uint8_t* vec_out,
-                                       uint8_t* workspace,
-                                       uint8_t* tiling_ptr) {
-  topk_pivot_fp16<<<blockDim, nullptr, stream>>>(vec_in, vec_out, workspace,
-                                                 tiling_ptr);
 }

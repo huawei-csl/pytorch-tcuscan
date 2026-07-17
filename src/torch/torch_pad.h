@@ -12,13 +12,10 @@
 
 #include "../host_utils.h"
 #include "../tiling/tiling_simple_pad.h"
+#include "aclrtlaunch_simple_pad_fp16.h"
 #include "commons.h"
 #include "tiling/platform/platform_ascendc.h"
 #include "torch_npu/csrc/core/npu/NPUStream.h"
-
-extern "C" void launch_simple_pad_fp16(uint32_t blockDim, void* stream,
-                                       void* vec_in, void* vec_out,
-                                       void* workspace, void* tiling);
 
 namespace tcuscan {
 
@@ -42,10 +39,10 @@ at::Tensor run_simple_pad(const at::Tensor& x, const uint32_t align_len) {
 
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
-  launch_simple_pad_fp16(
-      block_dim, acl_stream, const_cast<void*>(x.storage().data()),
-      const_cast<void*>(z.storage().data()),
-      const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+  ACLRT_LAUNCH_KERNEL(simple_pad_fp16)
+  (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
+   const_cast<void*>(z.storage().data()),
+   const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
 
   aclrtFree(tiling_device);
 

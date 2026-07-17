@@ -110,8 +110,6 @@ extern "C" __global__ __aicore__ void seg_scan_single_core(GM_ADDR input_vec,
                                                            GM_ADDR output_vec,
                                                            GM_ADDR workspace,
                                                            GM_ADDR tilingGm) {
-  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2);
-
   tcuscan::SegScanSingleCoreTiling tiling;
   GetTilingData(&tiling, tilingGm);
 
@@ -121,22 +119,4 @@ extern "C" __global__ __aicore__ void seg_scan_single_core(GM_ADDR input_vec,
   tcuscan::run_seg_scan_single_core_kernel(
       input_vec, input_flag, lower_half, lower_int8, output_vec, tiling.vec_len,
       tiling.matmul_size, workspace);
-}
-
-/**
- * @brief Launch the `seg_scan_single_core` kernel.
- *
- * @param [in] blockDim Number of blocks for the kernel launch.
- * @param [in] stream CUDA stream.
- * @param [in] input_vec Pointer to an input buffer.
- * @param [in] input_flag Pointer to an input buffer.
- * @param [in] output_vec Pointer to an output buffer.
- * @param [in] workspace Pointer to workspace.
- * @param [in] tilingGm Pointer to the tiling buffer.
- */
-extern "C" void launch_seg_scan_single_core(
-    uint32_t blockDim, void* stream, uint8_t* input_vec, uint8_t* input_flag,
-    uint8_t* output_vec, uint8_t* workspace, uint8_t* tilingGm) {
-  seg_scan_single_core<<<blockDim, nullptr, stream>>>(
-      input_vec, input_flag, output_vec, workspace, tilingGm);
 }

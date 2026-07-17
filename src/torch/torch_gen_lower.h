@@ -12,14 +12,12 @@
 
 #include "../host_utils.h"
 #include "../tiling/tiling_gen_lower.h"
+#include "aclrtlaunch_gen_lower_fp16.h"
+// #include "aclrtlaunch_gen_lower_fp32.h"
+#include "aclrtlaunch_gen_lower_int8.h"
 #include "commons.h"
 #include "tiling/platform/platform_ascendc.h"
 #include "torch_npu/csrc/core/npu/NPUStream.h"
-
-extern "C" void launch_gen_lower_fp16(uint32_t blockDim, void* stream,
-                                      void* dst, void* workspace, void* tiling);
-extern "C" void launch_gen_lower_int8(uint32_t blockDim, void* stream,
-                                      void* dst, void* workspace, void* tiling);
 
 namespace tcuscan {
 
@@ -46,13 +44,13 @@ at::Tensor run_gen_lower(uint32_t matrix_size, const at::Device& device,
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
   if (dtype == at::kHalf) {
-    launch_gen_lower_fp16(
-        block_dim, acl_stream, const_cast<void*>(z.storage().data()),
-        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+    ACLRT_LAUNCH_KERNEL(gen_lower_fp16)
+    (block_dim, acl_stream, const_cast<void*>(z.storage().data()),
+     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else if (dtype == at::kChar) {
-    launch_gen_lower_int8(
-        block_dim, acl_stream, const_cast<void*>(z.storage().data()),
-        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+    ACLRT_LAUNCH_KERNEL(gen_lower_int8)
+    (block_dim, acl_stream, const_cast<void*>(z.storage().data()),
+     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   }
 
   aclrtFree(tiling_device);
