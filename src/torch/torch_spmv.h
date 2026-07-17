@@ -49,8 +49,8 @@ at::Tensor run_spmv_multi_cube(const at::Tensor& vals, const at::Tensor& indptr,
   const at::Tensor product = tcuscan::run_csr_gather(vals, cols, x);
   const at::Tensor scanned =
       tcuscan::run_scan_multi_cube(product, upper, lower_strict);
-  const at::Tensor gathered = tcuscan::run_gather_spmv(scanned, indptr, 128);
-  const at::Tensor z = torch::diff(gathered);
+  // Fused gather + diff (replaces run_gather_spmv followed by torch::diff).
+  const at::Tensor z = tcuscan::run_gather_spmv_diff(scanned, indptr, 128);
   aclrtSynchronizeStream(acl_stream);
 
   return z;
@@ -86,8 +86,8 @@ at::Tensor run_spmv(const at::Tensor& vals, const at::Tensor& indptr,
     product = tcuscan::run_csr_gather(vals, cols, x);
   }
   const at::Tensor scanned = tcuscan::run_scan_multi_core(product, s);
-  const at::Tensor gathered = tcuscan::run_gather_spmv(scanned, indptr, 128);
-  const at::Tensor z = torch::diff(gathered);
+  // Fused gather + diff (replaces run_gather_spmv followed by torch::diff).
+  const at::Tensor z = tcuscan::run_gather_spmv_diff(scanned, indptr, 128);
 
   return z;
 }

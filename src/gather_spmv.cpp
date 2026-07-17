@@ -23,10 +23,11 @@ extern "C" __global__ __aicore__ void gather_spmv(GM_ADDR values_in,
                                                   GM_ADDR vec_out,
                                                   GM_ADDR workspace,
                                                   GM_ADDR tilingGm) {
-  (void)workspace;
   tcuscan::GatherSpmvTiling tiling;
   GetTilingData(&tiling, tilingGm);
 
-  tcuscan::run_gather_spmv(values_in, cols_in, vec_out, tiling.idx_len,
-                           tiling.val_len, tiling.tile_len);
+  // `workspace` is unused by the plain gather (EnableDiff = false), but is
+  // forwarded as the (ignored) scratch argument.
+  tcuscan::run_gather_spmv(values_in, cols_in, vec_out, workspace,
+                           tiling.idx_len, tiling.val_len, tiling.tile_len);
 }
