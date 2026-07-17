@@ -22,6 +22,8 @@
 #include "aclrtlaunch_scan_batch_fp32.h"
 #include "aclrtlaunch_scan_multi_core_fp16.h"
 #include "aclrtlaunch_scan_multi_core_fp16_no_l2.h"
+#include "aclrtlaunch_scan_multi_core_fp32.h"
+#include "aclrtlaunch_scan_multi_core_fp32_no_l2.h"
 #include "aclrtlaunch_scan_multi_core_int8.h"
 #include "aclrtlaunch_scan_multi_core_int8_no_l2.h"
 #include "aclrtlaunch_scan_multi_cube_fp16.h"
@@ -184,10 +186,12 @@ at::Tensor run_scan_batch(const at::Tensor& x, int S) {
 at::Tensor run_scan_multi_core(const at::Tensor& x, int S) {
   const auto ascendc_platform =
       platform_ascendc::PlatformAscendCManager::GetInstance();
+  auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
   const at::Device device = x.options().device();
   const auto dtype = x.options().dtype();
-  const auto dtype_out =
-      dtype == torch::kHalf ? torch::kFloat32 : torch::kInt32;
+  const auto dtype_out = dtype == torch::kHalf || dtype == torch::kFloat32
+                             ? torch::kFloat32
+                             : torch::kInt32;
 
   const uint32_t matmul_size = static_cast<uint32_t>(S);
   const uint32_t total_length = x.numel();
@@ -211,8 +215,6 @@ at::Tensor run_scan_multi_core(const at::Tensor& x, int S) {
                                    l2_cache_size};
   uint8_t* tiling_device = alloc_copy_tiling(tiling);
 
-  auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
-
   if (dtype == torch::kHalf) {
     const uint32_t user_workspace_size =
         tcuscan::get_workspace_size<int16_t>(tiling);
@@ -222,7 +224,18 @@ at::Tensor run_scan_multi_core(const at::Tensor& x, int S) {
     (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
      const_cast<void*>(z.storage().data()),
      const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
-  } else {
+  } else if (dtype == torch::kFloat32) {
+    const uint32_t user_workspace_size =
+        tcuscan::get_workspace_size<float>(tiling);
+    const at::Tensor workspace_tensor =
+        alloc_workspace(user_workspace_size, device);
+
+    ACLRT_LAUNCH_KERNEL(scan_multi_core_fp32)
+    (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
+     const_cast<void*>(z.storage().data()),
+     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+
+  } else if (dtype == torch::kInt8) {
     const uint32_t user_workspace_size =
         tcuscan::get_workspace_size<int8_t>(tiling);
     const at::Tensor workspace_tensor =
@@ -254,8 +267,9 @@ at::Tensor run_scan_multi_core_no_l2(const at::Tensor& x, int S) {
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();
   const auto dtype = x.options().dtype();
-  const auto dtype_out =
-      dtype == torch::kHalf ? torch::kFloat32 : torch::kInt32;
+  const auto dtype_out = dtype == torch::kHalf || dtype == torch::kFloat32
+                             ? torch::kFloat32
+                             : torch::kInt32;
 
   const uint32_t matmul_size = static_cast<uint32_t>(S);
   const uint32_t total_length = x.numel();
@@ -280,6 +294,15 @@ at::Tensor run_scan_multi_core_no_l2(const at::Tensor& x, int S) {
     const at::Tensor workspace_tensor =
         alloc_workspace(user_workspace_size, device);
     ACLRT_LAUNCH_KERNEL(scan_multi_core_fp16_no_l2)
+    (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
+     const_cast<void*>(z.storage().data()),
+     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+  } else if (dtype == torch::kFloat32) {
+    const uint32_t user_workspace_size =
+        tcuscan::get_workspace_size<float>(tiling);
+    const at::Tensor workspace_tensor =
+        alloc_workspace(user_workspace_size, device);
+    ACLRT_LAUNCH_KERNEL(scan_multi_core_fp32_no_l2)
     (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
      const_cast<void*>(z.storage().data()),
      const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
