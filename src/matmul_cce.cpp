@@ -29,6 +29,8 @@ __aicore__ inline void GetTilingData(TilingT* const tiling,
 extern "C" __global__ __aicore__ void matmul_cce(GM_ADDR x, GM_ADDR y,
                                                  GM_ADDR z, GM_ADDR workspace,
                                                  GM_ADDR tiling_gm) {
+  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2);
+
   (void)workspace;
   tcuscan::MatMulCCETiling t;
   tcuscan::GetTilingData(&t, tiling_gm);
@@ -46,6 +48,8 @@ extern "C" __global__ __aicore__ void matmul_cce(GM_ADDR x, GM_ADDR y,
 extern "C" __global__ __aicore__ void matmul_cce(GM_ADDR a, GM_ADDR b,
                                                  GM_ADDR c, GM_ADDR workspace,
                                                  GM_ADDR tiling) {
+  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2);
+
   (void)a;
   (void)b;
   (void)c;
@@ -55,3 +59,20 @@ extern "C" __global__ __aicore__ void matmul_cce(GM_ADDR a, GM_ADDR b,
 }
 
 #endif  // end of __DAV_C220_CUBE__ vs __DAV_C220_VEC__ switch
+
+/**
+ * @brief Launch the `matmul_cce` kernel.
+ *
+ * @param [in] blockDim Number of blocks for the kernel launch.
+ * @param [in] stream CUDA stream.
+ * @param [in] x Pointer to an input buffer.
+ * @param [in] y Pointer to an input buffer.
+ * @param [in] z Pointer to an input buffer.
+ * @param [in] workspace Pointer to workspace.
+ * @param [in] tiling_gm Pointer to the tiling buffer.
+ */
+extern "C" void launch_matmul_cce(uint32_t blockDim, void* stream, uint8_t* x,
+                                  uint8_t* y, uint8_t* z, uint8_t* workspace,
+                                  uint8_t* tiling_gm) {
+  matmul_cce<<<blockDim, nullptr, stream>>>(x, y, z, workspace, tiling_gm);
+}

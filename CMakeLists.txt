@@ -1,49 +1,115 @@
+# --------------------------------------------------------------------------------
+# Copyright (c) 2023-2026 Huawei Technologies Co., Ltd. All rights reserved. See
+# LICENSE in the root of the software repository:
+# https://github.com/huawei-csl/pytorch-tcuscan/ for the full License text.
+# --------------------------------------------------------------------------------#
+# Builds scan_kernels, vector_kernels, split_kernels and the tcuscan_ops python
+# extension with either kernel toolchain:
+#
+# -DUSE_ASC_LANGUAGE=ON (default)  ASC language (find_package(ASC)), as in
+# cann/ops-sparse -DUSE_ASC_LANGUAGE=OFF           legacy ascendc.cmake
+#
+# The host wrappers in src/torch/*.h launch kernels with `<<<>>>`, so they no
+# longer depend on the code-generated aclrtlaunch_<kernel>.h headers that only
+# the legacy path emits. Both toolchains now build every target, and the legacy
+# path can be dropped once it is no longer needed for comparison.
+
 cmake_minimum_required(VERSION 3.16.0)
-project(tcuscan)
+
+project(tcuscan LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_BUILD_TYPE "Release") # "Debug"
 
 option(PIP_INSTALL "True if building via pip" OFF)
+option(USE_ASC_LANGUAGE
+       "Compile kernels with the ASC language toolchain (CANN >= 9.0)" ON)
 
-find_package(Python3 REQUIRED COMPONENTS Interpreter Development)
-find_package(pybind11 CONFIG REQUIRED)
-find_package(Torch REQUIRED)
-
-# user-defined configuration
+# ========= user-defined configuration =========
 set(SOC_VERSION
     "Ascend910B4"
     CACHE STRING "system on chip type")
 set(ASCEND_CANN_PACKAGE_PATH
-    "/usr/local/Ascend/ascend-toolkit/latest"
+    "$ENV{ASCEND_HOME_PATH}"
     CACHE PATH "ASCEND CANN package installation directory")
 set(RUN_MODE
     "npu"
     CACHE STRING "run mode: npu")
-set(CMAKE_BUILD_TYPE
-    "Debug"
-    CACHE STRING "Build type Release/Debug (default Debug)" FORCE)
 set(CMAKE_INSTALL_PREFIX
     "${CMAKE_CURRENT_LIST_DIR}/out"
     CACHE STRING "path for install()" FORCE)
 
-if(EXISTS ${ASCEND_CANN_PACKAGE_PATH}/tools/tikcpp/ascendc_kernel_cmake)
-  set(ASCENDC_CMAKE_DIR
-      ${ASCEND_CANN_PACKAGE_PATH}/tools/tikcpp/ascendc_kernel_cmake)
-elseif(EXISTS ${ASCEND_CANN_PACKAGE_PATH}/compiler/tikcpp/ascendc_kernel_cmake)
-  set(ASCENDC_CMAKE_DIR
-      ${ASCEND_CANN_PACKAGE_PATH}/compiler/tikcpp/ascendc_kernel_cmake)
-elseif(EXISTS ${ASCEND_CANN_PACKAGE_PATH}/ascendc_devkit/tikcpp/samples/cmake)
-  set(ASCENDC_CMAKE_DIR
-      ${ASCEND_CANN_PACKAGE_PATH}/ascendc_devkit/tikcpp/samples/cmake)
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE
+      "Debug"
+      CACHE STRING "Build type Release/Debug (default Debug)" FORCE)
+endif()
+
+if(NOT ASCEND_CANN_PACKAGE_PATH)
+  set(ASCEND_CANN_PACKAGE_PATH "/usr/local/Ascend/ascend-toolkit/latest")
+endif()
+
+# ========= SOC_VERSION -> NPU_ARCH (ASC language only) =========
+string(TOLOWER "${SOC_VERSION}" SOC_VERSION_LOWER)
+if(SOC_VERSION_LOWER MATCHES "^ascend910b" OR SOC_VERSION_LOWER MATCHES
+                                              "^ascend910_93")
+  set(NPU_ARCH "dav-2201")
+elseif(SOC_VERSION_LOWER MATCHES "^ascend950")
+  set(NPU_ARCH "dav-3510")
+elseif(SOC_VERSION_LOWER MATCHES "^ascend310p")
+  set(NPU_ARCH "dav-2002")
 else()
   message(
     FATAL_ERROR
-      "ascendc_kernel_cmake does not exist, please check if CANN is installed.")
+      "Unsupported SOC_VERSION: ${SOC_VERSION}. Supported: ascend910b*, ascend910_93*, ascend950*, ascend310p*"
+  )
 endif()
 
-include(${ASCENDC_CMAKE_DIR}/ascendc.cmake)
+# ========= kernel toolchain =========
+if(USE_ASC_LANGUAGE)
+  # find_package(ASC) provides the ASC language plus ASC-flavoured
+  # ascendc_library / ascendc_compile_definitions / ascendc_include_directories.
+  # enable_language(ASC) only resolves once find_package has put the ASC plugin
+  # on CMAKE_MODULE_PATH.
+  if(NOT DEFINED ENV{ASCEND_HOME_PATH})
+    message(
+      FATAL_ERROR
+        "USE_ASC_LANGUAGE requires ASCEND_HOME_PATH, source <cann>/set_env.sh first."
+    )
+  endif()
+  find_package(ASC REQUIRED)
+  enable_language(ASC)
+
+  # CMakeASCInformation.cmake derives CMAKE_ASC_CREATE_SHARED_MODULE from
+  # CMAKE_ASC_CREATE_SHARED_LIBRARY before that one is defined, so it ends up
+  # empty and MODULE targets (the pybind11 extension) fail to generate.
+  if(NOT CMAKE_ASC_CREATE_SHARED_MODULE)
+    set(CMAKE_ASC_CREATE_SHARED_MODULE "${CMAKE_ASC_CREATE_SHARED_LIBRARY}")
+  endif()
+else()
+  if(EXISTS ${ASCEND_CANN_PACKAGE_PATH}/tools/tikcpp/ascendc_kernel_cmake)
+    set(ASCENDC_CMAKE_DIR
+        ${ASCEND_CANN_PACKAGE_PATH}/tools/tikcpp/ascendc_kernel_cmake)
+  elseif(EXISTS
+         ${ASCEND_CANN_PACKAGE_PATH}/compiler/tikcpp/ascendc_kernel_cmake)
+    set(ASCENDC_CMAKE_DIR
+        ${ASCEND_CANN_PACKAGE_PATH}/compiler/tikcpp/ascendc_kernel_cmake)
+  elseif(EXISTS ${ASCEND_CANN_PACKAGE_PATH}/ascendc_devkit/tikcpp/samples/cmake)
+    set(ASCENDC_CMAKE_DIR
+        ${ASCEND_CANN_PACKAGE_PATH}/ascendc_devkit/tikcpp/samples/cmake)
+  else()
+    message(
+      FATAL_ERROR
+        "ascendc_kernel_cmake does not exist, please check if CANN is installed."
+    )
+  endif()
+  include(${ASCENDC_CMAKE_DIR}/ascendc.cmake)
+endif()
+
+# ========= host dependencies =========
+find_package(Python3 REQUIRED COMPONENTS Interpreter Development)
+find_package(pybind11 CONFIG REQUIRED)
+find_package(Torch REQUIRED)
 
 # TORCH_NPU_PATH is the location where PyTorch Ascend Adapter (torch_npu) is
 # installed.
@@ -59,12 +125,33 @@ string(REPLACE "path string is NULL" "" TORCH_NPU_PATH "${TORCH_NPU_PATH}")
 
 message("***********************************************************")
 message("* ASCEND_CANN_PACKAGE_PATH : ${ASCEND_CANN_PACKAGE_PATH}")
+message("* USE_ASC_LANGUAGE         : ${USE_ASC_LANGUAGE}")
+message("* SOC_VERSION / NPU_ARCH   : ${SOC_VERSION} / ${NPU_ARCH}")
 message("* TORCH_INSTALL_PREFIX     : ${TORCH_INSTALL_PREFIX}")
 message("* TORCH_NPU_PATH           : ${TORCH_NPU_PATH}")
 message("* TORCH_LIBRARIES          : ${TORCH_LIBRARIES}")
 message("***********************************************************")
 
-# ascendc_library use to add kernel file to generate AscendC library
+# ========= kernel libraries =========
+# Settings shared by every kernel library, whichever toolchain compiled it.
+function(tcuscan_kernel_library_setup target_name)
+  # tcuscan_ops is linked with RUNPATH $ORIGIN/build/lib, so the kernel
+  # libraries have to land there whichever toolchain built them.
+  set_target_properties(${target_name} PROPERTIES LIBRARY_OUTPUT_DIRECTORY
+                                                  ${CMAKE_BINARY_DIR}/lib)
+  ascendc_include_directories(${target_name} PRIVATE
+                              ${CMAKE_CURRENT_SOURCE_DIR}/src)
+  if(USE_ASC_LANGUAGE)
+    # The ASC compiler takes the target architecture instead of SOC_VERSION.
+    target_compile_options(
+      ${target_name} PRIVATE $<$<COMPILE_LANGUAGE:ASC>:--npu-arch=${NPU_ARCH}>)
+    target_link_libraries(${target_name} PRIVATE tiling_api platform ascendalog)
+  else()
+    target_link_libraries(${target_name} PRIVATE ascendcl c_sec tiling_api
+                                                 register platform ascendalog)
+  endif()
+endfunction()
+
 ascendc_library(
   scan_kernels
   SHARED
@@ -89,15 +176,7 @@ ascendc_library(
   src/spmv_v2_multi_cube.cpp
   src/tri_inv_cube_col_sweep.cpp)
 
-# ascendc_compile_options(scan_kernels PRIVATE -Wall -Wextra -Werror)
-
-ascendc_compile_definitions(scan_kernels PRIVATE -DHAVE_WORKSPACE -DHAVE_TILING)
-
-ascendc_include_directories(scan_kernels PRIVATE
-                            ${CMAKE_CURRENT_SOURCE_DIR}/src)
-
-target_link_libraries(scan_kernels PRIVATE ascendcl c_sec tiling_api register
-                                           platform ascendalog)
+tcuscan_kernel_library_setup(scan_kernels)
 
 ascendc_library(
   vector_kernels
@@ -117,32 +196,20 @@ ascendc_library(
   src/histogram.cpp
   src/searchsorted.cpp)
 
-# ascendc_compile_options(vector_kernels PRIVATE -Wall -Wextra -Werror)
-
-ascendc_compile_definitions(vector_kernels PRIVATE -DHAVE_WORKSPACE
-                            -DHAVE_TILING)
-
-ascendc_include_directories(vector_kernels PRIVATE
-                            ${CMAKE_CURRENT_SOURCE_DIR}/src)
-
-target_link_libraries(vector_kernels PRIVATE ascendcl c_sec tiling_api register
-                                             platform ascendalog)
+tcuscan_kernel_library_setup(vector_kernels)
 
 ascendc_library(split_kernels SHARED src/radix_sort.cpp src/compress.cpp
                 src/split.cpp src/topk.cpp)
 
-# ascendc_compile_options(split_kernels PRIVATE -Wall -Wextra -Werror)
+tcuscan_kernel_library_setup(split_kernels)
 
-ascendc_compile_definitions(split_kernels PRIVATE -DHAVE_WORKSPACE
-                            -DHAVE_TILING)
+pybind11_add_module(tcuscan_ops src/pybind11.cpp src/torch/torch_scan_cpu.cpp)
 
-ascendc_include_directories(split_kernels PRIVATE
-                            ${CMAKE_CURRENT_SOURCE_DIR}/src)
-
-target_link_libraries(split_kernels PRIVATE ascendcl c_sec tiling_api register
-                                            platform ascendalog)
-
-pybind11_add_module(tcuscan_ops src/pybind11.cpp)
+if(USE_ASC_LANGUAGE)
+  target_compile_options(
+    tcuscan_ops PRIVATE $<$<COMPILE_LANGUAGE:ASC>:--npu-arch=${NPU_ARCH}
+                        -std=c++17>)
+endif()
 
 target_link_libraries(
   tcuscan_ops

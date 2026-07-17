@@ -58,7 +58,30 @@ __aicore__ inline void run_block_scan(GM_ADDR input_vec, GM_ADDR lower,
 extern "C" __global__ __aicore__ void block_scan_fp16(
     GM_ADDR input_vec, GM_ADDR lower, GM_ADDR upper_strict, GM_ADDR output_vec,
     GM_ADDR workspace, GM_ADDR tilingGm) {
+  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_AIC_ONLY);
+
   (void)workspace;
   tcuscan::run_block_scan<half>(input_vec, lower, upper_strict, output_vec,
                                 tilingGm);
+}
+
+/**
+ * @brief Call the `block_scan` kernel for FP16 data type.
+ *
+ * @param [in] blockDim Number of blocks for the kernel launch.
+ * @param [in] stream CUDA stream.
+ * @param [in] input_vec Pointer to an input buffer.
+ * @param [in] lower Pointer to an input buffer.
+ * @param [in] upper_strict Pointer to an input buffer.
+ * @param [in] output_vec Pointer to an output buffer.
+ * @param [in] workspace Pointer to workspace.
+ * @param [in] tilingGm Pointer to the tiling buffer.
+ */
+extern "C" void launch_block_scan_fp16(uint32_t blockDim, void* stream,
+                                       uint8_t* input_vec, uint8_t* lower,
+                                       uint8_t* upper_strict,
+                                       uint8_t* output_vec, uint8_t* workspace,
+                                       uint8_t* tilingGm) {
+  block_scan_fp16<<<blockDim, nullptr, stream>>>(
+      input_vec, lower, upper_strict, output_vec, workspace, tilingGm);
 }

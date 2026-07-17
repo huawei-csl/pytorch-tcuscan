@@ -27,6 +27,8 @@ extern "C" __global__ __aicore__ void compress_fp16(GM_ADDR x, GM_ADDR mask,
                                                     GM_ADDR z,
                                                     GM_ADDR workspace,
                                                     GM_ADDR tiling_gm) {
+  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_AIV_ONLY);
+
   tcuscan::CompressTiling tiling;
   GetTilingData(&tiling, tiling_gm);
 
@@ -49,6 +51,8 @@ extern "C" __global__ __aicore__ void compress_fp32(GM_ADDR x, GM_ADDR mask,
                                                     GM_ADDR z,
                                                     GM_ADDR workspace,
                                                     GM_ADDR tiling_gm) {
+  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_AIV_ONLY);
+
   tcuscan::CompressTiling tiling;
   GetTilingData(&tiling, tiling_gm);
 
@@ -74,6 +78,8 @@ extern "C" __global__ __aicore__ void compress_ind_fp16(
     GM_ADDR vec_in, GM_ADDR indices_in, GM_ADDR mask,
     GM_ADDR num_ones_per_block, GM_ADDR vec_out, GM_ADDR indices_out,
     GM_ADDR workspace, GM_ADDR tiling_gm) {
+  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_AIV_ONLY);
+
   (void)workspace;
   tcuscan::CompressTiling tiling;
   GetTilingData(&tiling, tiling_gm);
@@ -101,6 +107,8 @@ extern "C" __global__ __aicore__ void compress_ind_fp32(
     GM_ADDR vec_in, GM_ADDR indices_in, GM_ADDR mask,
     GM_ADDR num_ones_per_block, GM_ADDR vec_out, GM_ADDR indices_out,
     GM_ADDR workspace, GM_ADDR tiling_gm) {
+  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2);
+
   (void)workspace;
   tcuscan::CompressTiling tiling;
   GetTilingData(&tiling, tiling_gm);
@@ -127,6 +135,8 @@ extern "C" __global__ __aicore__ void compress_ind_fp32(
 extern "C" __global__ __aicore__ void compress_ind_no_arange_fp16(
     GM_ADDR vec_in, GM_ADDR mask, GM_ADDR num_ones_per_block, GM_ADDR vec_out,
     GM_ADDR indices_out, GM_ADDR workspace, GM_ADDR tiling_gm) {
+  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2);
+
   (void)workspace;
   tcuscan::CompressTiling tiling;
   GetTilingData(&tiling, tiling_gm);
@@ -154,6 +164,8 @@ extern "C" __global__ __aicore__ void compress_ind_no_arange_fp16(
 extern "C" __global__ __aicore__ void compress_ind_no_arange_fp32(
     GM_ADDR vec_in, GM_ADDR mask, GM_ADDR num_ones_per_block, GM_ADDR vec_out,
     GM_ADDR indices_out, GM_ADDR workspace, GM_ADDR tiling_gm) {
+  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2);
+
   (void)workspace;
   tcuscan::CompressTiling tiling;
   GetTilingData(&tiling, tiling_gm);
@@ -179,6 +191,8 @@ extern "C" __global__ __aicore__ void compress_ind_no_arange_fp32(
 extern "C" __global__ __aicore__ void compress_with_sums_fp16(
     GM_ADDR x, GM_ADDR mask, GM_ADDR num_ones_per_block, GM_ADDR z,
     GM_ADDR workspace, GM_ADDR tiling_gm) {
+  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2);
+
   (void)workspace;
   tcuscan::CompressTiling tiling;
   GetTilingData(&tiling, tiling_gm);
@@ -204,6 +218,8 @@ extern "C" __global__ __aicore__ void compress_with_sums_fp16(
 extern "C" __global__ __aicore__ void compress_with_sums_fp32(
     GM_ADDR x, GM_ADDR mask, GM_ADDR num_ones_per_block, GM_ADDR z,
     GM_ADDR workspace, GM_ADDR tiling_gm) {
+  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2);
+
   (void)workspace;
   tcuscan::CompressTiling tiling;
   GetTilingData(&tiling, tiling_gm);
@@ -231,6 +247,8 @@ extern "C" __global__ __aicore__ void where_fp16(GM_ADDR mask_in,
                                                  GM_ADDR vec_out,
                                                  GM_ADDR workspace,
                                                  GM_ADDR tiling_gm) {
+  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2);
+
   (void)workspace;
   tcuscan::WhereTiling tiling;
   GetTilingData(&tiling, tiling_gm);
@@ -239,4 +257,191 @@ extern "C" __global__ __aicore__ void where_fp16(GM_ADDR mask_in,
   const uint32_t tile_len = tiling.tile_len;
 
   tcuscan::run_where(mask_in, num_ones_per_block, vec_out, vec_len, tile_len);
+}
+
+/**
+ * @brief Call the `compress` kernel for FP16 data type.
+ *
+ * @param [in] blockDim Number of blocks for the kernel launch.
+ * @param [in] stream CUDA stream.
+ * @param [in] x Pointer to an input buffer.
+ * @param [in] mask Pointer to an input buffer.
+ * @param [in] z Pointer to an input buffer.
+ * @param [in] workspace Pointer to workspace.
+ * @param [in] tiling_gm Pointer to the tiling buffer.
+ */
+extern "C" void launch_compress_fp16(uint32_t blockDim, void* stream,
+                                     uint8_t* x, uint8_t* mask, uint8_t* z,
+                                     uint8_t* workspace, uint8_t* tiling_gm) {
+  compress_fp16<<<blockDim, nullptr, stream>>>(x, mask, z, workspace,
+                                               tiling_gm);
+}
+
+/**
+ * @brief Call the `compress` kernel for FP32 data type.
+ *
+ * @param [in] blockDim Number of blocks for the kernel launch.
+ * @param [in] stream CUDA stream.
+ * @param [in] x Pointer to an input buffer.
+ * @param [in] mask Pointer to an input buffer.
+ * @param [in] z Pointer to an input buffer.
+ * @param [in] workspace Pointer to workspace.
+ * @param [in] tiling_gm Pointer to the tiling buffer.
+ */
+extern "C" void launch_compress_fp32(uint32_t blockDim, void* stream,
+                                     uint8_t* x, uint8_t* mask, uint8_t* z,
+                                     uint8_t* workspace, uint8_t* tiling_gm) {
+  compress_fp32<<<blockDim, nullptr, stream>>>(x, mask, z, workspace,
+                                               tiling_gm);
+}
+
+/**
+ * @brief Call the `compress_ind` kernel for FP16 data type.
+ *
+ * @param [in] blockDim Number of blocks for the kernel launch.
+ * @param [in] stream CUDA stream.
+ * @param [in] vec_in Pointer to an input buffer.
+ * @param [in] indices_in Pointer to an input buffer.
+ * @param [in] mask Pointer to an input buffer.
+ * @param [in] num_ones_per_block Pointer to an input buffer.
+ * @param [in] vec_out Pointer to an output buffer.
+ * @param [in] indices_out Pointer to an output buffer.
+ * @param [in] workspace Pointer to workspace.
+ * @param [in] tiling_gm Pointer to the tiling buffer.
+ */
+extern "C" void launch_compress_ind_fp16(
+    uint32_t blockDim, void* stream, uint8_t* vec_in, uint8_t* indices_in,
+    uint8_t* mask, uint8_t* num_ones_per_block, uint8_t* vec_out,
+    uint8_t* indices_out, uint8_t* workspace, uint8_t* tiling_gm) {
+  compress_ind_fp16<<<blockDim, nullptr, stream>>>(
+      vec_in, indices_in, mask, num_ones_per_block, vec_out, indices_out,
+      workspace, tiling_gm);
+}
+
+/**
+ * @brief Call the `compress_ind` kernel for FP32 data type.
+ *
+ * @param [in] blockDim Number of blocks for the kernel launch.
+ * @param [in] stream CUDA stream.
+ * @param [in] vec_in Pointer to an input buffer.
+ * @param [in] indices_in Pointer to an input buffer.
+ * @param [in] mask Pointer to an input buffer.
+ * @param [in] num_ones_per_block Pointer to an input buffer.
+ * @param [in] vec_out Pointer to an output buffer.
+ * @param [in] indices_out Pointer to an output buffer.
+ * @param [in] workspace Pointer to workspace.
+ * @param [in] tiling_gm Pointer to the tiling buffer.
+ */
+extern "C" void launch_compress_ind_fp32(
+    uint32_t blockDim, void* stream, uint8_t* vec_in, uint8_t* indices_in,
+    uint8_t* mask, uint8_t* num_ones_per_block, uint8_t* vec_out,
+    uint8_t* indices_out, uint8_t* workspace, uint8_t* tiling_gm) {
+  compress_ind_fp32<<<blockDim, nullptr, stream>>>(
+      vec_in, indices_in, mask, num_ones_per_block, vec_out, indices_out,
+      workspace, tiling_gm);
+}
+
+/**
+ * @brief Call the `compress_ind_no_arange` kernel for FP16 data type.
+ *
+ * @param [in] blockDim Number of blocks for the kernel launch.
+ * @param [in] stream CUDA stream.
+ * @param [in] vec_in Pointer to an input buffer.
+ * @param [in] mask Pointer to an input buffer.
+ * @param [in] num_ones_per_block Pointer to an input buffer.
+ * @param [in] vec_out Pointer to an output buffer.
+ * @param [in] indices_out Pointer to an output buffer.
+ * @param [in] workspace Pointer to workspace.
+ * @param [in] tiling_gm Pointer to the tiling buffer.
+ */
+extern "C" void launch_compress_ind_no_arange_fp16(
+    uint32_t blockDim, void* stream, uint8_t* vec_in, uint8_t* mask,
+    uint8_t* num_ones_per_block, uint8_t* vec_out, uint8_t* indices_out,
+    uint8_t* workspace, uint8_t* tiling_gm) {
+  compress_ind_no_arange_fp16<<<blockDim, nullptr, stream>>>(
+      vec_in, mask, num_ones_per_block, vec_out, indices_out, workspace,
+      tiling_gm);
+}
+
+/**
+ * @brief Call the `compress_ind_no_arange` kernel for FP32 data type.
+ *
+ * @param [in] blockDim Number of blocks for the kernel launch.
+ * @param [in] stream CUDA stream.
+ * @param [in] vec_in Pointer to an input buffer.
+ * @param [in] mask Pointer to an input buffer.
+ * @param [in] num_ones_per_block Pointer to an input buffer.
+ * @param [in] vec_out Pointer to an output buffer.
+ * @param [in] indices_out Pointer to an output buffer.
+ * @param [in] workspace Pointer to workspace.
+ * @param [in] tiling_gm Pointer to the tiling buffer.
+ */
+extern "C" void launch_compress_ind_no_arange_fp32(
+    uint32_t blockDim, void* stream, uint8_t* vec_in, uint8_t* mask,
+    uint8_t* num_ones_per_block, uint8_t* vec_out, uint8_t* indices_out,
+    uint8_t* workspace, uint8_t* tiling_gm) {
+  compress_ind_no_arange_fp32<<<blockDim, nullptr, stream>>>(
+      vec_in, mask, num_ones_per_block, vec_out, indices_out, workspace,
+      tiling_gm);
+}
+
+/**
+ * @brief Call the `compress_with_sums` kernel for FP16 data type.
+ *
+ * @param [in] blockDim Number of blocks for the kernel launch.
+ * @param [in] stream CUDA stream.
+ * @param [in] x Pointer to an input buffer.
+ * @param [in] mask Pointer to an input buffer.
+ * @param [in] num_ones_per_block Pointer to an input buffer.
+ * @param [in] z Pointer to an input buffer.
+ * @param [in] workspace Pointer to workspace.
+ * @param [in] tiling_gm Pointer to the tiling buffer.
+ */
+extern "C" void launch_compress_with_sums_fp16(uint32_t blockDim, void* stream,
+                                               uint8_t* x, uint8_t* mask,
+                                               uint8_t* num_ones_per_block,
+                                               uint8_t* z, uint8_t* workspace,
+                                               uint8_t* tiling_gm) {
+  compress_with_sums_fp16<<<blockDim, nullptr, stream>>>(
+      x, mask, num_ones_per_block, z, workspace, tiling_gm);
+}
+
+/**
+ * @brief Call the `compress_with_sums` kernel for FP32 data type.
+ *
+ * @param [in] blockDim Number of blocks for the kernel launch.
+ * @param [in] stream CUDA stream.
+ * @param [in] x Pointer to an input buffer.
+ * @param [in] mask Pointer to an input buffer.
+ * @param [in] num_ones_per_block Pointer to an input buffer.
+ * @param [in] z Pointer to an input buffer.
+ * @param [in] workspace Pointer to workspace.
+ * @param [in] tiling_gm Pointer to the tiling buffer.
+ */
+extern "C" void launch_compress_with_sums_fp32(uint32_t blockDim, void* stream,
+                                               uint8_t* x, uint8_t* mask,
+                                               uint8_t* num_ones_per_block,
+                                               uint8_t* z, uint8_t* workspace,
+                                               uint8_t* tiling_gm) {
+  compress_with_sums_fp32<<<blockDim, nullptr, stream>>>(
+      x, mask, num_ones_per_block, z, workspace, tiling_gm);
+}
+
+/**
+ * @brief Call the `where` kernel for FP16 data type.
+ *
+ * @param [in] blockDim Number of blocks for the kernel launch.
+ * @param [in] stream CUDA stream.
+ * @param [in] mask_in Pointer to an input buffer.
+ * @param [in] num_ones_per_block Pointer to an input buffer.
+ * @param [in] vec_out Pointer to an output buffer.
+ * @param [in] workspace Pointer to workspace.
+ * @param [in] tiling_gm Pointer to the tiling buffer.
+ */
+extern "C" void launch_where_fp16(uint32_t blockDim, void* stream,
+                                  uint8_t* mask_in, uint8_t* num_ones_per_block,
+                                  uint8_t* vec_out, uint8_t* workspace,
+                                  uint8_t* tiling_gm) {
+  where_fp16<<<blockDim, nullptr, stream>>>(mask_in, num_ones_per_block,
+                                            vec_out, workspace, tiling_gm);
 }

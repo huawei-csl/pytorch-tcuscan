@@ -12,11 +12,14 @@
 
 #include "../tiling/tiling_matmul_cce.h"
 #include "acl/acl.h"
-#include "aclrtlaunch_matmul_cce.h"
 #include "commons.h"
 #include "tiling/platform/platform_ascendc.h"
 #include "torch_npu/csrc/core/npu/NPUStream.h"
 #include "workspace.h"
+
+extern "C" void launch_matmul_cce(uint32_t blockDim, void* stream, void* x,
+                                  void* y, void* z, void* workspace,
+                                  void* tiling_gm);
 
 namespace tcuscan {
 
@@ -46,9 +49,11 @@ at::Tensor matmul_cce(at::Tensor a, at::Tensor b) {
 
   const at::Tensor workspace_tensor = tcuscan::alloc_workspace(0, device);
 
-  ACLRT_LAUNCH_KERNEL(matmul_cce)
-  (block_dim, acl_stream, a_ptr, b_ptr, c_ptr,
-   const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+  // Qualified: the enclosing host wrapper tcuscan::matmul_cce would otherwise
+  // hide the kernel of the same name.
+  ::launch_matmul_cce(block_dim, acl_stream, a_ptr, b_ptr, c_ptr,
+                      const_cast<void*>(workspace_tensor.storage().data()),
+                      tiling_device);
   aclrtSynchronizeStream(acl_stream);
   aclrtFree(tiling_device);
 
