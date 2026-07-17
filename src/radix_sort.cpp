@@ -45,8 +45,6 @@ extern "C" __global__ __aicore__ void radix_sort_fp16(GM_ADDR in, GM_ADDR out,
   tcuscan::RadixSortTiling tiling_data;
   GetTilingData(&tiling_data, tiling);
 
-  GM_ADDR const usrWorkspace = AscendC::GetUserWorkspace(workspace);
-
   // Arrays in workspace have to be aligned to their data type size. Therefore
   // we align the size of the radices array to 4 bytes, so that the
   // workspace that comes after starts at a valid address for int32_t.
@@ -57,7 +55,7 @@ extern "C" __global__ __aicore__ void radix_sort_fp16(GM_ADDR in, GM_ADDR out,
   const uint32_t split_ws_size = tcuscan::split::get_workspace_size();
   const uint32_t output_size = vec_len * sizeof(half);
 
-  GM_ADDR const radices = usrWorkspace;
+  GM_ADDR const radices = workspace;
   GM_ADDR const split_workspace = radices + radices_size;
   GM_ADDR const out2 = split_workspace + split_ws_size;
   GM_ADDR const indices_ws = out2 + output_size;
