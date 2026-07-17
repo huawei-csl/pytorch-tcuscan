@@ -62,11 +62,6 @@ __aicore__ inline void run_seg_sum_multi_cube(
   if ASCEND_IS_AIV {
     const uint32_t num_blocks = AscendC::GetBlockNum();
 
-    // Use only 1 AIV core
-    if (GetBlockIdx() % 2 == 1) {
-      return;
-    }
-
     // id is the id of each AI Core (2 AIVs and 1 AIC core)
     const auto id = GetBlockIdx() / GetTaskRation();
     int32_t segm_ind_offset =
