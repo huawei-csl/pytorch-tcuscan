@@ -205,18 +205,6 @@ ascendc_library(split_kernels SHARED src/radix_sort.cpp src/compress.cpp
 
 tcuscan_kernel_library_setup(split_kernels)
 
-# ========= python extension =========
-# torch_scan_cpu.cpp stays a plain C++ source: it is OpenMP host code and the
-# ASC compiler ships no OpenMP runtime.
-find_package(OpenMP REQUIRED COMPONENTS CXX)
-
-if(USE_ASC_LANGUAGE)
-  # The host wrappers in src/torch/*.h launch kernels with `<<<>>>`, which only
-  # the ASC compiler understands, so the translation unit that includes them has
-  # to be compiled as ASC rather than plain C++.
-  set_source_files_properties(src/pybind11.cpp PROPERTIES LANGUAGE ASC)
-endif()
-
 pybind11_add_module(tcuscan_ops src/pybind11.cpp src/torch/torch_scan_cpu.cpp)
 
 if(USE_ASC_LANGUAGE)
@@ -224,10 +212,6 @@ if(USE_ASC_LANGUAGE)
     tcuscan_ops PRIVATE $<$<COMPILE_LANGUAGE:ASC>:--npu-arch=${NPU_ARCH}
                         -std=c++17>)
 endif()
-
-# Link the OpenMP runtime explicitly rather than through OpenMP::OpenMP_CXX,
-# whose -fopenmp link flag the ASC driver does not accept.
-target_link_libraries(tcuscan_ops PRIVATE ${OpenMP_CXX_LIBRARIES})
 
 target_link_libraries(
   tcuscan_ops
