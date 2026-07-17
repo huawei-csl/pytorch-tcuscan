@@ -11,12 +11,17 @@
 
 #include "../tiling/tiling_count_if.h"
 #include "../tiling/tiling_greater_equal.h"
-#include "aclrtlaunch_count_if_fp16.h"
-#include "aclrtlaunch_greater_equal_fp16.h"
 #include "commons.h"
 #include "tiling/platform/platform_ascendc.h"
 #include "torch_npu/csrc/core/npu/NPUStream.h"
 #include "workspace.h"
+
+extern "C" void launch_count_if_fp16(uint32_t blockDim, void* stream,
+                                     void* vec_in, void* vec_out,
+                                     void* workspace, void* tiling_gm);
+extern "C" void launch_greater_equal_fp16(uint32_t blockDim, void* stream,
+                                          void* vec_in, void* vec_out,
+                                          void* workspace, void* tiling_gm);
 
 namespace tcuscan {
 
@@ -53,10 +58,10 @@ at::Tensor run_count_if(const at::Tensor& x, float pivot, uint32_t tile_len,
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
   if (dtype == at::kHalf) {
-    ACLRT_LAUNCH_KERNEL(count_if_fp16)
-    (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
-     const_cast<void*>(z.storage().data()),
-     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+    launch_count_if_fp16(
+        block_dim, acl_stream, const_cast<void*>(x.storage().data()),
+        const_cast<void*>(z.storage().data()),
+        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else {
     /* Unsupported */
   }
@@ -93,10 +98,10 @@ at::Tensor run_greater_equal(const at::Tensor& x, float pivot,
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
   if (dtype == at::kHalf) {
-    ACLRT_LAUNCH_KERNEL(greater_equal_fp16)
-    (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
-     const_cast<void*>(z.storage().data()),
-     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+    launch_greater_equal_fp16(
+        block_dim, acl_stream, const_cast<void*>(x.storage().data()),
+        const_cast<void*>(z.storage().data()),
+        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else {
     /* Not supported */
   }

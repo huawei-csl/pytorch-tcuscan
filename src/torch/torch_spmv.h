@@ -10,12 +10,23 @@
 #include <pybind11/pybind11.h>
 
 #include "../tiling/tiling_spmv.h"
-#include "aclrtlaunch_spmv_v2_fp16.h"
-#include "aclrtlaunch_spmv_v2_fp32.h"
-#include "aclrtlaunch_spmv_v2_multi_cube_fp16.h"
 #include "torch_gather.h"
 #include "torch_scan.h"
 #include "torch_seg_ops.h"
+
+extern "C" {
+void launch_spmv_v2_fp16(uint32_t blockDim, void* stream, void* vec_in,
+                         void* cols_in, void* indptr, void* x_in, void* vec_out,
+                         void* workspace, void* tiling_gm);
+void launch_spmv_v2_fp32(uint32_t blockDim, void* stream, void* vec_in,
+                         void* cols_in, void* indptr, void* x_in, void* vec_out,
+                         void* workspace, void* tiling_gm);
+void launch_spmv_v2_multi_cube_fp16(uint32_t blockDim, void* stream,
+                                    void* vec_in, void* cols_in, void* upper,
+                                    void* lower, void* indptr, void* x_in,
+                                    void* vec_out, void* workspace,
+                                    void* tiling_gm);
+}
 
 namespace tcuscan {
 
@@ -106,12 +117,10 @@ at::Tensor run_spmv(const at::Tensor& vals, const at::Tensor& indptr,
  * @param cols column index array of the CSR matrix
  * @param x dense vector to multiply
  * @param s tile size for the multi-core segmented sum kernel
- * @param [in] segm_offsets Segment start index offset per block.
  * @return Dense result vector of the SpMV product A @ x
  */
 at::Tensor run_spmv_v2(const at::Tensor& vals, const at::Tensor& indptr,
-                       const at::Tensor& cols, const at::Tensor& x, int s,
-                       c10::optional<at::Tensor> segm_offsets = c10::nullopt) {
+                       const at::Tensor& cols, const at::Tensor& x, int s) {
   const auto vals_dtype = vals.options().dtype();
   const auto x_dtype = x.options().dtype();
   TORCH_CHECK((vals_dtype == torch::kHalf && x_dtype == torch::kHalf) ||
@@ -143,21 +152,6 @@ at::Tensor run_spmv_v2(const at::Tensor& vals, const at::Tensor& indptr,
       host_utils::CeilDiv(num_tiles, block_dim);
   const uint32_t block_len = max_num_tiles_per_block * align_size;
 
-  at::Tensor segm_offsets_;
-  if (segm_offsets.has_value()) {
-    segm_offsets_ = segm_offsets.value();
-  } else {
-    const at::Tensor sstart = torch::clamp(
-        torch::arange(
-            0, block_dim + 1,
-            torch::TensorOptions().dtype(torch::kInt32).device(device)) *
-            block_len,
-        c10::nullopt, static_cast<int32_t>(nnz));
-
-    segm_offsets_ = torch::searchsorted(indptr.to(torch::kInt32), sstart,
-                                        /*out_int32=*/true);
-  }
-
   const at::Tensor z =
       at::zeros({num_segments},
                 at::TensorOptions().dtype(torch::kFloat32).device(device));
@@ -185,21 +179,19 @@ at::Tensor run_spmv_v2(const at::Tensor& vals, const at::Tensor& indptr,
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
   if (is_fp32) {
-    ACLRT_LAUNCH_KERNEL(spmv_v2_fp32)
-    (block_dim, acl_stream, const_cast<void*>(vals.storage().data()),
-     const_cast<void*>(cols.storage().data()), const_cast<void*>(indptr_data),
-     const_cast<void*>(x.storage().data()),
-     const_cast<void*>(segm_offsets_.storage().data()),
-     const_cast<void*>(z.storage().data()),
-     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+    launch_spmv_v2_fp32(
+        block_dim, acl_stream, const_cast<void*>(vals.storage().data()),
+        const_cast<void*>(cols.storage().data()),
+        const_cast<void*>(indptr_data), const_cast<void*>(x.storage().data()),
+        const_cast<void*>(z.storage().data()),
+        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else {
-    ACLRT_LAUNCH_KERNEL(spmv_v2_fp16)
-    (block_dim, acl_stream, const_cast<void*>(vals.storage().data()),
-     const_cast<void*>(cols.storage().data()), const_cast<void*>(indptr_data),
-     const_cast<void*>(x.storage().data()),
-     const_cast<void*>(segm_offsets_.storage().data()),
-     const_cast<void*>(z.storage().data()),
-     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+    launch_spmv_v2_fp16(
+        block_dim, acl_stream, const_cast<void*>(vals.storage().data()),
+        const_cast<void*>(cols.storage().data()),
+        const_cast<void*>(indptr_data), const_cast<void*>(x.storage().data()),
+        const_cast<void*>(z.storage().data()),
+        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   }
 
   aclrtFree(tiling_device);
@@ -286,14 +278,15 @@ at::Tensor run_spmv_v2_multi_cube(const at::Tensor& vals,
 
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
-  ACLRT_LAUNCH_KERNEL(spmv_v2_multi_cube_fp16)
-  (block_dim, acl_stream, const_cast<void*>(vals.storage().data()),
-   const_cast<void*>(cols.storage().data()),
-   const_cast<void*>(upper.storage().data()),
-   const_cast<void*>(lower_strict.storage().data()),
-   const_cast<void*>(indptr.storage().data()),
-   const_cast<void*>(x.storage().data()), const_cast<void*>(z.storage().data()),
-   const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+  launch_spmv_v2_multi_cube_fp16(
+      block_dim, acl_stream, const_cast<void*>(vals.storage().data()),
+      const_cast<void*>(cols.storage().data()),
+      const_cast<void*>(upper.storage().data()),
+      const_cast<void*>(lower_strict.storage().data()),
+      const_cast<void*>(indptr.storage().data()),
+      const_cast<void*>(x.storage().data()),
+      const_cast<void*>(z.storage().data()),
+      const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
 
   aclrtFree(tiling_device);
   aclrtSynchronizeStream(acl_stream);

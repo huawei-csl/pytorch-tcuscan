@@ -26,6 +26,8 @@ extern "C" __global__ __aicore__ void count_if_fp16(GM_ADDR vec_in,
                                                     GM_ADDR vec_out,
                                                     GM_ADDR workspace,
                                                     GM_ADDR tiling_gm) {
+  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_AIV_ONLY);
+
   (void)workspace;
   tcuscan::CountIfTiling tiling;
   GetTilingData(&tiling, tiling_gm);
@@ -50,6 +52,8 @@ extern "C" __global__ __aicore__ void greater_equal_fp16(GM_ADDR vec_in,
                                                          GM_ADDR vec_out,
                                                          GM_ADDR workspace,
                                                          GM_ADDR tiling_gm) {
+  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_AIV_ONLY);
+
   (void)workspace;
   tcuscan::GreaterEqualTiling tiling;
   GetTilingData(&tiling, tiling_gm);
@@ -59,4 +63,39 @@ extern "C" __global__ __aicore__ void greater_equal_fp16(GM_ADDR vec_in,
   const uint32_t tile_len = tiling.tile_len;
 
   tcuscan::run_greater_equal<half>(vec_in, pivot, vec_out, vec_len, tile_len);
+}
+
+/**
+ * @brief Call the `count_if` kernel for FP16 data type.
+ *
+ * @param [in] blockDim Number of blocks for the kernel launch.
+ * @param [in] stream CUDA stream.
+ * @param [in] vec_in Pointer to the input vector.
+ * @param [in] vec_out Pointer to the output vector.
+ * @param [in] workspace Pointer to workspace.
+ * @param [in] tiling_gm Pointer to the tiling buffer.
+ */
+extern "C" void launch_count_if_fp16(uint32_t blockDim, void* stream,
+                                     uint8_t* vec_in, uint8_t* vec_out,
+                                     uint8_t* workspace, uint8_t* tiling_gm) {
+  count_if_fp16<<<blockDim, nullptr, stream>>>(vec_in, vec_out, workspace,
+                                               tiling_gm);
+}
+
+/**
+ * @brief Call the `greater_equal` kernel for FP16 data type.
+ *
+ * @param [in] blockDim Number of blocks for the kernel launch.
+ * @param [in] stream CUDA stream.
+ * @param [in] vec_in Pointer to the input vector.
+ * @param [in] vec_out Pointer to the output vector.
+ * @param [in] workspace Pointer to workspace.
+ * @param [in] tiling_gm Pointer to the tiling buffer.
+ */
+extern "C" void launch_greater_equal_fp16(uint32_t blockDim, void* stream,
+                                          uint8_t* vec_in, uint8_t* vec_out,
+                                          uint8_t* workspace,
+                                          uint8_t* tiling_gm) {
+  greater_equal_fp16<<<blockDim, nullptr, stream>>>(vec_in, vec_out, workspace,
+                                                    tiling_gm);
 }
