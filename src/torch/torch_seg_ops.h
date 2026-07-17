@@ -103,7 +103,6 @@ at::Tensor run_seg_scan_vec(const at::Tensor& x, const at::Tensor& f, int S) {
       const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
 
   aclrtFree(tiling_device);
-  aclrtSynchronizeStream(acl_stream);
 
   return z;
 }
@@ -122,7 +121,7 @@ at::Tensor run_seg_sum(const at::Tensor& x, const at::Tensor& f, int S) {
   using tcuscan::run_compress_pos;
   using tcuscan::run_scan_multi_core;
 
-  auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
+
   const at::Device device = x.options().device();
 
   const at::Tensor scan_x = run_scan_multi_core(x, S);
@@ -132,7 +131,6 @@ at::Tensor run_seg_sum(const at::Tensor& x, const at::Tensor& f, int S) {
 
   const at::Tensor prepend =
       at::zeros({1}, at::TensorOptions().dtype(at::kFloat).device(device));
-  aclrtSynchronizeStream(acl_stream);
 
   const at::Tensor prep_compress_scan_x =
       torch::cat({prepend, compress_scan_x});
@@ -183,7 +181,6 @@ at::Tensor run_seg_scan_mc_revert(const at::Tensor& x, const at::Tensor& f,
       const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
 
   aclrtFree(tiling_device);
-  aclrtSynchronizeStream(acl_stream);
 
   return z;
 }
@@ -224,7 +221,6 @@ at::Tensor run_seg_scan(const at::Tensor& x, const at::Tensor& f, int S) {
       const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
 
   aclrtFree(tiling_device);
-  aclrtSynchronizeStream(acl_stream);
 
   return z;
 }
@@ -266,7 +262,7 @@ at::Tensor run_seg_sum_single_core(const at::Tensor& x,
                                                matmul_size};
   uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
 
-  auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
+
 
   // Offset indptr by one element, since first element is always zero.
   void* indptr_data = static_cast<void*>(
@@ -280,6 +276,7 @@ at::Tensor run_seg_sum_single_core(const at::Tensor& x,
     const at::Tensor workspace_tensor =
         tcuscan::alloc_workspace(user_workspace_size, device);
 
+  auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
     launch_seg_sum_single_core_fp16(
         BLOCK_DIM, acl_stream, const_cast<void*>(x.storage().data()),
         indptr_data, const_cast<void*>(z.storage().data()),
@@ -290,6 +287,8 @@ at::Tensor run_seg_sum_single_core(const at::Tensor& x,
 
     const at::Tensor workspace_tensor =
         tcuscan::alloc_workspace(user_workspace_size, device);
+
+  auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
     launch_seg_sum_single_core_int8(
         BLOCK_DIM, acl_stream, const_cast<void*>(x.storage().data()),
         indptr_data, const_cast<void*>(z.storage().data()),
@@ -297,7 +296,6 @@ at::Tensor run_seg_sum_single_core(const at::Tensor& x,
   }
 
   aclrtFree(tiling_device);
-  aclrtSynchronizeStream(acl_stream);
 
   return z;
 }
@@ -332,7 +330,7 @@ at::Tensor run_seg_sum_single_cube(const at::Tensor& x, const at::Tensor& upper,
                                                matmul_size};
   uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
 
-  auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
+
 
   if (dtype == torch::kHalf) {
     const uint32_t user_workspace_size =
@@ -341,6 +339,7 @@ at::Tensor run_seg_sum_single_cube(const at::Tensor& x, const at::Tensor& upper,
     const at::Tensor workspace_tensor =
         tcuscan::alloc_workspace(user_workspace_size, device);
 
+  auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
     launch_seg_sum_single_cube_fp16(
         BLOCK_DIM, acl_stream, const_cast<void*>(x.storage().data()),
         const_cast<void*>(upper.storage().data()),
@@ -353,7 +352,6 @@ at::Tensor run_seg_sum_single_cube(const at::Tensor& x, const at::Tensor& upper,
   }
 
   aclrtFree(tiling_device);
-  aclrtSynchronizeStream(acl_stream);
 
   return z;
 }
@@ -438,8 +436,6 @@ at::Tensor run_seg_sum_multi_core(
         const_cast<void*>(z.storage().data()),
         const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
 
-    aclrtFree(tiling_device);
-    aclrtSynchronizeStream(acl_stream);
 
   } else if (dtype == torch::kInt8) {
     const uint32_t workspace_size = tcuscan::get_workspace_size<int8_t>(tiling);
@@ -455,9 +451,9 @@ at::Tensor run_seg_sum_multi_core(
         const_cast<void*>(z.storage().data()),
         const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
 
-    aclrtFree(tiling_device);
-    aclrtSynchronizeStream(acl_stream);
+
   }
+    aclrtFree(tiling_device);
 
   return z;
 }
@@ -553,7 +549,6 @@ at::Tensor run_seg_sum_multi_cube(
       const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
 
   aclrtFree(tiling_device);
-  aclrtSynchronizeStream(acl_stream);
 
   return z;
 }
