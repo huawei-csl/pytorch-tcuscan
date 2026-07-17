@@ -23,15 +23,13 @@ extern "C" __global__ __aicore__ void split_uint16(GM_ADDR in, GM_ADDR mask,
                                                    GM_ADDR out,
                                                    GM_ADDR workspace,
                                                    GM_ADDR tiling) {
-  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_AIV_ONLY);
+  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2);
 
   constexpr bool zeros_first = false;
   tcuscan::SplitTiling tiling_data;
   GetTilingData(&tiling_data, tiling);
 
-  GM_ADDR const usrWorkspace = AscendC::GetUserWorkspace(workspace);
-
-  tcuscan::run_split_uint16(in, mask, out, usrWorkspace, tiling_data.num_elems,
+  tcuscan::run_split_uint16(in, mask, out, workspace, tiling_data.num_elems,
                             tiling_data.vec_tile_size, zeros_first);
 }
 
@@ -49,16 +47,14 @@ extern "C" __global__ __aicore__ void split_uint16(GM_ADDR in, GM_ADDR mask,
 extern "C" __global__ __aicore__ void split_ind_uint16(
     GM_ADDR vec_in, GM_ADDR mask_in, GM_ADDR indices_in, GM_ADDR vec_out,
     GM_ADDR indices_out, GM_ADDR workspace, GM_ADDR tiling) {
-  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_AIV_ONLY);
+  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2);
 
   constexpr bool zeros_first = false;
   tcuscan::SplitTiling tiling_data;
   GetTilingData(&tiling_data, tiling);
 
-  GM_ADDR const usrWorkspace = AscendC::GetUserWorkspace(workspace);
-
   tcuscan::run_split_ind_uint16(
-      vec_in, mask_in, indices_in, vec_out, indices_out, usrWorkspace,
+      vec_in, mask_in, indices_in, vec_out, indices_out, workspace,
       tiling_data.num_elems, tiling_data.vec_tile_size, zeros_first);
 }
 
