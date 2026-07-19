@@ -52,36 +52,28 @@ build: build.sh
 pypackage:
 	./build-pypackage.sh -v ${ASCEND_DEVICE}
 
-# 'make compile_vadd' compiles 'kernel_vadd.cpp' into 'libkernel_vadd.so' without building the whole project.
+# 'make compile_vadd' compiles 'kernel_vadd.cpp' into 'libkernel_vadd_a2.so' without building the whole project.
 # This is useful for development and debugging of individual kernels.
 compile_%:
-	bisheng -fPIC -shared -xcce -O2 -std=c++17 \
-		-Isrc/kernel -Isrc\
-		-I$(ASCEND_TOOLKIT_HOME)/$(ARCH)-linux/tikcpp/tikcfw \
-		-I$(ASCEND_TOOLKIT_HOME)/$(ARCH)-linux/asc/include/interface \
-		-I$(ASCEND_TOOLKIT_HOME)/$(ARCH)-linux/asc/impl/basic_api \
+	mkdir -p build/lib/
+	bisheng -fPIC -shared -O2 --asc-aicore-lang \
+		-Isrc/kernel -Isrc \
 		--npu-arch=dav-2201 \
-		-mllvm -cce-aicore-stack-size=0x8000 \
-		-mllvm -cce-aicore-function-stack-size=0x8000 \
 		-Wno-ignored-attributes \
 		src/$*.cpp \
-		-o libkernel_$*.so
+		-o build/lib/libkernel_$*_a2.so \
+		-ltiling_api -lplatform -lascendalog
 
+# Same as compile_%, but targeting A5 (ascend950 -> dav-3510).
 compile_a5_%:
 	mkdir -p build/lib/
-	bisheng -fPIC -shared -xcce -O2 -std=c++17 \
-		-Isrc/kernel -Isrc\
-		-I$(ASCEND_TOOLKIT_HOME)/$(ARCH)-linux/tikcpp/tikcfw \
-		-I$(ASCEND_TOOLKIT_HOME)/$(ARCH)-linux/asc/include/interface \
-		-I$(ASCEND_TOOLKIT_HOME)/$(ARCH)-linux/asc/impl/basic_api \
-		--cce-aicore-arch=dav-c310 \
-		-mllvm -cce-aicore-stack-size=0x8000 \
-		-mllvm -cce-aicore-record-overflow=true \
-		-mllvm -cce-aicore-addr-transform \
-		-mllvm -cce-aicore-function-stack-size=0x8000 \
+	bisheng -fPIC -shared -O2 --asc-aicore-lang \
+		-Isrc/kernel -Isrc \
+		--npu-arch=dav-3510 \
 		-Wno-ignored-attributes \
 		src/$*.cpp \
-		-o build/lib/libkernel_$*.so
+		-o build/lib/libkernel_$*_a5.so \
+		-ltiling_api -lplatform -lascendalog
 
 build_tidy: build-tidy.sh
 	./build-tidy.sh -v ${ASCEND_DEVICE}
