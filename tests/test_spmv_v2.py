@@ -1,7 +1,14 @@
+# --------------------------------------------------------------------------------
+# Copyright (c) 2023-2026 Huawei Technologies Co., Ltd.
+# All rights reserved.
+# See LICENSE in the root of the software repository:
+# https://github.com/huawei-csl/pytorch-tcuscan/
+# for the full License text.
+# --------------------------------------------------------------------------------
 #!/usr/bin/python3
 # coding=utf-8
 #
-# Copyright (C) 2023-2024. Huawei Technologies Co., Ltd. All rights reserved.
+# Copyright (C) 2023-2026. Huawei Technologies Co., Ltd. All rights reserved.
 #
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -9,17 +16,17 @@
 # ===============================================================================
 
 import os
+from functools import partial
 
 import numpy as np
 import pytest
 import torch_npu  # noqa
 from scipy.sparse import random
-from functools import partial
 
 import tcuscan_ops
 import torch
 
-NPU_DEVICE = os.environ.get("NPU_DEVICE", "npu:0")
+NPU_DEVICE = os.environ.get("NPU_DEVICE", "npu:1")
 torch.npu.config.allow_internal_format = False
 torch.npu.set_device(NPU_DEVICE)
 
@@ -81,7 +88,9 @@ def _test_tcuscan_spmv_v2(
     expected = torch.from_numpy(result)
     assert actual.shape == expected.shape
 
-    expected_dtype = torch.float32 if dtype == torch.float16 else torch.int32
+    expected_dtype = (
+        torch.float32 if dtype in (torch.float16, torch.float32) else torch.int32
+    )
     assert actual.dtype == expected_dtype
 
     assert torch.allclose(
@@ -95,7 +104,7 @@ def _test_tcuscan_spmv_v2(
 @pytest.mark.parametrize(
     ("dtype", "scale_factor"),
     [
-        pytest.param(torch.int16, 6, id="torch.int16"),
+        pytest.param(torch.float32, 2, id="torch.float32"),
         pytest.param(torch.float16, 2, id="torch.float16"),
     ],
 )

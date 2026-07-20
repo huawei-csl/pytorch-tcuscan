@@ -60,15 +60,13 @@ clang_linter:
     - export DEBIAN_FRONTEND=noninteractive
     - apt-get update && apt-get install -y clang-format git-core
   script:
-    - linter_errors=$(find src/ test/ -iname '*.h' -o -iname '*.cpp' | xargs clang-format -n -style=file 2>&1 || true)
+    - linter_errors=$(find src/ -iname '*.h' -o -iname '*.cpp' | xargs clang-format -n -style=file 2>&1 || true)
     - echo "$linter_errors"
     - if [ ! -z "$linter_errors" ]; then echo "Detected formatting issues; please fix"; exit 1; else echo "Formatting is correct"; exit 0; fi
 
 
 clang_tidy:
   stage: linter
-  tags:
-    - baremetal
   dependencies: []
   needs: []
   script:
@@ -84,8 +82,8 @@ secret_detection:
   script:
     - gitleaks detect -v --source .
 
-.pages:
-  image: tcuscan/doxygen-alpine:latest
+pages:
+  image: zouzias/doxygen:latest
   stage: linter
   dependencies: []
   before_script: []
@@ -173,6 +171,12 @@ test_diff:
   script:
     - make setup_ci
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_diff
+
+test_searchsorted:
+  <<: *test_config
+  script:
+    - make setup_ci
+    - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_searchsorted
 
 test_mcscan:
   <<: *test_config

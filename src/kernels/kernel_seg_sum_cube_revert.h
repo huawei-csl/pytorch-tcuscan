@@ -74,9 +74,9 @@ class KernelSegSumCubeRevert {
                                     num_segments_);
     global_out_.SetGlobalBuffer((__gm__ T*)vec_out, num_segments_);
 
-    pipe_.InitBuffer(in_q_, BUFFER_NUM, matrix_tile_len_ * sizeof(T));
-    pipe_.InitBuffer(segm_q_, BUFFER_NUM, tile_len_ * sizeof(uint32_t));
-    pipe_.InitBuffer(out_q_, 1, tile_len_ * sizeof(T));
+    pipe_.InitBuffer(in_q_, 1, matrix_tile_len_ * sizeof(T));
+    pipe_.InitBuffer(segm_q_, 1, matrix_tile_len_ * sizeof(uint32_t));
+    pipe_.InitBuffer(out_q_, 1, matrix_tile_len_ * sizeof(T));
   }
 
   /**
@@ -87,7 +87,7 @@ class KernelSegSumCubeRevert {
    */
   __aicore__ inline LocalTensor<uint32_t> LoadNextSegmentTile() {
     const uint32_t next_tile_len =
-        scalar::NextTileLen(tile_len_, segments_offset_, num_segments_);
+        scalar::NextTileLen(matrix_tile_len_, segments_offset_, num_segments_);
     copy::CopyGmToVec(segm_q_, global_segm_in_[segments_offset_],
                       next_tile_len);
 
@@ -107,18 +107,17 @@ class KernelSegSumCubeRevert {
     vec_out_lt.SetValue(index, value);
     index++;
     // Write tile to GM and "re-allocate" the output tile.
-    if (index >= tile_len_) {
+    if (index >= matrix_tile_len_) {
       out_q_.template EnQue<T>(vec_out_lt);
       if constexpr (UseAtomicWrite) {
         AscendC::PipeBarrier<PIPE_ALL>();
         AscendC::SetAtomicAdd<T>();
       }
-      copy::CopyVecToGm(global_out_[out_offset_], out_q_, tile_len_);
+      copy::CopyVecToGm(global_out_[out_offset_], out_q_, matrix_tile_len_);
       if constexpr (UseAtomicWrite) {
         AscendC::SetAtomicNone();
-        AscendC::DisableDmaAtomic();
       }
-      out_offset_ += tile_len_;
+      out_offset_ += matrix_tile_len_;
       vec_out_lt = out_q_.template AllocTensor<T>();
 
       // "Local-coordinates" of local tensor index must be zeroed
@@ -143,11 +142,11 @@ class KernelSegSumCubeRevert {
       // Run out-of-segments, set the segment end to maximum
       // vector length.
       return vec_len_;
-    } else if (index >= tile_len_) {
+    } else if (index >= matrix_tile_len_) {
       // Run out-of-segments in the segment tiles. Just load the
       // next segment tile and update counters/indices
       segm_q_.template FreeTensor<uint32_t>(segm_ind_lt);
-      segments_offset_ += tile_len_;
+      segments_offset_ += matrix_tile_len_;
       segm_ind_lt = LoadNextSegmentTile();
 
       // "Local-coordinates" segment index must be zeroed and keep
@@ -172,6 +171,17 @@ class KernelSegSumCubeRevert {
   }
 
  private:
+  /**
+   * @brief Returns true if the output tile is the first or last tile. This is
+   * used to determine if atomics must be used for writing the output tile to
+   * global memory.
+   *
+   * @return True if the output tile is the first or last tile, false otherwise.
+   */
+  __aicore__ inline bool isFirstOrLastTile() {
+    return (out_offset_ == 0) || is_last_tile_;
+  }
+
   __aicore__ inline void SyncWithCubeNoop() {
     for (uint32_t tile_idx = 0; tile_idx < num_tiles_; tile_idx++) {
       if constexpr (SyncBefore) {
@@ -186,10 +196,12 @@ class KernelSegSumCubeRevert {
     T accumulation = 0;
     uint32_t in_offset = 0;
     uint32_t out_idx = 0;
-    uint32_t segm_idx = 1;
+    uint32_t segm_idx = 0;
     uint32_t segm_end = segm_ind_lt.GetValue(segm_idx) - vec_start_offset_;
 
     for (uint32_t tile_idx = 0; tile_idx < num_tiles_; tile_idx++) {
+      is_last_tile_ = (tile_idx == num_tiles_ - 1);
+
       if constexpr (SyncBefore) {
         sync::SyncGroup<sync::GroupSyncDirection::FULL>();
       }
@@ -231,23 +243,24 @@ class KernelSegSumCubeRevert {
     const uint32_t tail_len = out_idx + 1;
     out_q_.template EnQue<T>(vec_out_lt);
     if constexpr (UseAtomicWrite) {
-      AscendC::PipeBarrier<PIPE_ALL>();
-      AscendC::SetAtomicAdd<T>();
+      if (isFirstOrLastTile()) {
+        AscendC::PipeBarrier<PIPE_ALL>();
+        AscendC::SetAtomicAdd<T>();
+      }
     }
     copy::CopyVecToGm(global_out_[out_offset_], out_q_, tail_len);
     if constexpr (UseAtomicWrite) {
-      AscendC::SetAtomicNone();
-      AscendC::DisableDmaAtomic();
+      if (isFirstOrLastTile()) {
+        AscendC::SetAtomicNone();
+      }
     }
   }
 
   TPipe pipe_;
 
-  TQue<QuePosition::VECIN, BUFFER_NUM> in_q_;
-  TQue<QuePosition::VECIN, BUFFER_NUM> segm_q_;
-  TQue<QuePosition::VECOUT, 1>
-      out_q_;  // TODO: double-buffering when atomics not used
-
+  TQue<QuePosition::VECIN, 1> in_q_;
+  TQue<QuePosition::VECIN, 1> segm_q_;
+  TQue<QuePosition::VECOUT, 1> out_q_;
   GlobalTensor<T> global_in_;
   GlobalTensor<uint32_t> global_segm_in_;
   GlobalTensor<T> global_out_;
@@ -261,6 +274,7 @@ class KernelSegSumCubeRevert {
 
   uint32_t segments_offset_ = 0;
   uint32_t out_offset_ = 0;
+  bool is_last_tile_ = false;
 };
 
 }  // namespace tcuscan

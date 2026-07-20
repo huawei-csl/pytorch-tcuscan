@@ -22,6 +22,7 @@
 #include "torch/torch_pad.h"
 #include "torch/torch_reduce.h"
 #include "torch/torch_scan.h"
+#include "torch/torch_searchsorted.h"
 #include "torch/torch_seg_ops.h"
 #include "torch/torch_sort.h"
 #include "torch/torch_split.h"
@@ -64,11 +65,26 @@ PYBIND11_MODULE(tcuscan_ops, m) {
         "Segmented Sum (multi-core)");
   m.def("run_seg_sum_single_cube", &tcuscan::run_seg_sum_single_cube,
         "Segmented Sum (single-cube)");
+  m.def("run_seg_sum_multi_cube", &tcuscan::run_seg_sum_multi_cube,
+        pybind11::arg("x"), pybind11::arg("upper"),
+        pybind11::arg("lower_strict"), pybind11::arg("indptr"),
+        pybind11::arg("segm_offsets") = pybind11::none(),
+        "Segmented Sum (multi-cube)");
   m.def("run_spmv", &tcuscan::run_spmv, "Sparse Matrix-Vector Multiplication");
-  m.def("run_spmv_v2", &tcuscan::run_spmv_v2,
+  m.def("run_spmv_v2", &tcuscan::run_spmv_v2, pybind11::arg("vals"),
+        pybind11::arg("indptr"), pybind11::arg("cols"), pybind11::arg("x"),
+        pybind11::arg("s"), pybind11::arg("segm_offsets") = pybind11::none(),
         "Sparse Matrix-Vector Multiplication Using Segmented Sum");
   m.def("run_spmv_multi_cube", &tcuscan::run_spmv_multi_cube,
         "Sparse Matrix-Vector Multiplication Using Multi-cube Scan");
+  m.def("run_spmv_v2_multi_cube", &tcuscan::run_spmv_v2_multi_cube,
+        pybind11::arg("vals"), pybind11::arg("indptr"), pybind11::arg("cols"),
+        pybind11::arg("x"), pybind11::arg("upper"),
+        pybind11::arg("lower_strict"),
+        "Sparse Matrix-Vector Multiplication Using Multi-cube Segmented Sum");
+  m.def("run_searchsorted", &tcuscan::run_searchsorted, pybind11::arg("sorted"),
+        pybind11::arg("values"),
+        "Binary search (lower_bound) into a sorted int32 array");
   m.def("run_copy", &tcuscan::run_copy, "Copy single core");
   m.def("run_scan_batch", &tcuscan::run_scan_batch, "Scan Batch");
   m.def("run_scan_single_core", &tcuscan::run_scan_single_core,
