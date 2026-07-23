@@ -27,9 +27,11 @@ extern "C" __global__ __aicore__ void count_if_fp16(GM_ADDR vec_in,
   (void)workspace;
   tcuscan::CountIfTiling tiling;
   GetTilingData(&tiling, tiling_gm);
+  const AscendC::CMPMODE mode =
+      static_cast<AscendC::CMPMODE>(tiling.compare_mode);
 
-  tcuscan::run_count_if<false, half>(vec_in, vec_out, tiling.num_elems,
-                                     tiling.tile_len, tiling.pivot);
+  tcuscan::run_count_if<half>(vec_in, vec_out, tiling.vec_len, tiling.tile_len,
+                              tiling.pivot, mode);
 }
 
 /**
