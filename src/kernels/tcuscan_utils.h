@@ -15,6 +15,19 @@ using namespace AscendC;
 
 namespace tcuscan {
 
+/// @brief True when AscendC::Nz2NdParams carries the NZ->ND enable flag.
+///
+/// On dav-c310 (__NPU_ARCH__ 3510/5102) the struct drops `nz2ndEn` and
+/// `originalNSize`; the NZ->ND conversion is selected through the FixpipeConfig
+/// template parameter instead. This must gate the preprocessor rather than an
+/// `if constexpr`, because the member names are looked up even in a discarded
+/// branch.
+#if defined(__NPU_ARCH__) && ((__NPU_ARCH__ == 3510) || (__NPU_ARCH__ == 5102))
+#define TCUSCAN_IS_DAV_C220_ARCH 0
+#else
+#define TCUSCAN_IS_DAV_C220_ARCH 1
+#endif
+
 /// @brief Number of bytes for a required alignment in UB.
 constexpr uint16_t UB_ALIGNMENT = 32;
 /// @brief Number of bytes for the UB size (A2A3).
@@ -555,6 +568,10 @@ __aicore__ inline void CopyCL0ToGlobal(
 
   LocalTensor<DataType> lt = src_q.template DeQue<DataType>();
 
+#if TCUSCAN_IS_DAV_C220_ARCH
+  // Pre-dav-c310: the legacy DMA-style Fixpipe overload takes the generic
+  // FixpipeParams<T>, and the NZ->ND conversion is requested through the
+  // nz2ndEn flag on the params struct.
   FixpipeParams<DataType> params;
   params.cburstNum = height;
   params.burstLen = width * fractal_size * sizeof(DataType) / DATA_BLOCK_SIZE;
@@ -566,6 +583,25 @@ __aicore__ inline void CopyCL0ToGlobal(
   params.nz2ndParams = nz2nd_params;
 
   Fixpipe(global, lt, params);
+#else
+  // dav-c310 (A5): the generic FixpipeParams<T> overload no longer exists. The
+  // L0C->GM copy is described with FixpipeParamsArch3510 (matmul-style nSize /
+  // mSize / strides), and the NZ->ND conversion is selected through the
+  // CFG_ROW_MAJOR FixpipeConfig template parameter instead of an nz2ndEn flag.
+  // Field mapping follows the CANN matmul copy-out utility (row-major output).
+  FixpipeParamsArch3510<CO2Layout::ROW_MAJOR> params;
+  params.nSize = width;
+  params.mSize = height;
+  // Source stride in L0C is the M dimension aligned up to a fractal.
+  params.srcStride = (height + fractal_size - 1) / fractal_size * fractal_size;
+  // Row stride of the contiguous row-major output matrix.
+  params.dstStride = width;
+  // Single ND matrix (ndNum == 1); the ND strides are unused in that case.
+  params.params = Nz2NdParams(/*ndNum=*/1, /*srcNdStride=*/height,
+                              /*dstNdStride=*/height);
+
+  Fixpipe<DataType, DataType, CFG_ROW_MAJOR>(global, lt, params);
+#endif
 
   src_q.FreeTensor(lt);
 }
@@ -1190,7 +1226,9 @@ __aicore__ inline int GetSyncConf(int mode, int flag_id) {
  */
 template <GroupSyncDirection Dir = GroupSyncDirection::FULL>
 __aicore__ inline void SyncGroup() {
-  const int mode = 2;
+#if TCUSCAN_IS_DAV_C220_ARCH
+
+  constexpr int mode = 2;
 
   if constexpr (Dir == GroupSyncDirection::CUBE_WAIT_FOR_VEC) {
     const int AIV_SET_FLAG_ID = 11;
@@ -1225,6 +1263,9 @@ __aicore__ inline void SyncGroup() {
     }
     return;
   }
+#else
+// TODO(anastasios): Fix this for David!
+#endif
 }
 
 /**
