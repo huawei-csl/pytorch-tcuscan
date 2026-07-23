@@ -28,11 +28,10 @@ __aicore__ inline void _run_scan_multi_core_no_l2_split(GM_ADDR input_vec,
   constexpr bool IsInclusive = true;
 
   GM_ADDR const lower = load_tril_matrix<InputT>(matmul_size);
-  GM_ADDR const usrWorkspace = AscendC::GetUserWorkspace(workspace);
 
   constexpr OutputT starting_value = 0;
   run_scan_multi_core_kernel<InputT, IsInclusive>(input_vec, lower, output_vec,
-                                                  usrWorkspace, vec_len,
+                                                  workspace, vec_len,
                                                   matmul_size, starting_value);
 }
 
@@ -102,6 +101,8 @@ extern "C" __global__ __aicore__ void scan_multi_core_fp16(GM_ADDR input_vec,
                                                            GM_ADDR output_vec,
                                                            GM_ADDR workspace,
                                                            GM_ADDR tilingGm) {
+  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2);
+
   tcuscan::_run_scan_multi_core<half>(input_vec, output_vec, workspace,
                                       tilingGm);
 }
@@ -118,6 +119,8 @@ extern "C" __global__ __aicore__ void scan_multi_core_int8(GM_ADDR input_vec,
                                                            GM_ADDR output_vec,
                                                            GM_ADDR workspace,
                                                            GM_ADDR tilingGm) {
+  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2);
+
   tcuscan::_run_scan_multi_core<int8_t>(input_vec, output_vec, workspace,
                                         tilingGm);
 }
@@ -134,6 +137,8 @@ extern "C" __global__ __aicore__ void scan_multi_core_int8(GM_ADDR input_vec,
 extern "C" __global__ __aicore__ void scan_multi_core_fp16_no_l2(
     GM_ADDR input_vec, GM_ADDR output_vec, GM_ADDR workspace,
     GM_ADDR tilingGm) {
+  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2);
+
   tcuscan::_run_scan_multi_core_no_l2_split<half>(input_vec, output_vec,
                                                   workspace, tilingGm);
 }
@@ -150,6 +155,80 @@ extern "C" __global__ __aicore__ void scan_multi_core_fp16_no_l2(
 extern "C" __global__ __aicore__ void scan_multi_core_int8_no_l2(
     GM_ADDR input_vec, GM_ADDR output_vec, GM_ADDR workspace,
     GM_ADDR tilingGm) {
+  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2);
+
   tcuscan::_run_scan_multi_core_no_l2_split<int8_t>(input_vec, output_vec,
                                                     workspace, tilingGm);
+}
+
+/**
+ * @brief Call the `scan_multi_core` kernel for FP16 data type.
+ *
+ * @param [in] blockDim Number of blocks for the kernel launch.
+ * @param [in] stream CUDA stream.
+ * @param [in] input_vec Pointer to an input buffer.
+ * @param [in] output_vec Pointer to an output buffer.
+ * @param [in] workspace Pointer to workspace.
+ * @param [in] tilingGm Pointer to the tiling buffer.
+ */
+extern "C" void launch_scan_multi_core_fp16(uint32_t blockDim, void* stream,
+                                            uint8_t* input_vec,
+                                            uint8_t* output_vec,
+                                            uint8_t* workspace,
+                                            uint8_t* tilingGm) {
+  scan_multi_core_fp16<<<blockDim, nullptr, stream>>>(input_vec, output_vec,
+                                                      workspace, tilingGm);
+}
+
+/**
+ * @brief Call the `scan_multi_core` kernel for INT8 data type.
+ *
+ * @param [in] blockDim Number of blocks for the kernel launch.
+ * @param [in] stream CUDA stream.
+ * @param [in] input_vec Pointer to an input buffer.
+ * @param [in] output_vec Pointer to an output buffer.
+ * @param [in] workspace Pointer to workspace.
+ * @param [in] tilingGm Pointer to the tiling buffer.
+ */
+extern "C" void launch_scan_multi_core_int8(uint32_t blockDim, void* stream,
+                                            uint8_t* input_vec,
+                                            uint8_t* output_vec,
+                                            uint8_t* workspace,
+                                            uint8_t* tilingGm) {
+  scan_multi_core_int8<<<blockDim, nullptr, stream>>>(input_vec, output_vec,
+                                                      workspace, tilingGm);
+}
+
+/**
+ * @brief Launch the `scan_multi_core_fp16_no_l2` kernel.
+ *
+ * @param [in] blockDim Number of blocks for the kernel launch.
+ * @param [in] stream CUDA stream.
+ * @param [in] input_vec Pointer to an input buffer.
+ * @param [in] output_vec Pointer to an output buffer.
+ * @param [in] workspace Pointer to workspace.
+ * @param [in] tilingGm Pointer to the tiling buffer.
+ */
+extern "C" void launch_scan_multi_core_fp16_no_l2(
+    uint32_t blockDim, void* stream, uint8_t* input_vec, uint8_t* output_vec,
+    uint8_t* workspace, uint8_t* tilingGm) {
+  scan_multi_core_fp16_no_l2<<<blockDim, nullptr, stream>>>(
+      input_vec, output_vec, workspace, tilingGm);
+}
+
+/**
+ * @brief Launch the `scan_multi_core_int8_no_l2` kernel.
+ *
+ * @param [in] blockDim Number of blocks for the kernel launch.
+ * @param [in] stream CUDA stream.
+ * @param [in] input_vec Pointer to an input buffer.
+ * @param [in] output_vec Pointer to an output buffer.
+ * @param [in] workspace Pointer to workspace.
+ * @param [in] tilingGm Pointer to the tiling buffer.
+ */
+extern "C" void launch_scan_multi_core_int8_no_l2(
+    uint32_t blockDim, void* stream, uint8_t* input_vec, uint8_t* output_vec,
+    uint8_t* workspace, uint8_t* tilingGm) {
+  scan_multi_core_int8_no_l2<<<blockDim, nullptr, stream>>>(
+      input_vec, output_vec, workspace, tilingGm);
 }

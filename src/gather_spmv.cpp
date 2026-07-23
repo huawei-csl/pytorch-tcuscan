@@ -23,10 +23,31 @@ extern "C" __global__ __aicore__ void gather_spmv(GM_ADDR values_in,
                                                   GM_ADDR vec_out,
                                                   GM_ADDR workspace,
                                                   GM_ADDR tilingGm) {
+  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_AIV_ONLY);
+
   (void)workspace;
   tcuscan::GatherSpmvTiling tiling;
   GetTilingData(&tiling, tilingGm);
 
   tcuscan::run_gather_spmv(values_in, cols_in, vec_out, tiling.idx_len,
                            tiling.val_len, tiling.tile_len);
+}
+
+/**
+ * @brief Launch the `gather_spmv` kernel.
+ *
+ * @param [in] blockDim Number of blocks for the kernel launch.
+ * @param [in] stream CUDA stream.
+ * @param [in] values_in Pointer to an input buffer.
+ * @param [in] cols_in Pointer to an input buffer.
+ * @param [in] vec_out Pointer to an output buffer.
+ * @param [in] workspace Pointer to workspace.
+ * @param [in] tilingGm Pointer to the tiling buffer.
+ */
+extern "C" void launch_gather_spmv(uint32_t blockDim, void* stream,
+                                   uint8_t* values_in, uint8_t* cols_in,
+                                   uint8_t* vec_out, uint8_t* workspace,
+                                   uint8_t* tilingGm) {
+  gather_spmv<<<blockDim, nullptr, stream>>>(values_in, cols_in, vec_out,
+                                             workspace, tilingGm);
 }
