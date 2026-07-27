@@ -221,3 +221,10 @@ The final step is to build a test file `tests/test_${MYKERNEL}.py`, and add a jo
 - In `test/test_*.py`, we always need to import `torch_npu`, which might be unused. Make sure to add a comment `import torch_npu # noqa` so that the prospector passes the CI
 - When the input is a 2d-tensor, e.g., as in `scan_batch`, we usually set `block_size` (i.e. the number of cube cores) equal to the batch size.
 - All the files related to a kernel (test, tiling, header, cpp,...) must all have the same name. E.g., if the kernel name is `scan_fp16`, we need to name the files `tiling_scan_fp16.h`, `kernel_scan_fp16.h`, `scan_fp16.cpp`, `test_scan_fp16.py`, etc.
+
+
+## Contributors
+
+Following, a list of contributors (alphabetical order)
+
+Gioele Gottardo, Aleksandros Sobczyk, Giuseppe Sorrentino, Bartłomiej Wróblewski, Anastasios Zouzias
