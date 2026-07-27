@@ -225,6 +225,9 @@ The final step is to build a test file `tests/test_${MYKERNEL}.py`, and add a jo
 
 ## Contributors
 
-Following, a list of contributors (alphabetical order)
-
-Gioele Gottardo, Aleksandros Sobczyk, Giuseppe Sorrentino, Bartłomiej Wróblewski, Anastasios Zouzias
+Below is a list of contributors (alphabetical order by surname):
+- Gioele Gottardo
+- Aleksandros Sobczyk
+- Giuseppe Sorrentino
+- Bartłomiej Wróblewski
+- Anastasios Zouzias
