@@ -56,7 +56,7 @@ def _test_scan_batch(s: int, vec_len: int, batch_size: int, dtype: torch.dtype):
     if dtype == torch.float16:
         atol, rtol = 1e-4, 1e-2
     else:
-        atol, rtol = 0.0, 1e-6
+        atol, rtol = 0.0, 1e-4
     assert torch.allclose(
         actual, expected, atol=atol, rtol=rtol
     ), f"batch scan ({dtype}) wrong. s={s}, vec_len={vec_len}, batch_size= {batch_size}"

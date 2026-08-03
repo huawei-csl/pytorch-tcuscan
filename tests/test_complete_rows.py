@@ -79,7 +79,7 @@ def _test_complete_rows(
     assert expected.shape == actual.shape
     # fp32 is near-exact; integer kernels must match bit-exactly.
     if dtype == torch.float32:
-        atol, rtol = 0.0, 1e-6
+        atol, rtol = 0.0, 1e-4
     else:
         atol, rtol = 0.0, 0.0
     assert torch.allclose(

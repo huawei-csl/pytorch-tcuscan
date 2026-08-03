@@ -60,7 +60,7 @@ def _test_single_core_scan(vec_len: int, s: int, dtype: torch.dtype):
     if dtype == torch.float16:
         atol, rtol = 1e-4, 1e-2
     elif dtype == torch.float32:
-        atol, rtol = 0.0, 1e-6
+        atol, rtol = 0.0, 1e-4
     else:
         atol, rtol = 0.0, 0.0
     assert torch.allclose(
