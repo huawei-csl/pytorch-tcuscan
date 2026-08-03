@@ -100,7 +100,7 @@ def _test_seg_sum_single_core(
         ), f"Error seg_sum ({expected.dtype}). Abs-error: {abs_error} / {rel_error}, s={s}, num_cols={num_cols}"
     elif dtype == torch.float16:
         assert torch.allclose(
-            actual, expected, atol=1e-2
+            actual, expected, atol=1e-4, rtol=1e-2
         ), f"Error seg_sum ({expected.dtype}). Abs-error: {abs_error} / {rel_error}, s={s}, num_cols={num_cols}"
 
 

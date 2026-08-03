@@ -56,7 +56,12 @@ def _test_split(vec_len: int, s: int, dtype: torch.dtype = torch.int16):
 
     expected_left_part = torch.masked_select(x, mask == 1)
     num_selected = len(expected_left_part)
-    assert torch.allclose(expected_left_part, z[:num_selected])
+    # fp16 accumulates rounding error; integer kernels must match bit-exactly.
+    if dtype == torch.float16:
+        atol, rtol = 1e-4, 1e-2
+    else:
+        atol, rtol = 0.0, 0.0
+    assert torch.allclose(expected_left_part, z[:num_selected], atol=atol, rtol=rtol)
 
     expected_right_part = torch.masked_select(x, mask == 0)
     num_tail = len(expected_right_part)

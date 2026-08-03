@@ -80,7 +80,7 @@ def _test_tcuscan_segscan_revert(n: int, segm_density: float):
 
     assert actual.shape == golden.shape, "Output shape does not match expected shape."
     assert torch.allclose(
-        actual, torch.Tensor(golden), atol=1e-02
+        actual, torch.Tensor(golden), atol=0.0, rtol=1e-6
     ), f"segmented scan revertion (fp16) vec_len={n}"
 
 

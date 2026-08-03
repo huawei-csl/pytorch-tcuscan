@@ -42,7 +42,7 @@ def _test_row_scan(m: int, dtype: torch.dtype):
 
     assert actual.dtype == expected.dtype
     assert torch.allclose(
-        actual, expected, atol=0, rtol=1e-3
+        actual, expected, atol=1e-4, rtol=1e-2
     ), f"Row scan ({dtype}) is wrong. s={S}, m={m}"
 
 

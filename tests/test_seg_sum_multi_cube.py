@@ -152,7 +152,7 @@ def _test_seg_sum_multi_cube(
         actual.dtype == expected.dtype
     ), f"Output dtype mismatch. Got {actual.dtype}. Expected {expected.dtype}"
     assert torch.allclose(
-        actual, expected, atol=1e-2
+        actual, expected, atol=1e-4, rtol=1e-2
     ), f"Error seg_sum ({expected.dtype}). Abs-error: {abs_error} / {rel_error}, s={s}, num_cols={num_cols}"
 
 

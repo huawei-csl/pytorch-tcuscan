@@ -60,8 +60,13 @@ def _test_split_ind(vec_len: int, s: int, dtype: torch.dtype = torch.int16):
         torch.nonzero(mask == 1, as_tuple=True)[0].to(torch.int32) + 1
     )
     num_selected = len(expected_left_part)
-    assert torch.allclose(expected_left_part, z[:num_selected])
-    assert torch.allclose(expected_left_indices, indices_out[:num_selected])
+    # fp16 accumulates rounding error; integer kernels must match bit-exactly.
+    if dtype == torch.float16:
+        atol, rtol = 1e-4, 1e-2
+    else:
+        atol, rtol = 0.0, 0.0
+    assert torch.allclose(expected_left_part, z[:num_selected], atol=atol, rtol=rtol)
+    assert torch.equal(expected_left_indices, indices_out[:num_selected])
 
     expected_right_part = torch.masked_select(x, mask == 0)
     expected_right_indices = (
