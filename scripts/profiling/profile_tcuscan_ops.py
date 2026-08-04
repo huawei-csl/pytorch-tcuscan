@@ -790,9 +790,21 @@ def mcscan_benchmark(
     return _run_benchmark(device, run_scan), size
 
 
-def mcscan_no_l2_benchmark(
-    device: Device, size: int, dtype: torch.dtype, s: int
+def _mcscan_ablation_benchmark(
+    device: Device, size: int, dtype: torch.dtype, s: int, op: typing.Callable
 ) -> Tuple[float, int]:
+    """Benchmark a multi-core scan variant with some optimizations disabled.
+
+    Args:
+        device: Device to run the benchmark on.
+        size: Input vector length.
+        dtype: Input data type.
+        s: Tiling size for the matrix unit.
+        op: The `tcuscan_ops` entry point of the multi-core scan variant.
+
+    Returns:
+        The measured time and the input vector length.
+    """
     if dtype == torch.float16:
         x = torch.rand(size, device=device.str, dtype=dtype)
     elif dtype == torch.int8:
@@ -802,10 +814,34 @@ def mcscan_no_l2_benchmark(
     else:
         raise RuntimeError(f"dtype {dtype} is not supported in TCUSCAN scan operator")
 
-    def run_scan_no_l2() -> None:
-        _ = tcuscan_ops.run_scan_multi_core_no_l2(x, s)
+    def run_scan_variant() -> None:
+        _ = op(x, s)
 
-    return _run_benchmark(device, run_scan_no_l2), size
+    return _run_benchmark(device, run_scan_variant), size
+
+
+def mcscan_no_l2_benchmark(
+    device: Device, size: int, dtype: torch.dtype, s: int
+) -> Tuple[float, int]:
+    return _mcscan_ablation_benchmark(
+        device, size, dtype, s, tcuscan_ops.run_scan_multi_core_no_l2
+    )
+
+
+def mcscan_no_double_buffer_benchmark(
+    device: Device, size: int, dtype: torch.dtype, s: int
+) -> Tuple[float, int]:
+    return _mcscan_ablation_benchmark(
+        device, size, dtype, s, tcuscan_ops.run_scan_multi_core_no_double_buffer
+    )
+
+
+def mcscan_baseline_benchmark(
+    device: Device, size: int, dtype: torch.dtype, s: int
+) -> Tuple[float, int]:
+    return _mcscan_ablation_benchmark(
+        device, size, dtype, s, tcuscan_ops.run_scan_multi_core_baseline
+    )
 
 
 def row_scan_benchmark(
@@ -1221,6 +1257,8 @@ if __name__ == "__main__":  # noqa
             "seg_scan_sc",
             "mcscan",
             "mcscan_no_l2",
+            "mcscan_no_double_buffer",
+            "mcscan_baseline",
             "compress",
             "segmented_sum",
             "sc_segmented_sum",
@@ -1540,6 +1578,26 @@ if __name__ == "__main__":  # noqa
             f"mcscan_no_l2_{s}",
             dtype,
             partial(mcscan_no_l2_benchmark, dtype=tdtype, s=s),
+            sizes,
+            density,
+        )
+    elif bench == "mcscan_no_double_buffer" and dtype in ["fp16", "int8"]:
+        tdtype = STR_TO_DTYPE[dtype]
+        benchmark(
+            device,
+            f"mcscan_no_double_buffer_{s}",
+            dtype,
+            partial(mcscan_no_double_buffer_benchmark, dtype=tdtype, s=s),
+            sizes,
+            density,
+        )
+    elif bench == "mcscan_baseline" and dtype in ["fp16", "int8"]:
+        tdtype = STR_TO_DTYPE[dtype]
+        benchmark(
+            device,
+            f"mcscan_baseline_{s}",
+            dtype,
+            partial(mcscan_baseline_benchmark, dtype=tdtype, s=s),
             sizes,
             density,
         )

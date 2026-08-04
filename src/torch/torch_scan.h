@@ -21,8 +21,12 @@
 #include "aclrtlaunch_scan_batch_fp16.h"
 #include "aclrtlaunch_scan_batch_fp32.h"
 #include "aclrtlaunch_scan_multi_core_fp16.h"
+#include "aclrtlaunch_scan_multi_core_fp16_baseline.h"
+#include "aclrtlaunch_scan_multi_core_fp16_no_double_buffer.h"
 #include "aclrtlaunch_scan_multi_core_fp16_no_l2.h"
 #include "aclrtlaunch_scan_multi_core_int8.h"
+#include "aclrtlaunch_scan_multi_core_int8_baseline.h"
+#include "aclrtlaunch_scan_multi_core_int8_no_double_buffer.h"
 #include "aclrtlaunch_scan_multi_core_int8_no_l2.h"
 #include "aclrtlaunch_scan_multi_cube_fp16.h"
 #include "aclrtlaunch_scan_single_core_fp16.h"
@@ -241,14 +245,34 @@ at::Tensor run_scan_multi_core(const at::Tensor& x, int S) {
 }
 
 /**
- * @brief Returns the prefix sum (scan) of a 1D vector `x` without L2 splitting
- * optimization.
+ * @brief Multi-core scan configurations with some optimizations disabled.
+ *
+ * These variants exist only to measure the contribution of each individual
+ * optimization; use `run_scan_multi_core` for anything else. The variants are
+ * cumulative: `BASELINE` has all of them disabled, `NO_DOUBLE_BUFFER` enables
+ * the Cube/Vector overlap and `NO_L2` additionally enables double buffering on
+ * the Vector phases.
+ */
+enum class McScanAblation {
+  /// @brief No L2 splitting (all the other optimizations enabled).
+  NO_L2,
+  /// @brief No L2 splitting and no double buffering on the Vector phases.
+  NO_DOUBLE_BUFFER,
+  /// @brief No L2 splitting, no double buffering and no Cube/Vector overlap.
+  BASELINE
+};
+
+/**
+ * @brief Returns the prefix sum (scan) of a 1D vector `x` with some of the
+ * optimizations of `run_scan_multi_core` disabled.
  *
  * @param x Input 1D vector.
  * @param S Tiling parameter. Typical values 32, 64, 128.
+ * @param ablation Which optimizations to disable.
  * @return The prefix sum of `x`
  */
-at::Tensor run_scan_multi_core_no_l2(const at::Tensor& x, int S) {
+at::Tensor run_scan_multi_core_ablation(const at::Tensor& x, int S,
+                                        McScanAblation ablation) {
   const auto ascendc_platform =
       platform_ascendc::PlatformAscendCManager::GetInstance();
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
@@ -279,26 +303,96 @@ at::Tensor run_scan_multi_core_no_l2(const at::Tensor& x, int S) {
         tcuscan::get_workspace_size<int16_t>(tiling);
     const at::Tensor workspace_tensor =
         alloc_workspace(user_workspace_size, device);
-    ACLRT_LAUNCH_KERNEL(scan_multi_core_fp16_no_l2)
-    (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
-     const_cast<void*>(z.storage().data()),
-     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+
+    switch (ablation) {
+      case McScanAblation::NO_L2:
+        ACLRT_LAUNCH_KERNEL(scan_multi_core_fp16_no_l2)
+        (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
+         const_cast<void*>(z.storage().data()),
+         const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+        break;
+      case McScanAblation::NO_DOUBLE_BUFFER:
+        ACLRT_LAUNCH_KERNEL(scan_multi_core_fp16_no_double_buffer)
+        (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
+         const_cast<void*>(z.storage().data()),
+         const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+        break;
+      case McScanAblation::BASELINE:
+        ACLRT_LAUNCH_KERNEL(scan_multi_core_fp16_baseline)
+        (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
+         const_cast<void*>(z.storage().data()),
+         const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+        break;
+    }
   } else {
     const uint32_t user_workspace_size =
         tcuscan::get_workspace_size<int8_t>(tiling);
     const at::Tensor workspace_tensor =
         tcuscan::alloc_workspace(user_workspace_size, device);
 
-    ACLRT_LAUNCH_KERNEL(scan_multi_core_int8_no_l2)
-    (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
-     const_cast<void*>(z.storage().data()),
-     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+    switch (ablation) {
+      case McScanAblation::NO_L2:
+        ACLRT_LAUNCH_KERNEL(scan_multi_core_int8_no_l2)
+        (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
+         const_cast<void*>(z.storage().data()),
+         const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+        break;
+      case McScanAblation::NO_DOUBLE_BUFFER:
+        ACLRT_LAUNCH_KERNEL(scan_multi_core_int8_no_double_buffer)
+        (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
+         const_cast<void*>(z.storage().data()),
+         const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+        break;
+      case McScanAblation::BASELINE:
+        ACLRT_LAUNCH_KERNEL(scan_multi_core_int8_baseline)
+        (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
+         const_cast<void*>(z.storage().data()),
+         const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+        break;
+    }
   }
 
   aclrtFree(tiling_device);
   aclrtSynchronizeStream(acl_stream);
 
   return z;
+}
+
+/**
+ * @brief Returns the prefix sum (scan) of a 1D vector `x` without L2 splitting
+ * optimization.
+ *
+ * @param x Input 1D vector.
+ * @param S Tiling parameter. Typical values 32, 64, 128.
+ * @return The prefix sum of `x`
+ */
+at::Tensor run_scan_multi_core_no_l2(const at::Tensor& x, int S) {
+  return run_scan_multi_core_ablation(x, S, McScanAblation::NO_L2);
+}
+
+/**
+ * @brief Returns the prefix sum (scan) of a 1D vector `x` without the L2
+ * splitting and the Vector double buffering optimizations.
+ *
+ * @param x Input 1D vector.
+ * @param S Tiling parameter. Typical values 32, 64, 128.
+ * @return The prefix sum of `x`
+ */
+at::Tensor run_scan_multi_core_no_double_buffer(const at::Tensor& x, int S) {
+  return run_scan_multi_core_ablation(x, S, McScanAblation::NO_DOUBLE_BUFFER);
+}
+
+/**
+ * @brief Returns the prefix sum (scan) of a 1D vector `x` with all the
+ * optimizations disabled (no L2 splitting, no double buffering and no
+ * Cube/Vector overlap).
+ *
+ * @param x Input 1D vector.
+ * @param S Tiling parameter. Typical values 32, 64, 128.
+ * @return The prefix sum of `x`
+ */
+at::Tensor run_scan_multi_core_baseline(const at::Tensor& x, int S) {
+  return run_scan_multi_core_ablation(x, S, McScanAblation::BASELINE);
 }
 
 /**

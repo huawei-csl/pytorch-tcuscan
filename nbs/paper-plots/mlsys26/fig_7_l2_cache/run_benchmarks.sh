@@ -1,3 +1,3 @@
 #!/bin/bash
 
-make profile_mcscan_no_l2
+make profile_mcscan_ablations
