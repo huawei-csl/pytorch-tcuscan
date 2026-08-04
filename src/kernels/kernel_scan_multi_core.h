@@ -55,6 +55,12 @@ __aicore__ inline uint32_t get_workspace_size(uint32_t input_elems,
  * @brief Run the multi core scan kernel.
  *
  * @tparam IsInclusive Indicates whether the scan is inclusive or exclusive.
+ * @tparam Overlap If true, the Cube row-wise scan and the Vector tile reduction
+ * run concurrently (both only depend on the input vector). If false, the two
+ * phases are serialized by a full synchronization. Only meant to be disabled to
+ * measure the contribution of the Cube/Vector overlap.
+ * @tparam BufferNum Number of buffers used by the Vector phases. If set to `2`,
+ * double-buffering is enabled.
  *
  * @param [in] input_vec Pointer to an input vector.
  * @param [in] upper_triangular Pointer to an upper-triangular matrix filled
@@ -67,7 +73,8 @@ __aicore__ inline uint32_t get_workspace_size(uint32_t input_elems,
  * output vector.
  */
 
-template <typename InputT, bool IsInclusive = true>
+template <typename InputT, bool IsInclusive = true, bool Overlap = true,
+          int32_t BufferNum = 2>
 __aicore__ inline void run_scan_multi_core_kernel(
     GM_ADDR input_vec, GM_ADDR upper_triangular, GM_ADDR output_vec,
     GM_ADDR workspace, uint32_t vec_len, uint32_t matmul_size,
@@ -101,8 +108,12 @@ __aicore__ inline void run_scan_multi_core_kernel(
       PipeBarrier<PIPE_ALL>();
     }
 
+    if constexpr (!Overlap) {
+      SyncAll<false /*isAIVOnly*/>();
+    }
+
     if ASCEND_IS_AIV {
-      tcuscan::KernelReduceTiles<InputT> op_reduce(
+      tcuscan::KernelReduceTiles<InputT, BufferNum> op_reduce(
           matmul_size * matmul_size / 2, padded_vec_len_v);
       op_reduce.Init(padded_input, sums);
       op_reduce.Process();
@@ -111,7 +122,7 @@ __aicore__ inline void run_scan_multi_core_kernel(
     SyncAll<false /*isAIVOnly*/>();
 
     if ASCEND_IS_AIV {
-      tcuscan::KernelCompleteRows<OutputT, IsInclusive> op(
+      tcuscan::KernelCompleteRows<OutputT, IsInclusive, BufferNum> op(
           matmul_size, matmul_size / 2, vec_len);
       op.Init(padded_rowwise_scan, sums, output_vec);
       op.Process(starting_value);
@@ -133,8 +144,12 @@ __aicore__ inline void run_scan_multi_core_kernel(
       PipeBarrier<PIPE_ALL>();
     }
 
+    if constexpr (!Overlap) {
+      SyncAll<false /*isAIVOnly*/>();
+    }
+
     if ASCEND_IS_AIV {
-      tcuscan::KernelReduceTiles<InputT> op_reduce(
+      tcuscan::KernelReduceTiles<InputT, BufferNum> op_reduce(
           matmul_size * matmul_size / 2, vec_len);
       op_reduce.Init(input_vec, sums);
       op_reduce.Process();
@@ -143,7 +158,7 @@ __aicore__ inline void run_scan_multi_core_kernel(
     SyncAll<false /*isAIVOnly*/>();
 
     if ASCEND_IS_AIV {
-      tcuscan::KernelCompleteRows<OutputT, IsInclusive> op(
+      tcuscan::KernelCompleteRows<OutputT, IsInclusive, BufferNum> op(
           matmul_size, matmul_size / 2, vec_len);
       op.Init(intermediate_res, sums, output_vec);
       op.Process(starting_value);

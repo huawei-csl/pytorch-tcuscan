@@ -142,6 +142,19 @@ profile_mcscan_no_l2: profile_mcscan
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench mcscan_no_l2 --s 64 --dtype fp16
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench mcscan_no_l2 --s 128 --dtype fp16
 
+# Cumulative ablation of the MCSCAN optimizations:
+#   mcscan_baseline          : no Cube/Vector overlap, no double buffering, no L2 splitting
+#   mcscan_no_double_buffer  : + Cube/Vector overlap
+#   mcscan_no_l2             : + double buffering on the Vector phases
+#   mcscan                   : + L2 splitting (full MCSCAN)
+profile_mcscan_ablations: profile_mcscan_no_l2
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench mcscan_no_double_buffer --s 32 --dtype fp16
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench mcscan_no_double_buffer --s 64 --dtype fp16
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench mcscan_no_double_buffer --s 128 --dtype fp16
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench mcscan_baseline --s 32 --dtype fp16
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench mcscan_baseline --s 64 --dtype fp16
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench mcscan_baseline --s 128 --dtype fp16
+
 profile_row_scan: profile_all_s_fp16_row_scan
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench cast --dtype fp16
 

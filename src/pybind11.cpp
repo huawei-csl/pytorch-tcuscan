@@ -43,6 +43,12 @@ PYBIND11_MODULE(tcuscan_ops, m) {
         "Multi-core Scan");
   m.def("run_scan_multi_core_no_l2", &tcuscan::run_scan_multi_core_no_l2,
         "Multi-core Scan (no L2 cache optimization)");
+  m.def("run_scan_multi_core_no_double_buffer",
+        &tcuscan::run_scan_multi_core_no_double_buffer,
+        "Multi-core Scan (no L2 cache and no double buffering optimizations)");
+  m.def("run_scan_multi_core_baseline", &tcuscan::run_scan_multi_core_baseline,
+        "Multi-core Scan (no L2 cache, no double buffering and no Cube/Vector "
+        "overlap optimizations)");
   m.def("run_csr_gather", &tcuscan::run_csr_gather, "CSR gather");
   m.def("run_compress", &tcuscan::run_compress, "Compaction/compress");
   m.def("run_filter_greater_eq", &tcuscan::run_filter_greater_equal,
