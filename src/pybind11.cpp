@@ -90,6 +90,8 @@ PYBIND11_MODULE(tcuscan_ops, m) {
   m.def("run_scan_single_core", &tcuscan::run_scan_single_core,
         pybind11::arg("x"), pybind11::arg("S"),
         pybind11::arg("starting_sum") = 0, "Scan Single Core");
+  m.def("run_scan_vec_only", &tcuscan::run_scan_vec_only, pybind11::arg("x"),
+        pybind11::arg("S"), "Scan Vector Only");
   m.def("run_seg_scan_vec", &tcuscan::run_seg_scan_vec,
         "Segmented Scan (vector-only)");
   m.def("run_seg_scan_mc_revert", &tcuscan::run_seg_scan_mc_revert,
