@@ -64,8 +64,15 @@ extern "C" __global__ __aicore__ void radix_sort_fp16(GM_ADDR in, GM_ADDR out,
       indices, vec_len, tiling_data.vec_tile_size);
   SyncAll<false /*isAIVOnly*/>();
 
+  if (AscendC::GetBlockIdx() == 0) {
+    AscendC::PrintTimeStamp(11111);
+  }
+
   tcuscan::run_radix_encode<false>(in, out, vec_len, vec_tile_len);
 
+  if (AscendC::GetBlockIdx() == 0) {
+    AscendC::PrintTimeStamp(11112);
+  }
   bool are_zeros_first = !descending;
 
   GM_ADDR iter_in = out;
@@ -92,9 +99,14 @@ extern "C" __global__ __aicore__ void radix_sort_fp16(GM_ADDR in, GM_ADDR out,
   }
 
   SyncAll<true /*isAIVOnly*/>();
-
+  if (AscendC::GetBlockIdx() == 0) {
+    AscendC::PrintTimeStamp(11113);
+  }
   // Encode again to obtain the initial values (enc(enc(x)) = x)
   tcuscan::run_radix_encode<false>(out, out, vec_len, vec_tile_len);
+  if (AscendC::GetBlockIdx() == 0) {
+    AscendC::PrintTimeStamp(11114);
+  }
 }
 
 /**

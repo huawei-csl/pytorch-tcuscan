@@ -91,7 +91,8 @@ ascendc_library(
 
 # ascendc_compile_options(scan_kernels PRIVATE -Wall -Wextra -Werror)
 
-ascendc_compile_definitions(scan_kernels PRIVATE -DHAVE_WORKSPACE -DHAVE_TILING)
+ascendc_compile_definitions(scan_kernels PRIVATE -DHAVE_WORKSPACE -DHAVE_TILING
+                            -DASCENDC_TIME_STAMP_ON)
 
 ascendc_include_directories(scan_kernels PRIVATE
                             ${CMAKE_CURRENT_SOURCE_DIR}/src)
@@ -120,7 +121,7 @@ ascendc_library(
 # ascendc_compile_options(vector_kernels PRIVATE -Wall -Wextra -Werror)
 
 ascendc_compile_definitions(vector_kernels PRIVATE -DHAVE_WORKSPACE
-                            -DHAVE_TILING)
+                            -DHAVE_TILING -DASCENDC_TIME_STAMP_ON)
 
 ascendc_include_directories(vector_kernels PRIVATE
                             ${CMAKE_CURRENT_SOURCE_DIR}/src)
@@ -134,7 +135,7 @@ ascendc_library(split_kernels SHARED src/radix_sort.cpp src/compress.cpp
 # ascendc_compile_options(split_kernels PRIVATE -Wall -Wextra -Werror)
 
 ascendc_compile_definitions(split_kernels PRIVATE -DHAVE_WORKSPACE
-                            -DHAVE_TILING)
+                            -DHAVE_TILING -DASCENDC_TIME_STAMP_ON)
 
 ascendc_include_directories(split_kernels PRIVATE
                             ${CMAKE_CURRENT_SOURCE_DIR}/src)
