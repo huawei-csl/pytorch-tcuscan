@@ -475,7 +475,6 @@ at::Tensor run_scan_multi_cube(const at::Tensor& x, const at::Tensor& upper,
  * @return The prefix sum of `x`.
  */
 at::Tensor run_scan_vec_only(const at::Tensor& x, int S) {
-  auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();
   const auto dtype = x.options().dtype();
   const auto dtype_out = dtype == torch::kHalf || dtype == torch::kFloat32
@@ -495,8 +494,10 @@ at::Tensor run_scan_vec_only(const at::Tensor& x, int S) {
 
   uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
 
+  const at::Tensor workspace_tensor = alloc_zeros_workspace(0, device);
+  auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
+
   if (dtype == torch::kHalf) {
-    const at::Tensor workspace_tensor = alloc_zeros_workspace(0, device);
     ACLRT_LAUNCH_KERNEL(scan_vec_only_fp16)
     (1 /* single core*/, acl_stream, const_cast<void*>(x.storage().data()),
      const_cast<void*>(z.storage().data()),
