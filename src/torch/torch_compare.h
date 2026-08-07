@@ -22,6 +22,9 @@ extern "C" void launch_count_if_fp16(uint32_t blockDim, void* stream,
 extern "C" void launch_greater_equal_fp16(uint32_t blockDim, void* stream,
                                           void* vec_in, void* vec_out,
                                           void* workspace, void* tiling_gm);
+extern "C" void launch_less_equal_fp16(uint32_t blockDim, void* stream,
+                                       void* vec_in, void* vec_out,
+                                       void* workspace, void* tiling_gm);
 
 namespace tcuscan {
 
@@ -99,6 +102,45 @@ at::Tensor run_greater_equal(const at::Tensor& x, float pivot,
 
   if (dtype == at::kHalf) {
     launch_greater_equal_fp16(
+        block_dim, acl_stream, const_cast<void*>(x.storage().data()),
+        const_cast<void*>(z.storage().data()),
+        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+  } else {
+    /* Not supported */
+  }
+
+  aclrtFree(tiling_device);
+
+  return z;
+}
+
+/**
+ * @brief Returns binary tensor `{ x_i <= pivot }` of type `int8_t`.
+ *
+ * @param [in] x Input data vector.
+ * @param [in] pivot Input pivot
+ * @param [in] tile_len Tile length that is assigned on each AIV core.
+ * @return Binary mask tensor with 1 where `x_i <= pivot`, 0 otherwise.
+ */
+at::Tensor run_less_equal(const at::Tensor& x, float pivot, uint32_t tile_len) {
+  const at::Device device = x.options().device();
+  const auto dtype = x.options().dtype();
+
+  const uint32_t num_elems = x.numel();
+
+  const uint32_t block_dim = host_utils::CeilDiv(num_elems, tile_len);
+  const at::Tensor z = at::empty(
+      {num_elems}, at::TensorOptions().dtype(torch::kInt8).device(device));
+
+  const GreaterEqualTiling tiling{block_dim, num_elems, tile_len, pivot};
+  uint8_t* tiling_device = alloc_copy_tiling(tiling);
+
+  const at::Tensor workspace_tensor = alloc_workspace(0, device);
+
+  auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
+
+  if (dtype == at::kHalf) {
+    launch_less_equal_fp16(
         block_dim, acl_stream, const_cast<void*>(x.storage().data()),
         const_cast<void*>(z.storage().data()),
         const_cast<void*>(workspace_tensor.storage().data()), tiling_device);

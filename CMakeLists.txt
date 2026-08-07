@@ -160,6 +160,7 @@ ascendc_library(
   src/scan_batch.cpp
   src/matmul_cce.cpp
   src/scan_single_core.cpp
+  src/scan_single_cube.cpp
   src/seg_scan_vec_single_core.cpp
   src/seg_scan_mc_revert.cpp
   src/seg_sum_single_core.cpp
@@ -194,6 +195,7 @@ ascendc_library(
   src/tri_inv_col_sweep.cpp
   src/compare.cpp
   src/histogram.cpp
+  src/scan_vec_only.cpp
   src/searchsorted.cpp)
 
 tcuscan_kernel_library_setup(vector_kernels)

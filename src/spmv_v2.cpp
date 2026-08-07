@@ -25,7 +25,7 @@ using namespace tcuscan;
  * @param [in] cols_in Pointer to the CSR column indices array.
  * @param [in] segm_ind_in Pointer to the segment indices vector.
  * @param [in] x_in Pointer to the dense input vector.
- * @param [in] upper Pointer to an upper-triangular all-ones square matrix of
+ * @param [in] upper_in Pointer to an upper-triangular all-ones square matrix of
  * size \f$\textit{tile\_len} \times \textit{tile\_len}\f$.
  * @param [in] segm_offset_per_block Pointer to segment index offset per block.
  * @param [out] vec_out Pointer to the output vector.

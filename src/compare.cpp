@@ -7,6 +7,7 @@
 
 #include "kernels/kernel_count_if.h"
 #include "kernels/kernel_greater_equal.h"
+#include "kernels/kernel_less_or_equal.h"
 #include "kernels/tcuscan_utils.h"
 #include "tiling/tiling_count_if.h"
 #include "tiling/tiling_greater_equal.h"
@@ -66,6 +67,30 @@ extern "C" __global__ __aicore__ void greater_equal_fp16(GM_ADDR vec_in,
 }
 
 /**
+ * @brief Less-equal kernel for dtype fp16
+ *
+ * @param [in] vec_in Input data vector
+ * @param [in] vec_out Output vector
+ * @param [in] workspace Pointer to workspace.
+ * @param [in] tiling_gm Pointer to tiling structure.
+ */
+extern "C" __global__ __aicore__ void less_equal_fp16(GM_ADDR vec_in,
+                                                      GM_ADDR vec_out,
+                                                      GM_ADDR workspace,
+                                                      GM_ADDR tiling_gm) {
+  (void)workspace;
+  tcuscan::GreaterEqualTiling tiling;
+  GetTilingData(&tiling, tiling_gm);
+
+  const uint32_t vec_len = tiling.vec_len;
+  const half pivot = static_cast<half>(tiling.pivot);
+  const uint32_t tile_len = tiling.tile_len;
+
+  tcuscan::run_less_or_equal<true, half>(vec_in, vec_out, pivot, vec_len,
+                                         tile_len);
+}
+
+/**
  * @brief Call the `count_if` kernel for FP16 data type.
  *
  * @param [in] blockDim Number of blocks for the kernel launch.
@@ -98,4 +123,11 @@ extern "C" void launch_greater_equal_fp16(uint32_t blockDim, void* stream,
                                           uint8_t* tiling_gm) {
   greater_equal_fp16<<<blockDim, nullptr, stream>>>(vec_in, vec_out, workspace,
                                                     tiling_gm);
+}
+
+extern "C" void launch_less_equal_fp16(uint32_t blockDim, void* stream,
+                                       uint8_t* vec_in, uint8_t* vec_out,
+                                       uint8_t* workspace, uint8_t* tiling_gm) {
+  less_equal_fp16<<<blockDim, nullptr, stream>>>(vec_in, vec_out, workspace,
+                                                 tiling_gm);
 }
