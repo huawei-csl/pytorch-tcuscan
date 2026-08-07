@@ -73,6 +73,7 @@ ascendc_library(
   src/scan_batch.cpp
   src/matmul_cce.cpp
   src/scan_single_core.cpp
+  src/scan_single_cube.cpp
   src/seg_scan_vec_single_core.cpp
   src/seg_scan_mc_revert.cpp
   src/seg_sum_single_core.cpp
