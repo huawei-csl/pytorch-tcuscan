@@ -116,6 +116,7 @@ ascendc_library(
   src/tri_inv_col_sweep.cpp
   src/compare.cpp
   src/histogram.cpp
+  src/scan_vec_only.cpp
   src/searchsorted.cpp)
 
 # ascendc_compile_options(vector_kernels PRIVATE -Wall -Wextra -Werror)
