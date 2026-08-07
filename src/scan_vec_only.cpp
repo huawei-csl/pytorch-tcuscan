@@ -1,7 +1,7 @@
 /**
  * Copyright (c) Huawei Technologies Co., Ltd. 2024. All rights reserved.
  *
- * @file scan_vector_only.cpp
+ * @file scan_vec_only.cpp
  * @brief Entrypoint for scan vector-only kernel operation.
  */
 
