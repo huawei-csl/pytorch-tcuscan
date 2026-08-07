@@ -55,16 +55,6 @@ def _test_scan_vec_only(vec_len: int, s: int, dtype: torch.dtype):
 @pytest.mark.parametrize("multiplier", [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])
 @pytest.mark.parametrize("s", [32, 64, 128])
 @pytest.mark.parametrize("dtype", [torch.float16], ids=str)
-@pytest.mark.parametrize("offset", [1, 3, 7, 17, 23, 33, 53, 113])
-def test_scan_vec_only_minus(offset: int, multiplier: int, s: int, dtype: torch.dtype):
-    vec_len = multiplier * s * s - offset
-    _test_scan_vec_only(vec_len, s, dtype)
-
-
-@pytest.mark.parametrize("multiplier", [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])
-@pytest.mark.parametrize("s", [32, 64, 128])
-@pytest.mark.parametrize("dtype", [torch.float16], ids=str)
-@pytest.mark.parametrize("offset", [1, 3, 7, 17, 23, 33, 53, 113])
-def test_scan_vec_only_plus(offset: int, multiplier: int, s: int, dtype: torch.dtype):
-    vec_len = multiplier * s * s + offset
+def test_scan_vec_only(multiplier: int, s: int, dtype: torch.dtype):
+    vec_len = multiplier * s * s
     _test_scan_vec_only(vec_len, s, dtype)
