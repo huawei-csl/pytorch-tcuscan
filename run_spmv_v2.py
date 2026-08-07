@@ -29,7 +29,7 @@ import os
 from functools import partial
 
 import numpy as np
-import torch_npu  # noqa: F401
+import torch_npu  # noqa: F401  # pylint: disable=unused-import
 from scipy.sparse import random as sparse_random
 
 import torch
@@ -62,8 +62,7 @@ def compute_block_dim(nnz: int, tile_len: int) -> int:
     align_size = tile_len * tile_len
     num_tiles = ceil_div(nnz, align_size)
     block_dim = NUM_AI_CORES
-    if num_tiles < block_dim:
-        block_dim = num_tiles
+    block_dim = min(block_dim, num_tiles)
     return block_dim
 
 
@@ -180,7 +179,7 @@ def run_spmv_v2(
     # without the leading zero (see run_spmv_v2 in torch_spmv.h).
     indptr_kernel = indptr.to(torch.int32)[1:]
 
-    stream_ptr = torch.npu.current_stream()._as_parameter_  # noqa: SLF001
+    stream_ptr = torch.npu.current_stream()._as_parameter_  # noqa: SLF001  # pylint: disable=protected-access
 
     kernel(
         block_dim,

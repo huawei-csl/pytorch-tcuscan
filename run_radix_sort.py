@@ -27,7 +27,7 @@ Then run it::
 import ctypes
 import os
 
-import torch_npu  # noqa: F401
+import torch_npu  # noqa: F401  # pylint: disable=unused-import
 
 import torch
 
@@ -143,7 +143,7 @@ def run_radix_sort(lib, x: torch.Tensor, s: int):
         device=DEVICE,
     )
 
-    stream_ptr = torch.npu.current_stream()._as_parameter_  # noqa: SLF001
+    stream_ptr = torch.npu.current_stream()._as_parameter_  # noqa: SLF001  # pylint: disable=protected-access
 
     kernel(
         block_dim,
