@@ -112,7 +112,7 @@ build:
   before_script:
     - echo "Override script. Do not mutate pip config."
   script:
-    - make setup_ci
+    - make setup_once
     - make build
   artifacts:
     expire_in: 2 hours
@@ -133,285 +133,285 @@ build:
 test_compress:
   <<: *test_config
   script:
-    - make setup_ci
+    - make setup_once
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_compress
 
 test_compress_pos:
   <<: *test_config
   script:
-    - make setup_ci
+    - make setup_once
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_compress_pos
 
 test_compress_ind:
   <<: *test_config
   script:
-    - make setup_ci
+    - make setup_once
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_compress_ind
 
 test_copy:
   <<: *test_config
   script:
-    - make setup_ci
+    - make setup_once
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_copy
 
 test_gen_lower:
   <<: *test_config
   script:
-    - make setup_ci
+    - make setup_once
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_gen_lower
 
 test_csr_gather:
   <<: *test_config
   script:
-    - make setup_ci
+    - make setup_once
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_csr_gather
 
 test_diff:
   <<: *test_config
   script:
-    - make setup_ci
+    - make setup_once
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_diff
 
 test_searchsorted:
   <<: *test_config
   script:
-    - make setup_ci
+    - make setup_once
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_searchsorted
 
 test_mcscan:
   <<: *test_config
   script:
-    - make setup_ci
+    - make setup_once
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_scan_multi_core
 
 test_mcscan_no_l2:
   <<: *test_config
   script:
-    - make setup_ci
+    - make setup_once
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_scan_multi_core_no_l2
 
 test_scan_cpu:
   <<: *test_config
   script:
-    - make setup_ci
+    - make setup_once
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_scan_cpu
 
 
 test_scan_single_core:
   <<: *test_config
   script:
-    - make setup_ci
+    - make setup_once
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_scan_single_core
 
 test_scan_batch:
   <<: *test_config
   script:
-    - make setup_ci
+    - make setup_once
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_scan_batch
 
 test_seg_scan_single_core:
   <<: *test_config
   script:
-    - make setup_ci
+    - make setup_once
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_seg_scan_single_core
 
 test_seg_scan_vec_single_core:
   <<: *test_config
   script:
-    - make setup_ci
+    - make setup_once
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_seg_scan_vec_single_core
 
 test_segmented_sum:
   <<: *test_config
   script:
-    - make setup_ci
+    - make setup_once
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_segmented_sum
 
 test_seg_sum_single_core:
   <<: *test_config
   script:
-    - make setup_ci
+    - make setup_once
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_seg_sum_single_core
 
 test_seg_sum_multi_core:
   <<: *test_config
   script:
-    - make setup_ci
+    - make setup_once
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_seg_sum_multi_core
 
 test_seg_sum_single_cube:
   <<: *test_config
   script:
-    - make setup_ci
+    - make setup_once
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_seg_sum_single_cube
 
 test_seg_scan_mc_revert:
   <<: *test_config
   script:
-    - make setup_ci
+    - make setup_once
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_seg_scan_mc_revert
 
 test_split:
   <<: *test_config
   script:
-    - make setup_ci
+    - make setup_once
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_split
 
 test_split_ind:
   <<: *test_config
   script:
-    - make setup_ci
+    - make setup_once
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_split_ind
 
 test_topk:
   <<: *test_config
   script:
-    - make setup_ci
+    - make setup_once
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_topk
 
 test_topk_pivot:
   <<: *test_config
   script:
-    - make setup_ci
+    - make setup_once
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_topk_pivot
 
 test_radix_sort:
   <<: *test_config
   script:
-    - make setup_ci
+    - make setup_once
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_radix_sort
 
 test_vadd:
   <<: *test_config
   script:
-    - make setup_ci
+    - make setup_once
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_vadd
 
 test_mcgather:
   <<: *test_config
   script:
-    - make setup_ci
+    - make setup_once
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_mc_gather
 
 test_gather_spmv:
   <<: *test_config
   script:
-    - make setup_ci
+    - make setup_once
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_gather_spmv
 
 test_spmv:
   <<: *test_config
   script:
-    - make setup_ci
+    - make setup_once
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_spmv
 
 test_spmv_multi_cube:
   <<: *test_config
   script:
-    - make setup_ci
+    - make setup_once
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_spmv_multi_cube
 
 
 test_matmul_cce:
   <<: *test_config
   script:
-    - make setup_ci
+    - make setup_once
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_matmul_cce
 
 test_row_scan:
   <<: *test_config
   script:
-    - make setup_ci
+    - make setup_once
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_row_scan
 
 test_reduce_tiles:
   <<: *test_config
   script:
-    - make setup_ci
+    - make setup_once
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_reduce_tiles
 
 test_cube_reduce:
   <<: *test_config
   script:
-    - make setup_ci
+    - make setup_once
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_cube_reduce
 
 test_complete_rows:
   <<: *test_config
   script:
-    - make setup_ci
+    - make setup_once
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_complete_rows
 
 test_simple_pad:
   <<: *test_config
   script:
-    - make setup_ci
+    - make setup_once
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_simple_pad
 
 test_block_scan:
   <<: *test_config
   script:
-    - make setup_ci
+    - make setup_once
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_block_scan
 
 test_complete_blocks:
   <<: *test_config
   script:
-    - make setup_ci
+    - make setup_once
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_complete_blocks
 
 test_scan_multi_cube:
   <<: *test_config
   script:
-    - make setup_ci
+    - make setup_once
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_scan_multi_cube
 
 test_tri_inv_col_sweep:
   <<: *test_config
   script:
-    - make setup_ci
+    - make setup_once
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_tri_inv_col_sweep
 
 test_tri_inv_cube_col_sweep:
   <<: *test_config
   script:
-    - make setup_ci
+    - make setup_once
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_tri_inv_cube_col_sweep
 
 test_triu_inv_rec_unroll:
   <<: *test_config
   script:
-    - make setup_ci
+    - make setup_once
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_triu_inv_rec_unroll
 
 test_count_if:
   <<: *test_config
   script:
-    - make setup_ci
+    - make setup_once
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_count_if
 
 test_filter_greater_equal:
   <<: *test_config
   script:
-    - make setup_ci
+    - make setup_once
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_filter_greater_equal
 
 test_where:
   <<: *test_config
   script:
-    - make setup_ci
+    - make setup_once
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_where
 
 test_compress_ind_no_arange:
   <<: *test_config
   script:
-    - make setup_ci
+    - make setup_once
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_compress_ind_no_arange
 
 test_histogram:
   <<: *test_config
   script:
-    - make setup_ci
+    - make setup_once
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_histogram
 
 
@@ -424,7 +424,7 @@ unit_test:
   before_script:
     - echo "Override script. Do not mutate pip config."
   script:
-    - make setup_ci
+    - make setup_once
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make build test
   rules:
     - if: '$CI_RUN_LONG_TESTS == "1"'
