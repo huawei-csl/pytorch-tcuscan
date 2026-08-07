@@ -131,6 +131,8 @@ PYBIND11_MODULE(tcuscan_ops, m) {
         "Padding of an input tensor from length vec_len up to align_len");
   m.def("run_scan_multi_cube", &tcuscan::run_scan_multi_cube,
         "Multi-cube scan");
+  m.def("run_scan_single_cube", &tcuscan::run_scan_single_cube,
+        "Single-cube scan");
   m.def("run_scan_cpu", &tcuscan::run_scan_cpu, "Scan on CPUs");
   m.def("run_tri_inv_col_sweep", &tcuscan::run_tri_inv_col_sweep,
         "Unit upper triangular matrix inverses (fp16)");
