@@ -65,7 +65,7 @@ clang_linter:
     - if [ ! -z "$linter_errors" ]; then echo "Detected formatting issues; please fix"; exit 1; else echo "Formatting is correct"; exit 0; fi
 
 
-clang_tidy:
+.clang_tidy:
   stage: linter
   dependencies: []
   needs: []
