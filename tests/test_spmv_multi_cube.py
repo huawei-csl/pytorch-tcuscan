@@ -1,3 +1,10 @@
+# --------------------------------------------------------------------------------
+# Copyright (c) 2023-2026 Huawei Technologies Co., Ltd.
+# All rights reserved.
+# See LICENSE in the root of the software repository:
+# https://github.com/huawei-csl/pytorch-tcuscan/
+# for the full License text.
+# --------------------------------------------------------------------------------
 #!/usr/bin/python3
 # coding=utf-8
 #
@@ -54,7 +61,7 @@ def _test_tcuscan_spmv_multi_cube(nnr: int, s: int, density: float):
 
     values = (B.data).astype(np.float16)
     indexes = (B.indptr).astype(np.uint32)
-    cols = (B.indices).astype(np.uint32)
+    cols = (B.indices).astype(np.int32)
     vector = rng.uniform(1, 9, nnr - 1).astype(np.float16)
 
     result = B @ vector

@@ -1,10 +1,9 @@
-## How To Run CU-Sparse
+## How To Run cuSparse
 
 ### Step 1: Download the target sparse suite matrices
 
-The provided scripts automatically evaluate with cusparse **all** the downloaded matrices. Thus install the needed ones using the dedicated code:
+The provided scripts automatically evaluate with cusparse **all** the downloaded matrices.
 
-see - https://rnd-gitlab-eu.huawei.com/a00565472/pytorch-tcuscan/-/merge_requests/120
 
 ### Step 2: Enable NVCC
 

@@ -97,6 +97,9 @@ class KernelCubeReduce {
         tcuscan::scalar::GetWorkDistribution(vec_len_, tile_len_, block_num_);
 
     if (num_tiles_to_process == 0) {
+      if constexpr (SyncAfter) {
+        sync::SyncGroup<sync::GroupSyncDirection::FULL>();
+      }
       return;
     }
 
@@ -112,6 +115,9 @@ class KernelCubeReduce {
     const uint32_t output_tile_len = matmul_size_ * MAT_DIM_16;
     copy::CopyCL0ToGlobal(global_c_[id * output_tile_len], co1_q_, matmul_size_,
                           MAT_DIM_16);
+    // Ensure Fixpipe has committed the L0C result before the AIVs are released
+    // by the cross-core sync below.
+    PipeBarrier<PIPE_ALL>();
 
     if constexpr (SyncAfter) {
       sync::SyncGroup<sync::GroupSyncDirection::FULL>();
@@ -292,6 +298,7 @@ class KernelCompleteCubeReduce {
       sum += input_lt.GetValue(index);
     }
 
+    PipeBarrier<PIPE_ALL>();
     AscendC::SetAtomicAdd<T>();
     copy::CopyScalarToGm(global_output_[output_idx], res_out_q_, sum);
     AscendC::SetAtomicNone();

@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
-# -*- coding:utf-8 -*-
-#
-# PyTorch profiling code is part of TCUSCAN-CH CSTT project.
-#
-# Copyright 2024 Huawei Technologies Co., Ltd
+# --------------------------------------------------------------------------------
+# Copyright (c) 2023-2026 Huawei Technologies Co., Ltd.
+# All rights reserved.
+# See LICENSE in the root of the software repository:
+# https://github.com/huawei-csl/pytorch-tcuscan/
+# for the full License text.
+# --------------------------------------------------------------------------------
 
 import argparse
 import logging
+import math
 import os
 import sys
 import types
@@ -18,6 +21,7 @@ from typing import Optional, Tuple
 
 import numpy as np
 import torch.nn.functional as F
+from scipy.sparse import csr_matrix
 from scipy.sparse import random as sp_random
 
 import torch
@@ -92,6 +96,18 @@ def rand_triu_tensor(batch_size: int, n: int, dtype: np.dtype):
     A = torch.rand(batch_size, n, n, dtype=dtype, device=NPU_DEVICE)
     A = A - torch.tril(A)
     return A
+
+
+def uniform_rvs(shape):
+    return 2 * np.random.uniform(0, 1, size=shape) - 1
+
+
+def random_csr(rows: int, cols: int, nnz: int, dtype: np.dtype) -> csr_matrix:
+    flat = np.random.choice(rows * cols, size=nnz, replace=False)
+    row = flat // cols
+    col = flat % cols
+    data = uniform_rvs(nnz).astype(dtype)
+    return csr_matrix((data, (row, col)), shape=(rows, cols))
 
 
 def _run_benchmark(
@@ -627,6 +643,48 @@ def sc_segmented_sum_benchmark(
     return _run_benchmark(device, run_seg_sum), outputsize
 
 
+def seg_sum_multi_core_benchmark(
+    device: Device,
+    vec_len: int,
+    dtype: torch.dtype,
+    s: int,
+    num_blocks: int,
+) -> Tuple[float, int]:
+
+    MAX_SEG_LEN = 70000
+
+    # Build a CSR matrix with exactly vec_len non-zeros so that the kernel
+    # alignment requirement (nnz % (s*s) == 0) is satisfied by construction
+    # (sizes in main are multiples of num_cores * s * s).
+    nnz = vec_len
+    sp_dtype = np.float32 if dtype == torch.float16 else np.int32
+
+    num_segments = 10 * int(num_blocks * math.sqrt(s))
+    # num_segments = 10 * int(num_blocks * s)
+    A = random_csr(num_segments, MAX_SEG_LEN, vec_len, sp_dtype)
+
+    ones = np.ones(MAX_SEG_LEN).astype(sp_dtype)
+    values = (A.data).astype(sp_dtype)
+    indices = (A.indptr).astype(np.uint32)
+    nnz = A.nnz
+
+    expected = A @ ones
+    expected = torch.from_numpy(expected.flatten())
+
+    values_npu = torch.from_numpy(values).to(dtype).npu()
+    indices_npu = torch.from_numpy(indices).to(torch.int32).npu()
+    torch.npu.synchronize()
+
+    num_segments = A.shape[0]
+
+    assert nnz % (s * s) == 0, "Input must be a multiple of matrix tile length"
+
+    def run_seg_sum_multi_core() -> None:
+        _ = tcuscan_ops.run_seg_sum_multi_core(values_npu, indices_npu, s)
+
+    return _run_benchmark(device, run_seg_sum_multi_core), num_segments
+
+
 def cube_segmented_sum_benchmark(
     device: Device, vec_len: int, dtype: torch.dtype, segm_density: float, s: int
 ) -> Tuple[float, int]:
@@ -788,6 +846,24 @@ def scan_multi_cube_benchmark(
 
     def run_scan() -> None:
         _ = tcuscan_ops.run_scan_multi_cube(x, upper, lower_strict)
+
+    return _run_benchmark(device, run_scan), size
+
+
+def scan_single_cube_benchmark(
+    device: Device, size: int, dtype: torch.dtype, s: int
+) -> Tuple[float, int]:
+    if dtype == torch.float16:
+        x = torch.rand(size, device=device.str, dtype=dtype)
+    else:
+        raise RuntimeError(f"dtype {dtype} is not supported in scan_single_cube.")
+
+    ones = torch.ones((s, s), dtype=dtype, device=device.str)
+    upper = torch.triu(ones)
+    lower_strict = torch.tril(ones, -1)
+
+    def run_scan() -> None:
+        _ = tcuscan_ops.run_scan_single_cube(x, upper, lower_strict)
 
     return _run_benchmark(device, run_scan), size
 
@@ -955,23 +1031,48 @@ def tcuscan_hist_benchmark(
     return _run_benchmark(device, run_hist), num_bins
 
 
-def searchsorted_benchmark(
+def _make_searchsorted_inputs(
     device: Device, size: int, dtype: torch.dtype
-) -> Tuple[float, int]:
-    if dtype in {torch.int32}:
-        x = torch.randint(1, 100, (size,), device=device.str).to(torch.int32)
-        x = torch.cumsum(x, dim=-1)
-    else:
+) -> Tuple[torch.Tensor, torch.Tensor, int]:
+    """Build a monotonic int32 haystack and sorted int32 needles.
+
+    Shared by the ``searchsorted`` (torch baseline) and ``tcuscan_searchsorted``
+    (custom kernel) benchmarks so both are timed on identical inputs.
+    """
+    if dtype not in {torch.int32}:
         raise ValueError("searchsorted benchmark only supports int32 for now")
+
+    x = torch.randint(1, 100, (size,), device=device.str).to(torch.int32)
+    # cumsum promotes int32 -> int64; cast back since run_searchsorted requires int32.
+    x = torch.cumsum(x, dim=-1).to(torch.int32)
 
     num_partitions = 20
     search_vals = torch.randint(10, 1000, (num_partitions,), device=device.str).to(
         torch.int32
     )
-    search_vals = torch.cumsum(search_vals, dim=-1)
+    search_vals = torch.cumsum(search_vals, dim=-1).to(torch.int32)
+
+    return x, search_vals, num_partitions
+
+
+def searchsorted_benchmark(
+    device: Device, size: int, dtype: torch.dtype
+) -> Tuple[float, int]:
+    x, search_vals, num_partitions = _make_searchsorted_inputs(device, size, dtype)
 
     def run_searchsorted() -> None:
         _ = torch.searchsorted(x, search_vals)
+
+    return _run_benchmark(device, run_searchsorted), num_partitions
+
+
+def tcuscan_searchsorted_benchmark(
+    device: Device, size: int, dtype: torch.dtype
+) -> Tuple[float, int]:
+    x, search_vals, num_partitions = _make_searchsorted_inputs(device, size, dtype)
+
+    def run_searchsorted() -> None:
+        _ = tcuscan_ops.run_searchsorted(x, search_vals)
 
     return _run_benchmark(device, run_searchsorted), num_partitions
 
@@ -1142,6 +1243,7 @@ if __name__ == "__main__":  # noqa
             "segmented_sum",
             "sc_segmented_sum",
             "cube_segmented_sum",
+            "seg_sum_multi_core",
             "custom_copy",
             "vec_seg_scan_sc",
             "scscan",
@@ -1165,9 +1267,11 @@ if __name__ == "__main__":  # noqa
             "complete_blocks",
             "complete_rows",
             "scan_multi_cube",
+            "scan_single_cube",
             "hist",
             "tcuscan_hist",
             "searchsorted",
+            "tcuscan_searchsorted",
             "scan_batch",
             "scan_batch_tcuscan",
             "tri_inv_col_sweep",
@@ -1288,6 +1392,16 @@ if __name__ == "__main__":  # noqa
             sizes,
             density,
         )
+    elif bench == "tcuscan_searchsorted" and dtype in ["int32"]:
+        tdtype = STR_TO_DTYPE[dtype]
+        benchmark(
+            device,
+            "tcuscan_searchsorted",
+            dtype,
+            partial(tcuscan_searchsorted_benchmark, dtype=tdtype),
+            sizes,
+            density,
+        )
     elif bench == "seg_scan_mc_revert" and dtype in ["fp32"]:
         benchmark(
             device,
@@ -1381,6 +1495,21 @@ if __name__ == "__main__":  # noqa
             dtype,
             partial(
                 cube_segmented_sum_benchmark, dtype=tdtype, s=s, segm_density=density
+            ),
+            sizes,
+            density,
+        )
+    elif bench == "seg_sum_multi_core" and dtype in ["fp16"]:
+        tdtype = STR_TO_DTYPE[dtype]
+        benchmark(
+            device,
+            f"seg_sum_multi_core_{s}_{density}",
+            dtype,
+            partial(
+                seg_sum_multi_core_benchmark,
+                dtype=tdtype,
+                s=s,
+                num_blocks=num_cores,
             ),
             sizes,
             density,
@@ -1608,6 +1737,20 @@ if __name__ == "__main__":  # noqa
             dtype,
             partial(
                 scan_multi_cube_benchmark,
+                dtype=tdtype,
+                s=s,
+            ),
+            sizes,
+            density,
+        )
+    elif bench == "scan_single_cube" and dtype in ["fp16"]:
+        tdtype = STR_TO_DTYPE[dtype]
+        benchmark(
+            device,
+            f"scan_single_cube_{s}",
+            dtype,
+            partial(
+                scan_single_cube_benchmark,
                 dtype=tdtype,
                 s=s,
             ),

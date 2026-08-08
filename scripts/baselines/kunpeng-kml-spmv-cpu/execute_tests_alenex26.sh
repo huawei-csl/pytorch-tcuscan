@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # You must download the sparse suite matrices first using `sparse-suite-downloader`.
-BASE="/scratch/TCUSCAN/sparse-suite-matrices"
+BASE="/scratch/TCUSCAN/sparse-suite-matrices/ssgetpy-downloaded-matrices"
 export OMP_PLACES=cores
 
 export OMP_NUM_THREADS=96

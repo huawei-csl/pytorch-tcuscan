@@ -1,3 +1,10 @@
+# --------------------------------------------------------------------------------
+# Copyright (c) 2023-2026 Huawei Technologies Co., Ltd.
+# All rights reserved.
+# See LICENSE in the root of the software repository:
+# https://github.com/huawei-csl/pytorch-tcuscan/
+# for the full License text.
+# --------------------------------------------------------------------------------
 #!/usr/bin/python3
 # coding=utf-8
 #
@@ -9,6 +16,7 @@
 # ===============================================================================
 
 import os
+from functools import partial
 
 import numpy as np
 import pytest
@@ -18,7 +26,7 @@ from scipy.sparse import random
 import tcuscan_ops
 import torch
 
-NPU_DEVICE = os.environ.get("NPU_DEVICE", "npu:0")
+NPU_DEVICE = os.environ.get("NPU_DEVICE", "npu:1")
 torch.npu.config.allow_internal_format = False
 torch.npu.set_device(NPU_DEVICE)
 
@@ -36,7 +44,9 @@ _NROW = [
 ]
 
 
-def uniform_rvs(shape, scale: int = 6):
+def uniform_rvs(shape, dtype: np.dtype, scale: int = 6):
+    if np.issubsctype(dtype, np.integer):
+        return np.random.randint(-scale, scale, size=shape)
     return scale * np.random.uniform(0, 1, size=shape) - (scale // 2)
 
 
@@ -52,7 +62,7 @@ def _test_tcuscan_spmv(
         density=density,
         format="csr",
         dtype=out_dtype,
-        data_rvs=lambda shape: uniform_rvs(shape, scale_factor),
+        data_rvs=partial(uniform_rvs, dtype=out_dtype, scale=scale_factor),
     )
 
     values = (B.data).astype(out_dtype)
@@ -64,7 +74,7 @@ def _test_tcuscan_spmv(
 
     torch_values = torch.from_numpy(values).to(dtype).npu()
     torch_indexes = torch.from_numpy(indexes).npu()
-    torch_cols = torch.from_numpy(cols).npu()
+    torch_cols = torch.from_numpy(cols).to(torch.int32).npu()
 
     torch_vector = torch.from_numpy(vector).to(dtype).npu()
 
@@ -75,9 +85,7 @@ def _test_tcuscan_spmv(
     torch.npu.synchronize()
     actual_cpu = actual.cpu()
     expected = torch.from_numpy(result)
-    assert (
-        actual.shape == expected.shape
-    ), f"Output shape mismatch. Got {actual.shape}. Expected {expected.shape}"
+    assert actual.shape == expected.shape
 
     expected_dtype = torch.float32 if dtype == torch.float16 else torch.int32
     assert actual.dtype == expected_dtype

@@ -47,7 +47,7 @@ echo "Current compile soc version is ${SOC_VERSION}"
 
 # See https://docs.pytorch.org/cppdocs/installing.html
 export TORCH_DEVICE_BACKEND_AUTOLOAD=0
-CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:$(python -c 'import torch; print(torch.utils.cmake_prefix_path)')
+CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:$(python -c 'import torch, pybind11; print(torch.utils.cmake_prefix_path + ":" + pybind11.get_cmake_dir())')
 export CMAKE_PREFIX_PATH
 
 echo "CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}"

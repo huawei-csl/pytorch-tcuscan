@@ -29,13 +29,11 @@ extern "C" __global__ __aicore__ void topk_int16(GM_ADDR vec_in,
   tcuscan::TopKTiling tiling;
   GetTilingData(&tiling, tiling_ptr);
 
-  GM_ADDR const usrWorkspace = AscendC::GetUserWorkspace(workspace);
-
   const int32_t x_min = tiling.x_min.value_i32;
   const int32_t x_max = tiling.x_max.value_i32;
 
   tcuscan::run_topk<int16_t>(vec_in, tiling.k, vec_out, indices_out,
-                             usrWorkspace, x_min, x_max, tiling.num_elems,
+                             workspace, x_min, x_max, tiling.num_elems,
                              tiling.vec_tile_size);
 }
 
@@ -55,12 +53,10 @@ extern "C" __global__ __aicore__ void topk_fp16(GM_ADDR vec_in, GM_ADDR vec_out,
   tcuscan::TopKTiling tiling;
   GetTilingData(&tiling, tiling_ptr);
 
-  GM_ADDR const usrWorkspace = AscendC::GetUserWorkspace(workspace);
-
   const half x_min = static_cast<half>(tiling.x_min.value_fp32);
   const half x_max = static_cast<half>(tiling.x_max.value_fp32);
 
-  tcuscan::run_topk<half>(vec_in, tiling.k, vec_out, indices_out, usrWorkspace,
+  tcuscan::run_topk<half>(vec_in, tiling.k, vec_out, indices_out, workspace,
                           x_min, x_max, tiling.num_elems, tiling.vec_tile_size);
 }
 

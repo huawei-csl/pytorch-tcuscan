@@ -1,3 +1,10 @@
+# --------------------------------------------------------------------------------
+# Copyright (c) 2023-2026 Huawei Technologies Co., Ltd.
+# All rights reserved.
+# See LICENSE in the root of the software repository:
+# https://github.com/huawei-csl/pytorch-tcuscan/
+# for the full License text.
+# --------------------------------------------------------------------------------
 #!/usr/bin/python3
 # coding=utf-8
 #
@@ -10,6 +17,7 @@
 
 import os
 import random
+from functools import partial
 
 import numpy as np
 import pytest
@@ -31,11 +39,13 @@ _NUM_SEGMENTS = [513, 1025, 2011]  # 519, 2043 fails!
 _NUM_COLUMNS = [64 * 64 - 1, 128 * 128, 128 * 128 - 13, 128 * 128 + 13, 128 * 128 - 133]
 
 
-def uniform_rvs(shape):
+def uniform_rvs(shape, dtype: np.dtype):
+    if np.issubsctype(dtype, np.integer):
+        return np.random.randint(-2, 2, size=shape)
     return 2 * np.random.uniform(0, 1, size=shape) - 1
 
 
-def _test_tcuscan_seg_sum_single_core(
+def _test_seg_sum_single_core(
     num_segments: int, num_cols: int, s: int, density: float, dtype: torch.dtype
 ):
     sp_dtype = np.float32 if dtype == torch.float16 else np.int32
@@ -46,7 +56,7 @@ def _test_tcuscan_seg_sum_single_core(
         density=density,
         format="csr",
         dtype=sp_dtype,
-        data_rvs=uniform_rvs,
+        data_rvs=partial(uniform_rvs, dtype=sp_dtype),
     )
 
     ones = np.ones(num_cols).astype(sp_dtype)
@@ -84,17 +94,22 @@ def _test_tcuscan_seg_sum_single_core(
     assert (
         actual.dtype == expected.dtype
     ), f"Output dtype mismatch. Got {actual.dtype}. Expected {expected.dtype}"
-    assert torch.allclose(
-        actual, expected, atol=1e-2
-    ), f"Error seg_sum ({expected.dtype}). Abs-error: {abs_error} / {rel_error}, s={s}, num_cols={num_cols}"
+    if dtype == torch.int8:
+        assert torch.equal(
+            actual, expected
+        ), f"Error seg_sum ({expected.dtype}). Abs-error: {abs_error} / {rel_error}, s={s}, num_cols={num_cols}"
+    elif dtype == torch.float16:
+        assert torch.allclose(
+            actual, expected, atol=1e-2
+        ), f"Error seg_sum ({expected.dtype}). Abs-error: {abs_error} / {rel_error}, s={s}, num_cols={num_cols}"
 
 
 @pytest.mark.parametrize("num_segments", _NUM_SEGMENTS)
 @pytest.mark.parametrize("num_cols", _NUM_COLUMNS)
 @pytest.mark.parametrize("s", [32, 64, 128])
 @pytest.mark.parametrize("dtype", [torch.int8, torch.float16], ids=str)
-def test_tcuscan_segmented_sum(
+def test_seg_sum_single_core(
     num_segments: int, num_cols: int, s: int, dtype: torch.dtype
 ):
     density = 0.01
-    _test_tcuscan_seg_sum_single_core(num_segments, num_cols, s, density, dtype)
+    _test_seg_sum_single_core(num_segments, num_cols, s, density, dtype)

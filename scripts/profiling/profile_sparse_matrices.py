@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-# -*- coding:utf-8 -*-
-#
-# PyTorch profiling code is part of TCUSCAN-CH CSTT project.
-#
-# Copyright 2024 Huawei Technologies Co., Ltd
+# --------------------------------------------------------------------------------
+# Copyright (c) 2023-2026 Huawei Technologies Co., Ltd.
+# All rights reserved.
+# See LICENSE in the root of the software repository:
+# https://github.com/huawei-csl/pytorch-tcuscan/
+# for the full License text.
+# --------------------------------------------------------------------------------
 
 import argparse
 import logging
@@ -77,6 +79,24 @@ STR_TO_DTYPE = {
     "int8": torch.int8,
     "fp32": torch.float32,
 }
+
+
+def _dtype_bytes(dtype: torch.dtype) -> int:
+    if dtype.is_floating_point:
+        return torch.finfo(dtype).bits // 8
+    return torch.iinfo(dtype).bits // 8
+
+
+def _spmv_io_bytes(nrow: int, nnz: int, dtype: torch.dtype) -> int:
+    "Returns the number of bytes read/written by a SpMV operation on a CSR matrix with given dimensions and data type."
+    elem = _dtype_bytes(dtype)
+    return (
+        nnz * elem  # values
+        + nnz * 4  # col indices (int32)
+        + (nrow + 1) * 4  # row pointers (uint32)
+        + nrow * elem  # input vector x (A @ x)
+        + nrow * 4  # output vector (fp32 or int32)
+    )
 
 
 @dataclass
@@ -159,7 +179,11 @@ def segmented_scan_single_core_benchmark(
     def run_seg_scan_single_core() -> None:
         _ = tcuscan_ops.run_seg_scan(x_npu, f_npu, s)
 
-    return _run_benchmark(device, run_seg_scan_single_core), len(x_npu)
+    return (
+        _run_benchmark(device, run_seg_scan_single_core),
+        len(x_npu),
+        int(f_npu.sum().item()),
+    )
 
 
 def vec_segmented_scan_single_core_benchmark(
@@ -180,7 +204,11 @@ def vec_segmented_scan_single_core_benchmark(
     def run_vec_seg_scan_single_core() -> None:
         _ = tcuscan_ops.run_seg_scan_vec(x_npu, f_npu, s)
 
-    return _run_benchmark(device, run_vec_seg_scan_single_core), len(x_npu)
+    return (
+        _run_benchmark(device, run_vec_seg_scan_single_core),
+        len(x_npu),
+        int(f_npu.sum().item()),
+    )
 
 
 def compress_benchmark(device: Device, x: torch.Tensor, f: torch.Tensor, s: int):
@@ -202,7 +230,7 @@ def compress_benchmark(device: Device, x: torch.Tensor, f: torch.Tensor, s: int)
     def run_compress() -> None:
         _ = tcuscan_ops.run_compress(x_npu, f_npu, s)
 
-    return _run_benchmark(device, run_compress), len(x)
+    return _run_benchmark(device, run_compress), len(x_npu), int(f_npu.sum().item())
 
 
 def mcscan_benchmark(device: Device, B: csr_matrix, s: int) -> float:
@@ -224,7 +252,7 @@ def mcscan_benchmark(device: Device, B: csr_matrix, s: int) -> float:
     def run_scan() -> None:
         _ = tcuscan_ops.run_scan_multi_core(x_npu, s)
 
-    return _run_benchmark(device, run_scan), len(vals)
+    return _run_benchmark(device, run_scan), B.nnz, B.shape[0]
 
 
 def baseline_diff_benchmark(device: Device, B: csr_matrix) -> float:
@@ -244,7 +272,7 @@ def baseline_diff_benchmark(device: Device, B: csr_matrix) -> float:
     def run_diff() -> None:
         _ = torch.diff(vals_npu)
 
-    return _run_benchmark(device, run_diff), len(vals)
+    return _run_benchmark(device, run_diff), B.nnz, B.shape[0]
 
 
 def spmv_multi_cube_benchmark(device: Device, B: csr_matrix, s: int):
@@ -262,7 +290,7 @@ def spmv_multi_cube_benchmark(device: Device, B: csr_matrix, s: int):
     rng = np.random.default_rng(seed=42)
     vals = torch.from_numpy((B.data).astype(np.float16))
     idx = torch.from_numpy((B.indptr).astype(np.uint32))
-    cols = torch.from_numpy((B.indices).astype(np.uint32))
+    cols = torch.from_numpy((B.indices).astype(np.int32))
     vector = torch.from_numpy(rng.uniform(1, 9, len(idx) - 1).astype(np.float16))
     vals_npu = vals.npu()
     idx_npu = idx.npu()
@@ -278,7 +306,7 @@ def spmv_multi_cube_benchmark(device: Device, B: csr_matrix, s: int):
             vals_npu, idx_npu, col_npu, vec_npu, upper, lower_strict
         )
 
-    return _run_benchmark(device, run_spmv_multi_cube), len(vals)
+    return _run_benchmark(device, run_spmv_multi_cube), B.nnz, B.shape[0]
 
 
 def spmv_vec_only_benchmark(device: Device, B: csr_matrix, s: int):
@@ -308,7 +336,7 @@ def spmv_vec_only_benchmark(device: Device, B: csr_matrix, s: int):
     def run_spmv():
         _ = tcuscan_ops.run_spmv_vec_only(vals_npu, idx_npu, col_npu, vec_npu, s)
 
-    return _run_benchmark(device, run_spmv), len(vals)
+    return _run_benchmark(device, run_spmv), B.nnz, B.shape[0]
 
 
 def spmv_benchmark(device: Device, B: csr_matrix, s: int):
@@ -326,7 +354,7 @@ def spmv_benchmark(device: Device, B: csr_matrix, s: int):
     rng = np.random.default_rng(seed=42)
     vals = torch.from_numpy((B.data).astype(np.float16))
     idx = torch.from_numpy((B.indptr).astype(np.uint32))
-    cols = torch.from_numpy((B.indices).astype(np.uint32))
+    cols = torch.from_numpy((B.indices).astype(np.int32))
     vector = torch.from_numpy(rng.uniform(1, 9, len(idx) - 1).astype(np.float16))
     vals_npu = vals.npu()
     idx_npu = idx.npu()
@@ -338,7 +366,71 @@ def spmv_benchmark(device: Device, B: csr_matrix, s: int):
     def run_spmv():
         _ = tcuscan_ops.run_spmv(vals_npu, idx_npu, col_npu, vec_npu, s)
 
-    return _run_benchmark(device, run_spmv), len(vals)
+    return _run_benchmark(device, run_spmv), B.nnz, B.shape[0]
+
+
+def spmv_v2_benchmark(device: Device, B: csr_matrix, s: int):
+    """
+    Benchmark TCUSCAN SpMV v2 kernel (segmented-sum based).
+
+    Args:
+        device: Device to run benchmark on.
+        B: Input CSR Matrix
+        s: Matrix size tiling parameter.
+
+    Returns:
+        Average time in microseconds.
+    """
+    rng = np.random.default_rng(seed=42)
+    vals = torch.from_numpy((B.data).astype(np.float16))
+    idx = torch.from_numpy((B.indptr).astype(np.uint32))
+    cols = torch.from_numpy((B.indices).astype(np.int32))
+    vector = torch.from_numpy(rng.uniform(1, 9, len(idx) - 1).astype(np.float16))
+    vals_npu = vals.npu()
+    idx_npu = idx.npu()
+    col_npu = cols.npu()
+    vec_npu = vector.npu()
+
+    torch.npu.synchronize()
+
+    def run_spmv_v2():
+        _ = tcuscan_ops.run_spmv_v2(vals_npu, idx_npu, col_npu, vec_npu, s)
+
+    return _run_benchmark(device, run_spmv_v2), B.nnz, B.shape[0]
+
+
+def spmv_v2_multi_cube_benchmark(device: Device, B: csr_matrix, s: int):
+    """
+    Benchmark TCUSCAN SpMV v2 multi-cube kernel (segmented-sum based).
+
+    Args:
+        device: Device to run benchmark on.
+        B: Input CSR Matrix
+        s: Matrix size tiling parameter.
+
+    Returns:
+        Average time in microseconds.
+    """
+    rng = np.random.default_rng(seed=42)
+    vals = torch.from_numpy((B.data).astype(np.float16))
+    idx = torch.from_numpy((B.indptr).astype(np.int32))
+    cols = torch.from_numpy((B.indices).astype(np.int32))
+    vector = torch.from_numpy(rng.uniform(1, 9, len(idx) - 1).astype(np.float16))
+    vals_npu = vals.npu()
+    idx_npu = idx.npu()
+    col_npu = cols.npu()
+    vec_npu = vector.npu()
+    ones = torch.ones((s, s), dtype=torch.float16, device=NPU_DEVICE)
+    upper = torch.triu(ones)
+    lower_strict = torch.tril(ones, -1)
+    torch.npu.synchronize()
+
+    def run_spmv_v2_multi_cube():
+        _ = tcuscan_ops.run_spmv_v2_multi_cube(
+            vals_npu, idx_npu, col_npu, vec_npu, upper, lower_strict
+        )
+
+    return _run_benchmark(device, run_spmv_v2_multi_cube), B.nnz, B.shape[0]
 
 
 def csr_gather_benchmark(device: Device, B: csr_matrix):
@@ -356,7 +448,7 @@ def csr_gather_benchmark(device: Device, B: csr_matrix):
     rng = np.random.default_rng(seed=42)
     vals = torch.from_numpy((B.data).astype(np.float16))
     idx = torch.from_numpy((B.indptr).astype(np.uint32))
-    cols = torch.from_numpy((B.indices).astype(np.uint32))
+    cols = torch.from_numpy((B.indices).astype(np.int32))
     vector = torch.from_numpy(rng.uniform(1, 9, len(idx) - 1).astype(np.float16))
     vals_npu = vals.npu()
     col_npu = cols.npu()
@@ -365,7 +457,7 @@ def csr_gather_benchmark(device: Device, B: csr_matrix):
     def run_csr_gather():
         _ = tcuscan_ops.run_csr_gather(vals_npu, col_npu, vec_npu)
 
-    return _run_benchmark(device, run_csr_gather), len(vals)
+    return _run_benchmark(device, run_csr_gather), B.nnz, B.shape[0]
 
 
 def gather_spmv_benchmark(device: Device, B: csr_matrix, s: int):
@@ -388,7 +480,7 @@ def gather_spmv_benchmark(device: Device, B: csr_matrix, s: int):
     def run_gather_spmv():
         _ = tcuscan_ops.run_gather_spmv(vals_npu, idx_npu, s)
 
-    return _run_benchmark(device, run_gather_spmv), len(vals)
+    return _run_benchmark(device, run_gather_spmv), B.nnz, B.shape[0]
 
 
 def benchmark(
@@ -416,14 +508,22 @@ def benchmark(
     file = Path(filename)
     if not file.is_file():
         with open(filename, "w", encoding="UTF-8") as fd:
-            fd.write("benchname,operator,dtype,nnz,time_us\n")
+            fd.write("benchname,operator,dtype,nnz,nrows,time_us,bw_gbps\n")
 
     with open(filename, "a", encoding="UTF-8") as fd:
         logger.info(
             f"Benchmark: {benchname}, OP:{op_name}, dtype: {dtype}, device: {device.str}"
         )
-        time, nnz = fn(device)
-        fd.write(f"{benchname},{op_name},{dtype},{nnz},{time:.2f}\n")
+        time, nnz, nrows = fn(device)
+
+        bw_gbps = float("nan")
+        if op_name.startswith(("spmv")):
+            bw_gbps = (
+                _spmv_io_bytes(nrows, nnz, STR_TO_DTYPE[dtype]) / (time * 1e-6) / 1e9
+            )
+        fd.write(
+            f"{benchname},{op_name},{dtype},{nnz},{nrows},{time:.2f},{bw_gbps:.2f}\n"
+        )
 
 
 if __name__ == "__main__":
@@ -441,13 +541,15 @@ if __name__ == "__main__":
             "diff",
             "vec_seg_scan_sc",
             "spmv",
+            "spmv_v2",
             "spmv_multi_cube",
+            "spmv_v2_multi_cube",
             "csr_gather",
             "gather_spmv",
         ],
     )
     parser.add_argument("--dtype", choices=["int8", "fp16", "int16", "fp32"])
-    parser.add_argument("--s", type=int, default=64, required=False)
+    parser.add_argument("--s", type=int, default=128, required=False)
     parser.add_argument("--max_size", type=int, default=1e8, required=False)
     parser.add_argument("--num_cores", type=int, default=20, required=False)
     parser.add_argument("--matrixpath", type=str)
@@ -472,8 +574,9 @@ if __name__ == "__main__":
     else:
         device = Device(torch.cuda, "cuda:0")
 
+    bench_name = fullpath.split("/")[-1]
+
     if bench == "seg_scan_sc" and dtype in ["fp16"]:
-        bench_name = fullpath.split("/")[-1]
         my_x = pad_to_multiple(my_x, s)
         my_f = pad_to_multiple(my_f, s)
         benchmark(
@@ -484,7 +587,6 @@ if __name__ == "__main__":
             bench_name,
         )
     elif bench == "vec_seg_scan_sc" and dtype in ["fp16"]:
-        bench_name = fullpath.split("/")[-1]
         benchmark(
             device,
             f"vec_seg_scan_sc_{s}",
@@ -493,7 +595,6 @@ if __name__ == "__main__":
             bench_name,
         )
     elif bench == "compress" and dtype in ["fp16", "fp32"]:
-        bench_name = fullpath.split("/")[-1]
         benchmark(
             device,
             f"compress_{s}",
@@ -502,7 +603,6 @@ if __name__ == "__main__":
             bench_name,
         )
     elif bench == "mcscan" and dtype in ["fp16"]:
-        bench_name = fullpath.split("/")[-1]
         benchmark(
             device,
             f"mcscan_{s}",
@@ -511,12 +611,10 @@ if __name__ == "__main__":
             bench_name,
         )
     elif bench == "diff" and dtype in ["fp16", "fp32"]:
-        bench_name = fullpath.split("/")[-1]
         benchmark(
             device, "diff", dtype, partial(baseline_diff_benchmark, B=B), bench_name
         )
     elif bench == "spmv_multi_cube" and dtype in ["fp16"]:
-        bench_name = fullpath.split("/")[-1]
         benchmark(
             device,
             f"spmv_multi_cube_{s}",
@@ -529,7 +627,6 @@ if __name__ == "__main__":
             bench_name,
         )
     elif bench == "spmv" and dtype in ["fp16"]:
-        bench_name = fullpath.split("/")[-1]
         benchmark(
             device,
             f"spmv_{s}",
@@ -541,8 +638,32 @@ if __name__ == "__main__":
             ),
             bench_name,
         )
-    elif bench == "csr_gather" and dtype in ["fp16"]:
+    elif bench == "spmv_v2" and dtype in ["fp16"]:
+        benchmark(
+            device,
+            f"spmv_v2_{s}",
+            dtype,
+            partial(
+                spmv_v2_benchmark,
+                B=B,
+                s=s,
+            ),
+            bench_name,
+        )
+    elif bench == "spmv_v2_multi_cube" and dtype in ["fp16"]:
         bench_name = fullpath.split("/")[-1]
+        benchmark(
+            device,
+            f"spmv_v2_multi_cube_{s}",
+            dtype,
+            partial(
+                spmv_v2_multi_cube_benchmark,
+                B=B,
+                s=s,
+            ),
+            bench_name,
+        )
+    elif bench == "csr_gather" and dtype in ["fp16"]:
         benchmark(
             device,
             "csr_gather",
@@ -554,7 +675,6 @@ if __name__ == "__main__":
             bench_name,
         )
     elif bench == "gather_spmv" and dtype in ["fp32"]:
-        bench_name = fullpath.split("/")[-1]
         benchmark(
             device,
             f"gather_spmv_{s}",
