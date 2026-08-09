@@ -196,6 +196,9 @@ at::Tensor run_scan_multi_core(const at::Tensor& x, int S) {
   const auto dtype_out = dtype == torch::kHalf || dtype == torch::kFloat32
                              ? torch::kFloat32
                              : torch::kInt32;
+  TORCH_CHECK(dtype == torch::kHalf || dtype == torch::kFloat32 ||
+                  dtype == torch::kInt8,
+              "run_scan_multi_core: x must be fp16, fp32 or int8, got ", dtype);
 
   const uint32_t matmul_size = static_cast<uint32_t>(S);
   const uint32_t total_length = x.numel();
@@ -274,6 +277,10 @@ at::Tensor run_scan_multi_core_no_l2(const at::Tensor& x, int S) {
   const auto dtype_out = dtype == torch::kHalf || dtype == torch::kFloat32
                              ? torch::kFloat32
                              : torch::kInt32;
+  TORCH_CHECK(dtype == torch::kHalf || dtype == torch::kFloat32 ||
+                  dtype == torch::kInt8,
+              "run_scan_multi_core_no_l2: x must be fp16, fp32 or int8, got ",
+              dtype);
 
   const uint32_t matmul_size = static_cast<uint32_t>(S);
   const uint32_t total_length = x.numel();
