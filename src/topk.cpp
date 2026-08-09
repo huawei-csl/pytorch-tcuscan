@@ -32,8 +32,8 @@ extern "C" __global__ __aicore__ void topk_int16(GM_ADDR vec_in,
   const int32_t x_min = tiling.x_min.value_i32;
   const int32_t x_max = tiling.x_max.value_i32;
 
-  tcuscan::run_topk<int16_t>(vec_in, tiling.k, vec_out, indices_out,
-                             workspace, x_min, x_max, tiling.num_elems,
+  tcuscan::run_topk<int16_t>(vec_in, tiling.k, vec_out, indices_out, workspace,
+                             x_min, x_max, tiling.num_elems,
                              tiling.vec_tile_size);
 }
 
