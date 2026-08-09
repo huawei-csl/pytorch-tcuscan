@@ -36,7 +36,7 @@ create_conda_env:
 
 setup_once:
 	pip3 install -r requirements.txt
-	pip3 install --force-reinstall --no-deps  torch-npu==${TORCH_NPU_VER} --extra-index-url https://download.pytorch.org/whl/cpu
+	pip3 install --force-reinstall torch-npu==${TORCH_NPU_VER} --extra-index-url https://download.pytorch.org/whl/cpu
 
 # For 910B2 experiments, you need to update the L2_SIZE (constexpr) and SOC_VERSION (const static char*) in the code
 setup_once_aarch64:
