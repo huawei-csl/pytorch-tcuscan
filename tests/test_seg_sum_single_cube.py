@@ -34,7 +34,7 @@ NPU_DEVICE = os.environ.get("NPU_DEVICE", "npu:1")
 torch.npu.config.allow_internal_format = False
 torch.npu.set_device(NPU_DEVICE)
 
-_NUM_SEGMENTS = [513, 1025, 2011]  # 519, 2043 fails!
+_NUM_SEGMENTS = [513, 519, 1025, 2011, 2043]
 _NUM_COLUMNS = [64 * 64 - 1, 128 * 128, 128 * 128 - 13, 128 * 128 + 13, 128 * 128 - 133]
 
 
@@ -65,11 +65,12 @@ def _test_seg_sum_single_cube(
     expected = A @ ones
     expected = torch.from_numpy(expected.flatten())
 
-    # Drop last entry of indices.
-    indices = indices[:-1]
-
+    # The op consumes the full csr `indptr`; it drops the (always zero) first
+    # entry internally, so the segment ends are `indptr[1:]`.
+    assert indices[0] == 0, "First entry must be zero."
+    assert indices[-1] == nnz, "Last entry equals to the nnzs."
     assert (
-        len(indices) == num_segments
+        len(indices) == num_segments + 1
     ), f"Number of segments. vals: {len(values)}, indices: {len(indices)}"
 
     values_npu = torch.from_numpy(values).npu().to(dtype)
