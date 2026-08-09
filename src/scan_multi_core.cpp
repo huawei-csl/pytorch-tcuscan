@@ -28,11 +28,10 @@ __aicore__ inline void _run_scan_multi_core_no_l2_split(GM_ADDR input_vec,
   constexpr bool IsInclusive = true;
 
   GM_ADDR const lower = load_tril_matrix<InputT>(matmul_size);
-  GM_ADDR const usrWorkspace = AscendC::GetUserWorkspace(workspace);
 
   constexpr OutputT starting_value = 0;
   run_scan_multi_core_kernel<InputT, IsInclusive>(input_vec, lower, output_vec,
-                                                  usrWorkspace, vec_len,
+                                                  workspace, vec_len,
                                                   matmul_size, starting_value);
 }
 

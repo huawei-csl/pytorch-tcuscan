@@ -170,6 +170,8 @@ profile_scan_multi_cube:
 
 profile_scscan: profile_all_s_fp16_scscan
 
+profile_scan_single_cube: profile_all_s_fp16_scan_single_cube
+
 profile_compress_paper:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench compress --s 128 --density 0.1 --dtype fp16
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench compress --s 128 --density 0.1 --dtype fp32

@@ -73,6 +73,7 @@ ascendc_library(
   src/scan_batch.cpp
   src/matmul_cce.cpp
   src/scan_single_core.cpp
+  src/scan_single_cube.cpp
   src/seg_scan_vec_single_core.cpp
   src/seg_scan_mc_revert.cpp
   src/seg_sum_single_core.cpp
@@ -85,7 +86,7 @@ ascendc_library(
   src/scan_multi_cube.cpp
   src/simple_pad.cpp
   src/cube_reduce.cpp
-  src/spmv.cpp
+  src/spmv_v2.cpp
   src/spmv_v2_multi_cube.cpp
   src/tri_inv_cube_col_sweep.cpp)
 
@@ -114,7 +115,9 @@ ascendc_library(
   src/complete_blocks.cpp
   src/tri_inv_col_sweep.cpp
   src/compare.cpp
-  src/histogram.cpp)
+  src/histogram.cpp
+  src/scan_vec_only.cpp
+  src/searchsorted.cpp)
 
 # ascendc_compile_options(vector_kernels PRIVATE -Wall -Wextra -Werror)
 
