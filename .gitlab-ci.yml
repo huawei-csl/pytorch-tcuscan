@@ -105,12 +105,18 @@ build_spmv_eigen:
     - cd scripts/baselines/eigen-spmv-cpu
     - export GIT_SSL_NO_VERIFY=1 && make compile
 
-build:
+build_in_docker:
   tags:
     - docker_npu
   stage: build
-  before_script:
-    - echo "Override script. Do not mutate pip config."
+  script:
+    - make setup_once
+    - make build
+
+build:
+  tags:
+    - baremetal
+  stage: build
   script:
     - make setup_once
     - make build
@@ -124,8 +130,6 @@ build:
 .test_config: &test_config
   tags:
     - baremetal
-  before_script:
-    - echo "Override script. Do not mutate pip config."
   stage: tests
   needs: [build]
   dependencies: [build]
@@ -421,8 +425,6 @@ unit_test:
     - docker_npu
   stage: test_all
   dependencies: []
-  before_script:
-    - echo "Override script. Do not mutate pip config."
   script:
     - make setup_once
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make build test
