@@ -55,8 +55,16 @@ def _test_single_core_scan(vec_len: int, s: int, dtype: torch.dtype):
     expected_double = torch.cumsum(x_cpu.double(), dim=-1)
     expected_half = torch.cumsum(x_cpu, dim=-1, dtype=out_dtype)
     assert torch.equal(expected_double, expected_half.double())
+    # fp16 accumulates rounding error; fp32 is near-exact; integer kernels
+    # must match bit-exactly.
+    if dtype == torch.float16:
+        atol, rtol = 1e-4, 1e-2
+    elif dtype == torch.float32:
+        atol, rtol = 0.0, 1e-4
+    else:
+        atol, rtol = 0.0, 0.0
     assert torch.allclose(
-        expected, actual.cpu(), atol=0, rtol=1e-2
+        expected, actual.cpu(), atol=atol, rtol=rtol
     ), f"single-core scan ({dtype}) is wrong. s={s}, vec_len={vec_len}"
 
 

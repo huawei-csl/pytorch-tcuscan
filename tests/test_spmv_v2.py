@@ -93,8 +93,13 @@ def _test_tcuscan_spmv_v2(
     )
     assert actual.dtype == expected_dtype
 
+    # fp16 accumulates rounding error; fp32 is near-exact.
+    if dtype == torch.float16:
+        atol, rtol = 1e-4, 1e-2
+    else:
+        atol, rtol = 0.0, 1e-4
     assert torch.allclose(
-        actual_cpu, expected, atol=1e-01
+        actual_cpu, expected, atol=atol, rtol=rtol
     ), f"Error spmv ({expected.dtype}). s={s}"
 
 

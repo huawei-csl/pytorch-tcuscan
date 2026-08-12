@@ -87,7 +87,7 @@ def _test_tcuscan_spmv_multi_cube(nnr: int, s: int, density: float):
     ), f"Output shape mismatch. Got {actual.shape}. Expected {expected.shape}"
 
     assert torch.allclose(
-        actual_cpu, expected, atol=1e-0
+        actual_cpu, expected, atol=0.0, rtol=1e-4
     ), f"Error spmv_multi_cube  ({expected.dtype}). s={s}"
 
 

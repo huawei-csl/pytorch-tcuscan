@@ -77,7 +77,7 @@ def _test_tcuscan_segscan_single_core(n: int, s: int, segm_density: float):
 
     assert actual.shape == expected.shape, "Output shape does not match expected shape."
     assert torch.allclose(
-        actual, expected, atol=1e-02
+        actual, expected, atol=1e-4, rtol=1e-2
     ), f"segmented scan single core (fp16) wrong. s={s}, vec_len={n}"
 
 

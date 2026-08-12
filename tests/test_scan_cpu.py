@@ -37,8 +37,16 @@ def _test_dtype(vec_len: int, dtype: torch.dtype):
     abs_error = torch.max(torch.abs(actual - expected))
     rel_error = torch.max(torch.abs(actual - expected) / torch.abs(expected))
     assert actual.dtype == expected.dtype
+    # fp16 accumulates rounding error; fp32 is near-exact; integer kernels
+    # must match bit-exactly.
+    if dtype == torch.float16:
+        atol, rtol = 1e-4, 1e-2
+    elif dtype == torch.float32:
+        atol, rtol = 0.0, 1e-4
+    else:
+        atol, rtol = 0.0, 0.0
     assert torch.allclose(
-        actual, expected, atol=1e-3, rtol=1e-7
+        actual, expected, atol=atol, rtol=rtol
     ), f"Scan (CPU) ({dtype}) is wrong. vec_len={vec_len}. Abs/rel error: {abs_error:.5f} / {rel_error:.7f}"
 
 

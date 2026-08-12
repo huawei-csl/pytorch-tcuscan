@@ -64,8 +64,13 @@ def _test_cube_reduce(vec_len: int, dtype: torch.dtype):
 
     assert expected.dtype == actual.dtype
     assert expected.shape == actual.shape
+    # fp16 accumulates rounding error; integer kernels must match bit-exactly.
+    if dtype == torch.float16:
+        atol, rtol = 1e-4, 1e-2
+    else:
+        atol, rtol = 0.0, 0.0
     assert torch.allclose(
-        actual, expected, atol=1e-0, rtol=1e-2
+        actual, expected, atol=atol, rtol=rtol
     ), f"Expected : {expected}. Actual: {actual}"
 
 

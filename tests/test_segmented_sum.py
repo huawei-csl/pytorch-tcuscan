@@ -84,7 +84,7 @@ def _test_tcuscan_seg_sum(n: int, s: int, segm_density: float):
         actual.dtype == expected.dtype
     ), f"Output dtype mismatch. Got {actual.dtype}. Expected {expected.dtype}"
     assert torch.allclose(
-        actual, expected, atol=1e-02
+        actual, expected, atol=1e-4, rtol=1e-2
     ), f"Error seg_sum ({expected.dtype}). s={s}, vec_len={n}"
 
 

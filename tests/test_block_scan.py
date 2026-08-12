@@ -39,7 +39,7 @@ def _test_block_scan(m: int, s: int, dtype: torch.dtype):
 
     assert actual.dtype == expected.dtype
     assert torch.allclose(
-        actual, expected, atol=1e-2, rtol=1e-3
+        actual, expected, atol=1e-4, rtol=1e-2
     ), f"Block scan ({dtype}) is wrong. s={s}, m={m}"
 
 

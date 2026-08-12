@@ -50,8 +50,13 @@ def _test_dtype(vec_len: int, s: int, dtype: torch.dtype):
     actual = tcuscan_ops.run_scan_multi_core_no_l2(x, s)
     torch.npu.synchronize()
     assert actual.dtype == expected.dtype
+    # fp16 accumulates rounding error; integer kernels must match bit-exactly.
+    if dtype == torch.float16:
+        atol, rtol = 1e-4, 1e-2
+    else:
+        atol, rtol = 0.0, 0.0
     assert torch.allclose(
-        actual, expected, atol=1e-02
+        actual, expected, atol=atol, rtol=rtol
     ), f"multi-core scan ({dtype}) is wrong. s={s}, vec_len={vec_len}"
 
 

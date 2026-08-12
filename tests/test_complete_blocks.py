@@ -68,8 +68,13 @@ def _test_complete_blocks(
 
     assert expected.dtype == actual.dtype
     assert expected.shape == actual.shape
+    # fp32 is near-exact; integer kernels must match bit-exactly.
+    if dtype == torch.float32:
+        atol, rtol = 0.0, 1e-4
+    else:
+        atol, rtol = 0.0, 0.0
     assert torch.allclose(
-        actual, expected, atol=1e-0, rtol=1e-5
+        actual, expected, atol=atol, rtol=rtol
     ), "Returned tensor does not match expected tensor."
 
 

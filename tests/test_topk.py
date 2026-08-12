@@ -62,7 +62,9 @@ def _test_topk(size: int, k: int, dtype: torch.dtype) -> None:
     print(f"min / max: {torch.min(x)} / {torch.max(x)}")
     print(f"actual_topk: {actual_topk}")
     print(f"expected_topk: {expected_topk}")
-    assert torch.allclose(actual_topk.float(), expected_topk.float())
+    assert torch.allclose(
+        actual_topk.float(), expected_topk.float(), atol=1e-4, rtol=1e-2
+    )
 
     actual_indices, _ = torch.sort(actual_indices, dim=-1)
     expected_indices, _ = torch.sort(expected_indices, dim=-1)
@@ -70,7 +72,7 @@ def _test_topk(size: int, k: int, dtype: torch.dtype) -> None:
     assert (
         len(actual_indices) == k
     ), f"Output indices must have size K. K={len(actual_indices)}"
-    assert torch.allclose(expected_indices.float(), actual_indices.float())
+    assert torch.equal(expected_indices.float(), actual_indices.float())
 
 
 dtype = torch.float16

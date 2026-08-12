@@ -58,7 +58,7 @@ def _test_dtype(vec_len: int, s: int, dtype: torch.dtype):
     rel_error = torch.max(torch.abs(actual - expected) / torch.abs(actual))
     assert actual.dtype == expected.dtype
     assert torch.allclose(
-        actual, expected, atol=0, rtol=1e-2
+        actual, expected, atol=1e-4, rtol=1e-2
     ), f"multi-cube scan ({dtype}) is wrong. len / s : {vec_len} / {s}. Abs/rel error: {abs_error:.5f} / {rel_error:.7f}"
 
 

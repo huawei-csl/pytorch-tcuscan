@@ -53,8 +53,13 @@ def _test_dtype(vec_len: int, s: int, dtype: torch.dtype):
     abs_error = torch.max(torch.abs(actual - expected))
     rel_error = torch.max(torch.abs(actual - expected) / torch.abs(expected))
     assert actual.dtype == expected.dtype
+    # fp16 accumulates rounding error; integer kernels must match bit-exactly.
+    if dtype == torch.float16:
+        atol, rtol = 1e-4, 1e-2
+    else:
+        atol, rtol = 0.0, 0.0
     assert torch.allclose(
-        actual, expected, atol=1e-3, rtol=1e-7
+        actual, expected, atol=atol, rtol=rtol
     ), f"multi-core scan ({dtype}) is wrong. s={s}, vec_len={vec_len}. Abs/rel error: {abs_error:.5f} / {rel_error:.7f}"
 
 
