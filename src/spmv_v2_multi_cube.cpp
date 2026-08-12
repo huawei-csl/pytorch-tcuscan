@@ -32,10 +32,10 @@ using namespace tcuscan;
  * @param [in] vec_in Pointer to the input vector (sparse matrix non-zero
  * values).
  * @param [in] cols_in Pointer to the CSR column indices array.
- * @param [in] upper Pointer to an upper-triangular all-ones square matrix of
+ * @param [in] upper_in Pointer to an upper-triangular all-ones square matrix of
  * size \f$\textit{tile\_len} \times \textit{tile\_len}\f$.
- * @param [in] lower Pointer to a strict lower-triangular all-ones square matrix
- * of size \f$\textit{tile\_len} \times \textit{tile\_len}\f$.
+ * @param [in] lower_in Pointer to a strict lower-triangular all-ones square
+ * matrix of size \f$\textit{tile\_len} \times \textit{tile\_len}\f$.
  * @param [in] segm_ind_in Pointer to the full CSR row-pointer array.
  * @param [in] x_in Pointer to the dense input vector.
  * @param [out] vec_out Pointer to the output vector.

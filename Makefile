@@ -36,7 +36,7 @@ create_conda_env:
 
 setup_once:
 	pip3 install -r requirements.txt
-	pip3 install --force-reinstall --no-deps  torch-npu==${TORCH_NPU_VER} --extra-index-url https://download.pytorch.org/whl/cpu
+	pip3 install --force-reinstall torch-npu==${TORCH_NPU_VER} --extra-index-url https://download.pytorch.org/whl/cpu
 
 # For 910B2 experiments, you need to update the L2_SIZE (constexpr) and SOC_VERSION (const static char*) in the code
 setup_once_aarch64:
@@ -169,6 +169,8 @@ profile_scan_multi_cube:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench scan_multi_cube --s 128 --dtype fp16
 
 profile_scscan: profile_all_s_fp16_scscan
+
+profile_scan_single_cube: profile_all_s_fp16_scan_single_cube
 
 profile_compress_paper:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench compress --s 128 --density 0.1 --dtype fp16

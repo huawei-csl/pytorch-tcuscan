@@ -850,6 +850,24 @@ def scan_multi_cube_benchmark(
     return _run_benchmark(device, run_scan), size
 
 
+def scan_single_cube_benchmark(
+    device: Device, size: int, dtype: torch.dtype, s: int
+) -> Tuple[float, int]:
+    if dtype == torch.float16:
+        x = torch.rand(size, device=device.str, dtype=dtype)
+    else:
+        raise RuntimeError(f"dtype {dtype} is not supported in scan_single_cube.")
+
+    ones = torch.ones((s, s), dtype=dtype, device=device.str)
+    upper = torch.triu(ones)
+    lower_strict = torch.tril(ones, -1)
+
+    def run_scan() -> None:
+        _ = tcuscan_ops.run_scan_single_cube(x, upper, lower_strict)
+
+    return _run_benchmark(device, run_scan), size
+
+
 def complete_blocks_benchmark(
     device: Device,
     size: int,
@@ -1249,6 +1267,7 @@ if __name__ == "__main__":  # noqa
             "complete_blocks",
             "complete_rows",
             "scan_multi_cube",
+            "scan_single_cube",
             "hist",
             "tcuscan_hist",
             "searchsorted",
@@ -1718,6 +1737,20 @@ if __name__ == "__main__":  # noqa
             dtype,
             partial(
                 scan_multi_cube_benchmark,
+                dtype=tdtype,
+                s=s,
+            ),
+            sizes,
+            density,
+        )
+    elif bench == "scan_single_cube" and dtype in ["fp16"]:
+        tdtype = STR_TO_DTYPE[dtype]
+        benchmark(
+            device,
+            f"scan_single_cube_{s}",
+            dtype,
+            partial(
+                scan_single_cube_benchmark,
                 dtype=tdtype,
                 s=s,
             ),
