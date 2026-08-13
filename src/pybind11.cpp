@@ -1,7 +1,7 @@
 /**
  * @file pybind11.cpp
  *
- * Copyright (C) 2024-2025. Huawei Technologies Co., Ltd. All rights reserved.
+ * Copyright (C) 2024-2026. Huawei Technologies Co., Ltd. All rights reserved.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -131,6 +131,10 @@ PYBIND11_MODULE(tcuscan_ops, m) {
         "Padding of an input tensor from length vec_len up to align_len");
   m.def("run_scan_multi_cube", &tcuscan::run_scan_multi_cube,
         "Multi-cube scan");
+  m.def("run_scan_single_cube", &tcuscan::run_scan_single_cube,
+        "Single-cube scan");
+  m.def("run_block_scan_vec_only", &tcuscan::run_block_scan_vec_only,
+        "Block scan on vector blocks (fp16)");
   m.def("run_scan_single_cube", &tcuscan::run_scan_single_cube,
         "Single-cube scan");
   m.def("run_scan_cpu", &tcuscan::run_scan_cpu, "Scan on CPUs");
