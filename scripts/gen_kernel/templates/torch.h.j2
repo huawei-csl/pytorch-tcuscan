@@ -39,7 +39,7 @@ at::Tensor run_{{ kernel_cpp_name }}(const at::Tensor &x, int s) {
   const uint32_t block_dim = {{ num_blocks }};
   const uint32_t tile_size = static_cast<uint32_t>(s);
   const {{ kernel_cpp_name_suffix }}Tiling tiling{block_dim, total_len, tile_size};
-  uint8_t *tiling_device = allocCopyTiling(tiling);
+  uint8_t *tiling_device = alloc_copy_tiling(tiling);
 
   if (dtype == at::kHalf) {
     ACLRT_LAUNCH_KERNEL({{ kernel_cpp_name }}_fp16)
