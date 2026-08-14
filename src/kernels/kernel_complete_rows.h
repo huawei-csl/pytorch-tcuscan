@@ -25,14 +25,14 @@ namespace tcuscan {
  *
  * @tparam T Data type of the input and output vectors.
  * @tparam IsInclusive Indicates whether the scan is inclusive or exclusive.
- * @tparam BufferNum Number of buffers. If set to `2`, double-buffering is
- * enabled.
  */
-template <typename T, bool IsInclusive = true, int32_t BufferNum = 2>
+template <typename T, bool IsInclusive = true>
 class KernelCompleteRows {
   constexpr static int32_t MIN_VEC_SIZE = UB_ALIGNMENT / sizeof(T);
   /// @brief Maximum allowed tile size
   constexpr static uint32_t MAX_TILE_SIZE = 8192;
+  /// @brief Double buffering is enabled for half/fp16
+  constexpr static uint32_t BUFFER_NUM = std::is_same_v<T, float> ? 1 : 2;
 
  public:
   /**
@@ -84,8 +84,8 @@ class KernelCompleteRows {
     global_output_.SetGlobalBuffer((__gm__ T*)output + global_shift_,
                                    output_real_elems_);
 
-    pipe.InitBuffer(vec_tile_q_, BufferNum, tile_size_ * sizeof(T));
-    pipe.InitBuffer(vec_tile_out_q_, BufferNum, tile_size_ * sizeof(T));
+    pipe.InitBuffer(vec_tile_q_, BUFFER_NUM, tile_size_ * sizeof(T));
+    pipe.InitBuffer(vec_tile_out_q_, BUFFER_NUM, tile_size_ * sizeof(T));
 
     pipe.InitBuffer(sums_q_, 1, AlignUp(block_num_, MIN_VEC_SIZE) * sizeof(T));
   }
@@ -162,8 +162,8 @@ class KernelCompleteRows {
 
   TPipe pipe;
 
-  TQue<QuePosition::VECIN, BufferNum> vec_tile_q_;
-  TQue<QuePosition::VECOUT, BufferNum> vec_tile_out_q_;
+  TQue<QuePosition::VECIN, BUFFER_NUM> vec_tile_q_;
+  TQue<QuePosition::VECOUT, BUFFER_NUM> vec_tile_out_q_;
 
   TQue<QuePosition::VECIN, 1> sums_q_;
 

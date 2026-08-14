@@ -83,5 +83,5 @@ extern "C" __global__ __aicore__ void less_equal_fp16(GM_ADDR vec_in,
   const uint32_t tile_len = tiling.tile_len;
 
   tcuscan::run_less_or_equal<true, half>(vec_in, vec_out, pivot, vec_len,
-                                        tile_len);
+                                         tile_len);
 }

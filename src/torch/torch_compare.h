@@ -115,8 +115,7 @@ at::Tensor run_greater_equal(const at::Tensor& x, float pivot,
  * @param [in] tile_len Tile length that is assigned on each AIV core.
  * @return Binary mask tensor with 1 where `x_i <= pivot`, 0 otherwise.
  */
-at::Tensor run_less_equal(const at::Tensor& x, float pivot,
-                          uint32_t tile_len) {
+at::Tensor run_less_equal(const at::Tensor& x, float pivot, uint32_t tile_len) {
   const at::Device device = x.options().device();
   const auto dtype = x.options().dtype();
 
