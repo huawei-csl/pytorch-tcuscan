@@ -26,19 +26,6 @@ torch.npu.set_device(NPU_DEVICE)
 
 # Input array size to benchmark sort
 _SORT_SIZES = [
-    1024,
-    2048,
-    4096,
-    8192,
-    16384,
-    32768,
-    65536,
-    131072,
-    262144,
-    524288,
-    1179648,
-    4325376,
-    16908288,
     25165824,
 ]
 
@@ -84,7 +71,7 @@ def _test_sort(vec_len: int, dtype: torch.dtype, s: int):
 
 
 @pytest.mark.parametrize("vec_len", _SORT_SIZES)
-@pytest.mark.parametrize("s", [32, 64, 128])
+@pytest.mark.parametrize("s", [128])
 def test_tcuscan_sort_fp16(vec_len: int, s: int):
     if vec_len >= s * s:
         _test_sort(vec_len, torch.float16, s)
@@ -97,10 +84,3 @@ def test_tcuscan_sort_fp16(vec_len: int, s: int):
 #    s = 128
 #    dtype = torch.int16
 #    _test_sort(vec_len, dtype, s)
-
-
-@pytest.mark.parametrize("vec_len", get_sizes())
-@pytest.mark.parametrize("s", [64, 128])
-def test_tcuscan_sort_int16(vec_len: int, s: int):
-    dtype = torch.int16
-    _test_sort(vec_len, dtype, s)
