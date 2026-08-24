@@ -317,7 +317,7 @@ __aicore__ inline void run_csr_gather(GM_ADDR values_in, GM_ADDR cols_in,
     exec_mode::EnableCubeCores();
   }
 
-  // If input dtype if fp32, half the chunk size of x.
+  // If input dtype is fp32, half the chunk size of x.
   if constexpr (sizeof(T) == 4) {
     x_tile_elems_max /= 2;
   }
