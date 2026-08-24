@@ -6,3 +6,4 @@ bench_results_*.csv
 *.so
 build/
 __pycache__/
+*.csv

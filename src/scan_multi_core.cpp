@@ -28,11 +28,10 @@ __aicore__ inline void _run_scan_multi_core_no_l2_split(GM_ADDR input_vec,
   constexpr bool IsInclusive = true;
 
   GM_ADDR const lower = load_tril_matrix<InputT>(matmul_size);
-  GM_ADDR const usrWorkspace = AscendC::GetUserWorkspace(workspace);
 
   constexpr OutputT starting_value = 0;
   run_scan_multi_core_kernel<InputT, IsInclusive>(input_vec, lower, output_vec,
-                                                  usrWorkspace, vec_len,
+                                                  workspace, vec_len,
                                                   matmul_size, starting_value);
 }
 
@@ -123,6 +122,22 @@ extern "C" __global__ __aicore__ void scan_multi_core_int8(GM_ADDR input_vec,
 }
 
 /**
+ * @brief Run the multi core inclusive scan kernel with input dtype fp32
+ *
+ * @param [in] input_vec Pointer to an input vector.
+ * @param [in] output_vec Pointer to an output vector.
+ * @param [in] workspace Pointer to the kernel workspace.
+ * @param [in] tilingGm Pointer to the tiling buffer.
+ */
+extern "C" __global__ __aicore__ void scan_multi_core_fp32(GM_ADDR input_vec,
+                                                           GM_ADDR output_vec,
+                                                           GM_ADDR workspace,
+                                                           GM_ADDR tilingGm) {
+  tcuscan::_run_scan_multi_core<float>(input_vec, output_vec, workspace,
+                                       tilingGm);
+}
+
+/**
  * @brief Run the multi core inclusive scan kernel with input dtype fp16 without
  * L2 splitting optimization.
  *
@@ -152,4 +167,20 @@ extern "C" __global__ __aicore__ void scan_multi_core_int8_no_l2(
     GM_ADDR tilingGm) {
   tcuscan::_run_scan_multi_core_no_l2_split<int8_t>(input_vec, output_vec,
                                                     workspace, tilingGm);
+}
+
+/**
+ * @brief Run the multi core inclusive scan kernel with input dtype fp32 without
+ * L2 splitting optimization.
+ *
+ * @param [in] input_vec Pointer to an input vector.
+ * @param [in] output_vec Pointer to an output vector.
+ * @param [in] workspace Pointer to the kernel workspace.
+ * @param [in] tilingGm Pointer to the tiling buffer.
+ */
+extern "C" __global__ __aicore__ void scan_multi_core_fp32_no_l2(
+    GM_ADDR input_vec, GM_ADDR output_vec, GM_ADDR workspace,
+    GM_ADDR tilingGm) {
+  tcuscan::_run_scan_multi_core_no_l2_split<float>(input_vec, output_vec,
+                                                   workspace, tilingGm);
 }

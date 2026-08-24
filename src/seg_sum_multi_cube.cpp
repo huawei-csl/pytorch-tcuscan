@@ -31,6 +31,7 @@ using namespace tcuscan;
  * @param [in] workspace Pointer to a memory region used as workspace.
  * @param [in] vec_len Input vector length.
  * @param [in] num_segments Number of segments.
+ * @param [in] tile_len Tile size used for the matrix multiplication step.
  * @param [in] block_len Block length.
  */
 template <typename T>
@@ -51,17 +52,13 @@ __aicore__ inline void run_seg_sum_multi_cube(
   run_pad_kernel<T, false>(vec_in, padded_input, vec_len, align_size);
 
   sync::SyncGroup<sync::GroupSyncDirection::FULL>();
-  sync::SyncAllCores();
+  AscendC::SyncAll<false /*isAIVOnly*/>();
 
   if ASCEND_IS_AIC {
-    KernelBlockScan<T> op_cube(padded_vec_len, tile_len);
+    KernelBlockScan<T, /* SyncAfter*/ true> op_cube(padded_vec_len, tile_len);
     op_cube.Init(padded_input, upper, lower, spec_block_scan);
     op_cube.Process();
   }
-
-  sync::SyncGroup<sync::GroupSyncDirection::FULL>();
-  sync::SyncAllCores();
-  AscendC::PipeBarrier<PIPE_ALL>();
 
   if ASCEND_IS_AIV {
     const uint32_t num_blocks = AscendC::GetBlockNum();
@@ -94,8 +91,8 @@ __aicore__ inline void run_seg_sum_multi_cube(
       block_len = vec_len - block_vec_offset;
     }
 
-    KernelSegSumCubeRevert<OutputT, false, true> op(
-        block_len, num_segments_per_block, tile_len, block_vec_offset);
+    KernelSegSumCubeRevert<OutputT, /* SyncBefore*/ true, /* AtomicAdd */ true>
+        op(block_len, num_segments_per_block, tile_len, block_vec_offset);
     op.Init(spec_block_scan, segm_ind_in + segm_ind_offset * sizeof(int32_t),
             vec_out + segm_ind_offset * sizeof(OutputT));
     op.Process();
@@ -110,6 +107,10 @@ __aicore__ inline void run_seg_sum_multi_cube(
  * (https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.csr_matrix.html).
  *
  * @param [in] vec_in Pointer to the input vector.
+ * @param [in] upper Pointer to an upper-triangular all-ones square matrix of
+ * size \f$\textit{matmul_size}\f$.
+ * @param [in] lower Pointer to an lower-triangular all-ones square matrix of
+ * size \f$\textit{matmul_size}\f$.
  * @param [in] indptr Pointer to the segment indices vector.
  * @param [in] segment_offsets Pointer to the segment offset per block.
  * @param [in] vec_out Pointer to the output vector.

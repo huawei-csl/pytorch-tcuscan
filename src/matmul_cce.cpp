@@ -1,8 +1,5 @@
 #include "kernels/ascendc_kernel_operator.h"
 
-// Copied from
-// https://open.codehub.huawei.com/innersource/self_spec_infer_G/ascendc-samples
-
 #ifdef __DAV_C220_CUBE__
 // Cube-specific CCE intrinsics need to be inside this MACRO
 

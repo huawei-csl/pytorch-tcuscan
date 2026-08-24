@@ -17,8 +17,9 @@ namespace tcuscan {
  * @brief Performs the CSR gather operation as described in SEGMV algorithm in
  * [1].
  *
- * For each nonzero i, computes `z[i] = values[i] * x[cols[i]]`, i.e. gathers the
- * matching x entry for every CSR nonzero and scales it by that nonzero's value.
+ * For each nonzero i, computes `z[i] = values[i] * x[cols[i]]`, i.e. gathers
+ * the matching x entry for every CSR nonzero and scales it by that nonzero's
+ * value.
  *
  * [1] Segmented Operations for Sparse Matrix Computation on Vector
  * Multiprocessors: https://dl.acm.org/doi/10.5555/865221.

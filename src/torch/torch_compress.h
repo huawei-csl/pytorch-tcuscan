@@ -330,7 +330,18 @@ at::Tensor run_filter_greater_equal(const at::Tensor& x, float pivot, int S) {
  * @return The subvector of `x`: `x[x <= pivot]`.
  */
 at::Tensor run_filter_less_equal(const at::Tensor& x, float pivot, int S) {
-  const at::Tensor mask = (x <= pivot).to(torch::kInt8);
+  const auto dtype = x.options().dtype();
+  at::Tensor mask;
+  if (dtype == at::kHalf) {
+    mask = run_less_equal(x, pivot, static_cast<uint32_t>(S * S));
+  } else {
+    // For non-fp16 dtypes the PyTorch op runs on the NPU stream; synchronize
+    // before launching ACLRT kernels in run_compress to avoid a data race on
+    // the mask.
+    mask = (x <= pivot).to(torch::kInt8);
+    auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
+    aclrtSynchronizeStream(acl_stream);
+  }
   return run_compress(x, mask, S);
 }
 

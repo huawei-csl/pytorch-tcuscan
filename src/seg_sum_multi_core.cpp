@@ -50,7 +50,7 @@ __aicore__ inline void run_seg_sum_multi_core(
   run_pad_kernel<T, false>(vec_in, padded_input, vec_len, align_size);
 
   sync::SyncGroup<sync::GroupSyncDirection::FULL>();
-  sync::SyncAllCores();
+  AscendC::SyncAll<false /*isAIVOnly*/>();
 
   if ASCEND_IS_AIC {
     KernelRowScan<T> op_cube(tile_len, tile_len, padded_vec_len);
@@ -59,7 +59,7 @@ __aicore__ inline void run_seg_sum_multi_core(
   }
 
   sync::SyncGroup<sync::GroupSyncDirection::FULL>();
-  sync::SyncAllCores();
+  AscendC::SyncAll<false /*isAIVOnly*/>();
   AscendC::PipeBarrier<PIPE_ALL>();
 
   if ASCEND_IS_AIV {

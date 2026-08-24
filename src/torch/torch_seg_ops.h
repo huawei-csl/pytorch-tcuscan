@@ -272,9 +272,12 @@ at::Tensor run_seg_sum_single_core(const at::Tensor& x,
  * @param [in] x Input data vector.
  * @param [in] upper Upper triangular all-ones matrix of size S.
  * @param [in] lower_strict Strict lower triangular all-ones matrix of size S.
- * @param [in] indptr Input segment starts vector.
+ * @param [in] indptr Input segment starts vector following the
+ * `scipy.sparse.csr_matrix` notation, i.e., it starts with `0` and its last
+ * entry equals `len(x)`.
  * @param [in] s Tiling parameter. Typical values: 32, 64, 128.
- * @return Segmented sum of (x, indptr).
+ * @return Segmented sum of (x, indptr). Output length is the number of
+ * segments and equals to `len(indptr) - 1`.
  */
 at::Tensor run_seg_sum_single_cube(const at::Tensor& x, const at::Tensor& upper,
                                    const at::Tensor& lower_strict,
@@ -287,7 +290,9 @@ at::Tensor run_seg_sum_single_cube(const at::Tensor& x, const at::Tensor& upper,
   constexpr uint32_t BLOCK_DIM = 1;  // single core
   const uint32_t matmul_size = static_cast<uint32_t>(s);
   const uint32_t total_length = x.numel();
-  const uint32_t num_segments = indptr.numel();
+  // The kernel consumes the segment *ending* indices, i.e., the indptr without
+  // its (always zero) first entry. Hence, the number of segments are -1.
+  const uint32_t num_segments = indptr.numel() - 1;
 
   const at::Tensor z = at::empty(
       {num_segments}, at::TensorOptions().dtype(dtype_out).device(device));
@@ -297,6 +302,11 @@ at::Tensor run_seg_sum_single_cube(const at::Tensor& x, const at::Tensor& upper,
   uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
 
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
+
+  // Offset indptr by one element, since first element is always zero.
+  void* indptr_data = static_cast<void*>(
+      static_cast<uint8_t*>(const_cast<void*>(indptr.storage().data())) +
+      indptr.element_size());
 
   if (dtype == torch::kHalf) {
     const uint32_t user_workspace_size =
@@ -308,8 +318,7 @@ at::Tensor run_seg_sum_single_cube(const at::Tensor& x, const at::Tensor& upper,
     ACLRT_LAUNCH_KERNEL(seg_sum_single_cube_fp16)
     (BLOCK_DIM, acl_stream, const_cast<void*>(x.storage().data()),
      const_cast<void*>(upper.storage().data()),
-     const_cast<void*>(lower_strict.storage().data()),
-     const_cast<void*>(indptr.storage().data()),
+     const_cast<void*>(lower_strict.storage().data()), indptr_data,
      const_cast<void*>(z.storage().data()),
      const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else {
@@ -433,16 +442,18 @@ at::Tensor run_seg_sum_multi_core(
  * zero and the trailing nnz entry), returns the segmented sum of each segment.
  *
  * @param [in] x Input data vector.
- * @param [in] indptr CSR row-pointer vector (length = num_segments + 1).
- * @param [in] segm_offsets Segment start index offset per block.
  * @param [in] upper Upper triangular all-ones matrix of size S.
  * @param [in] lower_strict Strict lower triangular all-ones matrix of size S.
+ * @param [in] indptr CSR row-pointer vector (length = num_segments + 1).
+ * @param [in] segm_offsets Segment start index offset per block. Optional; when
+ * omitted it is computed internally from `indptr` (same as
+ * `run_seg_sum_multi_core`).
  * @return Segmented sum vector. Output length equals `num_segments`.
  */
-at::Tensor run_seg_sum_multi_cube(const at::Tensor& x, const at::Tensor& upper,
-                                  const at::Tensor& lower_strict,
-                                  const at::Tensor& indptr,
-                                  const at::Tensor& segm_offsets) {
+at::Tensor run_seg_sum_multi_cube(
+    const at::Tensor& x, const at::Tensor& upper,
+    const at::Tensor& lower_strict, const at::Tensor& indptr,
+    c10::optional<at::Tensor> segm_offsets = c10::nullopt) {
   const auto ascendc_platform =
       platform_ascendc::PlatformAscendCManager::GetInstance();
   const at::Device device = x.options().device();
@@ -469,6 +480,21 @@ at::Tensor run_seg_sum_multi_cube(const at::Tensor& x, const at::Tensor& upper,
       host_utils::CeilDiv(num_tiles, block_dim);
 
   const uint32_t block_len = max_num_tiles_per_block * matrix_tile_len;
+
+  at::Tensor segm_offsets_;
+  if (segm_offsets.has_value()) {
+    segm_offsets_ = segm_offsets.value();
+  } else {
+    const at::Tensor sstart = torch::clamp(
+        torch::arange(
+            0, block_dim + 1,
+            torch::TensorOptions().dtype(torch::kInt32).device(device)) *
+            block_len,
+        c10::nullopt, static_cast<int32_t>(total_length));
+
+    segm_offsets_ = torch::searchsorted(indptr.to(torch::kInt32), sstart,
+                                        /*out_int32=*/true);
+  }
 
   const at::Tensor z = at::zeros(
       {num_segments}, at::TensorOptions().dtype(dtype_out).device(device));
