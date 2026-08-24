@@ -158,8 +158,10 @@ def _run_benchmark(
     return avg_time_us
 
 
-def masked_select_benchmark(device: Device, size: int, dtype: torch.dtype) -> float:
-    mask = (torch.randn(size, device=device.str) > 0).to(torch.bool)
+def masked_select_benchmark(
+    device: Device, size: int, dtype: torch.dtype, segm_density: float
+) -> float:
+    mask = (torch.rand(size=(size,)) < segm_density).to(torch.uint8).npu()
     if dtype == torch.int16:
         x = torch.randint(0, 2**7 - 1, (size,), device=device.str).to(torch.int16)
     elif dtype == torch.float16:
@@ -1460,6 +1462,16 @@ if __name__ == "__main__":  # noqa
             f"compress_{s}_{density}",
             dtype,
             partial(compress_benchmark, dtype=tdtype, s=s, segm_density=density),
+            sizes,
+            density,
+        )
+    elif bench == "masked_select" and dtype in ["fp16", "fp32"]:
+        tdtype = STR_TO_DTYPE[dtype]
+        benchmark(
+            device,
+            f"masked_select_{s}_{density}",
+            dtype,
+            partial(masked_select_benchmark, dtype=tdtype, segm_density=density),
             sizes,
             density,
         )
