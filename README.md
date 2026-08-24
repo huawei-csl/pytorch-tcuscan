@@ -33,16 +33,20 @@ Reducing kernels promote their accumulator: `fp16 -> fp32` and integer inputs `i
 | Operator | Input dtypes | Description |
 | --- | --- | --- |
 | `run_scan_single_core` | `fp16`, `fp32`, `int8` | Prefix sum of a 1D vector on a single AI Core |
-| `run_scan_multi_core` | `fp16`, `int8` | Multi-core prefix sum |
-| `run_scan_multi_core_no_l2` | `fp16`, `int8` | Multi-core prefix sum without the L2 cache splitting optimization |
+| `run_scan_multi_core` | `fp16`, `fp32`, `int8` | Multi-core prefix sum |
+| `run_scan_multi_core_no_l2` | `fp16`, `fp32`, `int8` | Multi-core prefix sum without the L2 cache splitting optimization |
 | `run_scan_multi_cube` | `fp16` | Multi-cube prefix sum, built on top of the block scan |
 | `run_scan_batch` | `fp16`, `fp32` | Row-wise prefix sum of a 2D matrix (one cube core per row) |
 | `run_row_scan` | `fp16` | Prefix sum of each consecutive block of length `S` |
 | `run_block_scan` | `fp16` | Prefix sum of each consecutive block of length `S^2` |
 | `run_scan_cpu` | `fp16`, `fp32`, `int8` | CPU reference implementation |
 
-`run_scan_multi_core` and `run_scan_multi_core_no_l2` route *any* non-`fp16` dtype to the
-`int8` kernel, so passing `fp32` there is silently incorrect.
+`run_scan_multi_core` and `run_scan_multi_core_no_l2` accept `fp32` input and return `fp32`
+output (no accumulator promotion). The `fp32` path uses dedicated
+`scan_multi_core_fp32` / `scan_multi_core_fp32_no_l2` kernels.
+
+Both wrappers reject any other dtype with a `TORCH_CHECK` error rather than silently
+falling through to the `int8` kernel.
 
 ### Segmented scan / segmented sum
 
@@ -221,3 +225,13 @@ The final step is to build a test file `tests/test_${MYKERNEL}.py`, and add a jo
 - In `test/test_*.py`, we always need to import `torch_npu`, which might be unused. Make sure to add a comment `import torch_npu # noqa` so that the prospector passes the CI
 - When the input is a 2d-tensor, e.g., as in `scan_batch`, we usually set `block_size` (i.e. the number of cube cores) equal to the batch size.
 - All the files related to a kernel (test, tiling, header, cpp,...) must all have the same name. E.g., if the kernel name is `scan_fp16`, we need to name the files `tiling_scan_fp16.h`, `kernel_scan_fp16.h`, `scan_fp16.cpp`, `test_scan_fp16.py`, etc.
+
+
+## Contributors
+
+Below is a list of contributors (alphabetical order by surname):
+- Gioele Gottardo
+- Aleksandros Sobczyk
+- Giuseppe Sorrentino
+- Bartłomiej Wróblewski
+- Anastasios Zouzias

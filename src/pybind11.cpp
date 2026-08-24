@@ -81,7 +81,6 @@ PYBIND11_MODULE(tcuscan_ops, m) {
         pybind11::arg("vals"), pybind11::arg("indptr"), pybind11::arg("cols"),
         pybind11::arg("x"), pybind11::arg("upper"),
         pybind11::arg("lower_strict"),
-        pybind11::arg("segm_offsets") = pybind11::none(),
         "Sparse Matrix-Vector Multiplication Using Multi-cube Segmented Sum");
   m.def("run_searchsorted", &tcuscan::run_searchsorted, pybind11::arg("sorted"),
         pybind11::arg("values"),
@@ -91,6 +90,8 @@ PYBIND11_MODULE(tcuscan_ops, m) {
   m.def("run_scan_single_core", &tcuscan::run_scan_single_core,
         pybind11::arg("x"), pybind11::arg("S"),
         pybind11::arg("starting_sum") = 0, "Scan Single Core");
+  m.def("run_scan_vec_only", &tcuscan::run_scan_vec_only, pybind11::arg("x"),
+        pybind11::arg("S"), "Scan Vector Only");
   m.def("run_seg_scan_vec", &tcuscan::run_seg_scan_vec,
         "Segmented Scan (vector-only)");
   m.def("run_seg_scan_mc_revert", &tcuscan::run_seg_scan_mc_revert,
@@ -130,6 +131,8 @@ PYBIND11_MODULE(tcuscan_ops, m) {
         "Padding of an input tensor from length vec_len up to align_len");
   m.def("run_scan_multi_cube", &tcuscan::run_scan_multi_cube,
         "Multi-cube scan");
+  m.def("run_scan_single_cube", &tcuscan::run_scan_single_cube,
+        "Single-cube scan");
   m.def("run_scan_cpu", &tcuscan::run_scan_cpu, "Scan on CPUs");
   m.def("run_tri_inv_col_sweep", &tcuscan::run_tri_inv_col_sweep,
         "Unit upper triangular matrix inverses (fp16)");

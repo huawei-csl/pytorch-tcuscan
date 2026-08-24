@@ -100,18 +100,7 @@ class KernelSearchsorted {
    * first index `j` with `sorted[j] >= value`.
    */
   __aicore__ inline uint32_t LowerBound(T value) {
-    uint32_t lo = 0;
-    uint32_t hi = data_len_;
-    while (lo < hi) {
-      const uint32_t mid = lo + (hi - lo) / 2;
-      const T pivot = scalar::GetGMValue<T>(sorted_in_, mid, data_len_);
-      if (pivot < value) {
-        lo = mid + 1;
-      } else {
-        hi = mid;
-      }
-    }
-    return lo;
+    return scalar::LowerBoundGM<T>(sorted_in_, data_len_, value);
   }
 
   TPipe pipe_;

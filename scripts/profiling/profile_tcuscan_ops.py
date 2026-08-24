@@ -158,8 +158,10 @@ def _run_benchmark(
     return avg_time_us
 
 
-def masked_select_benchmark(device: Device, size: int, dtype: torch.dtype) -> float:
-    mask = (torch.randn(size, device=device.str) > 0).to(torch.bool)
+def masked_select_benchmark(
+    device: Device, size: int, dtype: torch.dtype, segm_density: float
+) -> float:
+    mask = (torch.rand(size=(size,)) < segm_density).to(torch.uint8).npu()
     if dtype == torch.int16:
         x = torch.randint(0, 2**7 - 1, (size,), device=device.str).to(torch.int16)
     elif dtype == torch.float16:
@@ -850,6 +852,24 @@ def scan_multi_cube_benchmark(
     return _run_benchmark(device, run_scan), size
 
 
+def scan_single_cube_benchmark(
+    device: Device, size: int, dtype: torch.dtype, s: int
+) -> Tuple[float, int]:
+    if dtype == torch.float16:
+        x = torch.rand(size, device=device.str, dtype=dtype)
+    else:
+        raise RuntimeError(f"dtype {dtype} is not supported in scan_single_cube.")
+
+    ones = torch.ones((s, s), dtype=dtype, device=device.str)
+    upper = torch.triu(ones)
+    lower_strict = torch.tril(ones, -1)
+
+    def run_scan() -> None:
+        _ = tcuscan_ops.run_scan_single_cube(x, upper, lower_strict)
+
+    return _run_benchmark(device, run_scan), size
+
+
 def complete_blocks_benchmark(
     device: Device,
     size: int,
@@ -1249,6 +1269,7 @@ if __name__ == "__main__":  # noqa
             "complete_blocks",
             "complete_rows",
             "scan_multi_cube",
+            "scan_single_cube",
             "hist",
             "tcuscan_hist",
             "searchsorted",
@@ -1441,6 +1462,16 @@ if __name__ == "__main__":  # noqa
             f"compress_{s}_{density}",
             dtype,
             partial(compress_benchmark, dtype=tdtype, s=s, segm_density=density),
+            sizes,
+            density,
+        )
+    elif bench == "masked_select" and dtype in ["fp16", "fp32"]:
+        tdtype = STR_TO_DTYPE[dtype]
+        benchmark(
+            device,
+            f"masked_select_{s}_{density}",
+            dtype,
+            partial(masked_select_benchmark, dtype=tdtype, segm_density=density),
             sizes,
             density,
         )
@@ -1718,6 +1749,20 @@ if __name__ == "__main__":  # noqa
             dtype,
             partial(
                 scan_multi_cube_benchmark,
+                dtype=tdtype,
+                s=s,
+            ),
+            sizes,
+            density,
+        )
+    elif bench == "scan_single_cube" and dtype in ["fp16"]:
+        tdtype = STR_TO_DTYPE[dtype]
+        benchmark(
+            device,
+            f"scan_single_cube_{s}",
+            dtype,
+            partial(
+                scan_single_cube_benchmark,
                 dtype=tdtype,
                 s=s,
             ),
