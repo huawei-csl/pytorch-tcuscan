@@ -74,8 +74,7 @@ falling through to the `int8` kernel.
 | `run_mc_gather` | `fp16`, `fp32` | General multi-core gather of a 1D vector |
 
 For `run_spmv_v2`, `vals` and `x` must have the *same* dtype, and `indptr` must be
-`int32`/`uint32`. `run_gather_spmv` is hard-instantiated as `KernelGatherSpmv<float>`, so it
-consumes the 32-bit output of the preceding scan.
+`int32`/`uint32`.
 
 All four SpMV entry points (`run_spmv`, `run_spmv_v2`, `run_spmv_multi_cube`,
 `run_spmv_v2_multi_cube`) take the BLAS-style scalars `alpha`, `beta` and an optional
@@ -84,13 +83,6 @@ output vector `y`, computing
 ```python
 y = tcuscan_ops.run_spmv_v2(vals, indptr, cols, x, s, alpha=2.0, beta=1.0, y=y)  # y = 2*A@x + y
 ```
-
-`y` must be a contiguous `fp32` vector with one element per matrix row, and is updated in
-place *and* returned. Omitting `y` returns a freshly allocated `alpha * A @ x` and ignores
-`beta`. Following the BLAS convention, `beta == 0` overwrites `y` without reading it, so an
-uninitialized `y` is valid input. The fused `v2` kernels apply both scalars on device:
-`alpha` scales each segment sum as it is written (fp32), and `beta` is applied by a
-pre-pass over `y` before the segment reduction accumulates onto it.
 
 ### Sort, top-k, and split
 
