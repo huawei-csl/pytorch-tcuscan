@@ -8,6 +8,7 @@
 #include "kernels/constants.h"
 #include "kernels/kernel_block_scan.h"
 #include "kernels/kernel_csr_gather.h"
+#include "kernels/kernel_scale.h"
 #include "kernels/kernel_seg_sum_cube_revert.h"
 #include "kernels/tcuscan_utils.h"
 #include "tiling/tiling_spmv.h"
@@ -45,13 +46,18 @@ using namespace tcuscan;
  * @param [in] x_len Length of the dense input vector.
  * @param [in] tile_len Tile size used for the matrix multiplication step.
  * @param [in] block_len Block length assigned to each AI Core group.
+ * @param [in] alpha Scaling factor of the SpMV product, applied by the
+ * segment reduction as it writes each segment sum.
+ * @param [in] beta Scaling factor applied in-place to @p vec_out before the
+ * segment reduction accumulates on top of it. Following the BLAS convention,
+ * `beta == 0` overwrites @p vec_out without reading it.
  */
 template <typename T>
 __aicore__ inline void run_spmv_v2_multi_cube(
     GM_ADDR vec_in, GM_ADDR cols_in, GM_ADDR upper_in, GM_ADDR lower_in,
     GM_ADDR segm_ind_in, GM_ADDR x_in, GM_ADDR vec_out, GM_ADDR workspace,
     uint32_t vec_len, uint32_t num_segments, uint32_t x_len, uint32_t tile_len,
-    uint32_t block_len) {
+    uint32_t block_len, float alpha, float beta) {
   using OutputT = tcuscan::cube_unit::CubeOutType_t<T>;
 
   const uint32_t align_size = tile_len * tile_len;
@@ -60,6 +66,12 @@ __aicore__ inline void run_spmv_v2_multi_cube(
 
   GM_ADDR const csr_products_ws = workspace;
   GM_ADDR const spec_block_scan_ws = workspace + pad_size;
+
+  // `y = beta * y` pre-pass. It must complete before `KernelSegSumCubeRevert`
+  // atomically accumulates `alpha * A @ x` into `vec_out`; the `SyncAll`
+  // barrier below provides that ordering. No-op when `beta == 1`.
+  run_scale_inplace<OutputT, false>(vec_out, num_segments,
+                                    static_cast<OutputT>(beta));
 
   // Size the gather tile to the largest that fits in the vector core's Unified
   // Buffer. Per `KernelCSRGather::Init`, the UB footprint is
@@ -122,7 +134,8 @@ __aicore__ inline void run_spmv_v2_multi_cube(
 
     KernelSegSumCubeRevert<OutputT, true /* SyncBefore */,
                            true /* UseAtomicWrite */>
-        op(block_len, num_segments_per_block, tile_len, block_vec_offset);
+        op(block_len, num_segments_per_block, tile_len, block_vec_offset,
+           static_cast<OutputT>(alpha));
     op.Init(spec_block_scan_ws,
             segm_ind_in + (segm_ind_offset + 1) * sizeof(int32_t),
             vec_out + segm_ind_offset * sizeof(OutputT));
@@ -160,8 +173,10 @@ extern "C" __global__ __aicore__ void spmv_v2_multi_cube_fp16(
   const uint32_t x_len = tiling.x_len;
   const uint32_t tile_len = tiling.tile_len;
   const uint32_t block_len = tiling.block_len;
+  const float alpha = tiling.alpha;
+  const float beta = tiling.beta;
 
   run_spmv_v2_multi_cube<half>(vec_in, cols_in, upper, lower, indptr, x_in,
                                vec_out, workspace, vec_len, num_segments, x_len,
-                               tile_len, block_len);
+                               tile_len, block_len, alpha, beta);
 }
