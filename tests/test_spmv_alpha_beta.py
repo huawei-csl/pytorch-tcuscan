@@ -56,12 +56,12 @@ def _csr_problem(nrow: int, density: float, dtype: torch.dtype, seed: int = 42):
     y0 = rng.uniform(-3, 3, B.shape[0]).astype(np.float32)
 
     np_dtype = np.float16 if dtype == torch.float16 else np.float32
-    tensors = dict(
-        vals=torch.from_numpy(B.data.astype(np_dtype)).npu(),
-        indptr=torch.from_numpy(B.indptr.astype(np.int32)).npu(),
-        cols=torch.from_numpy(B.indices.astype(np.int32)).npu(),
-        x=torch.from_numpy(vector.astype(np_dtype)).npu(),
-    )
+    tensors = {
+        "vals": torch.from_numpy(B.data.astype(np_dtype)).npu(),
+        "indptr": torch.from_numpy(B.indptr.astype(np.int32)).npu(),
+        "cols": torch.from_numpy(B.indices.astype(np.int32)).npu(),
+        "x": torch.from_numpy(vector.astype(np_dtype)).npu(),
+    }
     return B, vector, y0, tensors
 
 
@@ -127,7 +127,7 @@ def test_spmv_v2_beta_zero_ignores_garbage(s: int, nrow: int):
 @pytest.mark.parametrize("nrow", _NROW)
 def test_spmv_v2_no_y_matches_default(s: int, nrow: int):
     """Omitting ``y`` returns ``alpha * A @ x``, whatever ``beta`` says."""
-    B, vector, _, t = _csr_problem(nrow, 0.001, torch.float32)
+    _, vector, _, t = _csr_problem(nrow, 0.001, torch.float32)
 
     torch.npu.synchronize()
     actual = tcuscan_ops.run_spmv_v2(
