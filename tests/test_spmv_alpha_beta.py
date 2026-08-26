@@ -115,7 +115,7 @@ def test_spmv_v2_beta_zero_ignores_garbage(s: int, nrow: int):
 @pytest.mark.parametrize("nrow", _NROW)
 def test_spmv_v2_no_y_matches_default(s: int, nrow: int):
     """Omitting ``y`` returns ``alpha * A @ x``, whatever ``beta`` says."""
-    _, vector, _, t = _csr_problem(nrow, 0.001, torch.float32)
+    _, _, _, t = _csr_problem(nrow, 0.001, torch.float32)
 
     torch.npu.synchronize()
     actual = tcuscan_ops.run_spmv_v2(
