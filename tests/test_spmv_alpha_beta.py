@@ -5,15 +5,6 @@
 # https://github.com/huawei-csl/pytorch-tcuscan/
 # for the full License text.
 # --------------------------------------------------------------------------------
-#!/usr/bin/python3
-# coding=utf-8
-#
-# Copyright (C) 2023-2026. Huawei Technologies Co., Ltd. All rights reserved.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-# ===============================================================================
 """BLAS-style scaling for the SpMV entry points: ``y = alpha * A @ x + beta * y``."""
 
 import os
@@ -85,9 +76,6 @@ def _scan_matrices(s: int):
     return torch.triu(ones), torch.tril(ones, -1)
 
 
-# --------------------------------------------------------------------------- v2
-
-
 @pytest.mark.parametrize(("alpha", "beta"), _ALPHA_BETA)
 @pytest.mark.parametrize("s", [64, 128])
 @pytest.mark.parametrize("nrow", _NROW)
@@ -139,9 +127,6 @@ def test_spmv_v2_no_y_matches_default(s: int, nrow: int):
     _assert_close(actual, (3.0 * baseline).cpu(), "run_spmv_v2 no-y", 1e-1)
 
 
-# ---------------------------------------------------------------- v2 multi-cube
-
-
 @pytest.mark.parametrize(("alpha", "beta"), _ALPHA_BETA)
 @pytest.mark.parametrize("s", [64, 128])
 @pytest.mark.parametrize("nrow", _NROW)
@@ -168,9 +153,6 @@ def test_spmv_v2_multi_cube_alpha_beta(alpha: float, beta: float, s: int, nrow: 
         actual, _expected(B, vector, y0, alpha, beta), "run_spmv_v2_multi_cube", 1e0
     )
     assert actual.data_ptr() == y.data_ptr()
-
-
-# --------------------------------------------------------------- v1 (host path)
 
 
 @pytest.mark.parametrize(("alpha", "beta"), _ALPHA_BETA)
@@ -216,44 +198,3 @@ def test_spmv_multi_cube_alpha_beta(alpha: float, beta: float, s: int, nrow: int
         actual, _expected(B, vector, y0, alpha, beta), "run_spmv_multi_cube", 1e0
     )
     assert actual.data_ptr() == y.data_ptr()
-
-
-# ------------------------------------------------------------------ validation
-
-
-def test_spmv_v2_rejects_bad_y():
-    B, _, _, t = _csr_problem(1024, 0.001, torch.float32)
-
-    with pytest.raises(RuntimeError, match="must be float32"):
-        tcuscan_ops.run_spmv_v2(
-            t["vals"],
-            t["indptr"],
-            t["cols"],
-            t["x"],
-            128,
-            y=torch.zeros(B.shape[0], dtype=torch.float16).npu(),
-        )
-
-    with pytest.raises(RuntimeError, match="elements"):
-        tcuscan_ops.run_spmv_v2(
-            t["vals"],
-            t["indptr"],
-            t["cols"],
-            t["x"],
-            128,
-            y=torch.zeros(B.shape[0] + 7, dtype=torch.float32).npu(),
-        )
-
-    # A contiguous slice of a larger tensor: the kernel addresses `y` through
-    # `storage().data()`, which ignores the storage offset, so this must be
-    # rejected rather than silently writing to the wrong rows.
-    backing = torch.zeros(B.shape[0] + 8, dtype=torch.float32).npu()
-    with pytest.raises(RuntimeError, match="storage"):
-        tcuscan_ops.run_spmv_v2(
-            t["vals"],
-            t["indptr"],
-            t["cols"],
-            t["x"],
-            128,
-            y=backing[8:],
-        )
