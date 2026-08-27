@@ -199,10 +199,14 @@ at::Tensor run_csr_gather(const at::Tensor& values, const at::Tensor& cols,
  * @param values Input 1D vector.
  * @param idxs Input 1D indices vector.
  * @param tile_len Tile length.
+ * @param alpha Scaling factor applied to the gathered values. Because the SpMV
+ * pipeline finishes with a `diff` of this output, and
+ * `diff(alpha * g) == alpha * diff(g)`, this is exactly the `alpha` of
+ * `y = alpha * A @ x + beta * y`. Defaults to `1.0` (no scaling).
  * @return Special gather for SpMV.
  */
 at::Tensor run_gather_spmv(const at::Tensor& values, const at::Tensor& idxs,
-                           const uint32_t tile_len) {
+                           const uint32_t tile_len, const double alpha = 1.0) {
   const auto ascendc_platform =
       platform_ascendc::PlatformAscendCManager::GetInstance();
   const uint32_t max_aiv_cores = ascendc_platform->GetCoreNumAiv();
@@ -218,7 +222,8 @@ at::Tensor run_gather_spmv(const at::Tensor& values, const at::Tensor& idxs,
   const at::Tensor z = at::empty({idx_len}, values.options());
   const at::Tensor workspace_tensor = alloc_workspace(0, device);
 
-  const GatherSpmvTiling tiling{block_dim, values_len, idx_len, tile_len};
+  const GatherSpmvTiling tiling{block_dim, values_len, idx_len, tile_len,
+                                static_cast<float>(alpha)};
   uint8_t* tiling_device = alloc_copy_tiling(tiling);
 
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
