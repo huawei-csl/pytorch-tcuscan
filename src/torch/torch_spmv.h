@@ -57,6 +57,7 @@ inline void check_output_vector(const at::Tensor& y, uint32_t num_segments,
                                 const at::Device& device, const char* fn) {
   TORCH_CHECK(y.scalar_type() == at::kFloat, fn, ": y must be float32, got ",
               y.scalar_type());
+  TORCH_CHECK(y.dim() == 1, fn, ": y must be 1D, got ", y.dim(), "D");
   TORCH_CHECK(y.numel() == static_cast<int64_t>(num_segments), fn,
               ": y must have ", num_segments, " elements (one per row), got ",
               y.numel());

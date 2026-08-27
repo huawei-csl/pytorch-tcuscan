@@ -68,8 +68,10 @@ __aicore__ inline void run_spmv_v2_multi_cube(
   GM_ADDR const spec_block_scan_ws = workspace + pad_size;
 
   // `y = beta * y` pre-pass. It must complete before `KernelSegSumCubeRevert`
-  // atomically accumulates `alpha * A @ x` into `vec_out`; the `SyncAll`
-  // barrier below provides that ordering. No-op when `beta == 1`.
+  // atomically accumulates `alpha * A @ x` into `vec_out`; ordering is enforced
+  // by the `SyncAll` before the block scan and the SyncGroup barriers between
+  // `KernelBlockScan<..., SyncAfter=true>` and `KernelSegSumCubeRevert<..., SyncBefore=true>`.
+  // No-op when `beta == 1`.
   run_scale_inplace<OutputT, false>(vec_out, num_segments,
                                     static_cast<OutputT>(beta));
 
