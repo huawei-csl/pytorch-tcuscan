@@ -309,11 +309,23 @@ test_spmv:
     - make setup_once
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_spmv
 
+test_spmv_v2:
+  <<: *test_config
+  script:
+    - make setup_once
+    - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_spmv_v2
+
 test_spmv_multi_cube:
   <<: *test_config
   script:
     - make setup_once
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_spmv_multi_cube
+
+test_spmv_alpha_beta:
+  <<: *test_config
+  script:
+    - make setup_once
+    - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_spmv_alpha_beta
 
 
 test_matmul_cce:

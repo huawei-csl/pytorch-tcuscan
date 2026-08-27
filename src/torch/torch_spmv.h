@@ -19,6 +19,61 @@
 
 namespace tcuscan {
 
+namespace detail {
+
+/**
+ * @brief Combines an SpMV product into a caller-supplied output vector,
+ * computing `y = z + beta * y` in place.
+ *
+ * Follows the BLAS convention: `beta == 0` overwrites @p y without reading it,
+ * so an uninitialized (or NaN/Inf-carrying) output vector is valid input.
+ *
+ * @param [in,out] y Output vector, updated in place.
+ * @param [in] z The (already `alpha`-scaled) SpMV product.
+ * @param [in] beta Scaling factor applied to the incoming @p y.
+ * @return Reference to @p y.
+ */
+inline at::Tensor& accumulate_into(at::Tensor& y, const at::Tensor& z,
+                                   double beta) {
+  if (beta == 0.0) {
+    y.copy_(z);
+  } else if (beta == 1.0) {
+    y.add_(z);
+  } else {
+    y.mul_(beta).add_(z);
+  }
+  return y;
+}
+
+/**
+ * @brief Validates a caller-supplied SpMV output vector `y`.
+ *
+ * @param [in] y Output vector to validate.
+ * @param [in] num_segments Expected number of elements (matrix rows).
+ * @param [in] device Device the SpMV runs on.
+ * @param [in] fn Caller name, used in the error messages.
+ */
+inline void check_output_vector(const at::Tensor& y, uint32_t num_segments,
+                                const at::Device& device, const char* fn) {
+  TORCH_CHECK(y.scalar_type() == at::kFloat, fn, ": y must be float32, got ",
+              y.scalar_type());
+  TORCH_CHECK(y.dim() == 1, fn, ": y must be 1D, got ", y.dim(), "D");
+  TORCH_CHECK(y.numel() == static_cast<int64_t>(num_segments), fn,
+              ": y must have ", num_segments, " elements (one per row), got ",
+              y.numel());
+  TORCH_CHECK(y.is_contiguous(), fn, ": y must be contiguous");
+  // The kernels address `y` through `storage().data()`, which ignores the
+  // storage offset, so a contiguous view into a larger tensor would silently
+  // write to the wrong place.
+  TORCH_CHECK(y.storage_offset() == 0, fn,
+              ": y must own its storage from offset 0 (got a view with offset ",
+              y.storage_offset(), ")");
+  TORCH_CHECK(y.device() == device, fn, ": y must live on ", device, ", got ",
+              y.device());
+}
+
+}  // namespace detail
+
 /**
  * @brief CSR sparse matrix - dense vector multiplication using the multi-cube
  * scan algorithm. See Segmented Operations using Matrix Multiplications
@@ -34,26 +89,44 @@ namespace tcuscan {
  * @param upper pre-computed upper triangular scan matrix (SxS, float16)
  * @param lower_strict pre-computed strict lower triangular scan matrix (SxS,
  * float16)
+ * @param alpha Scaling factor of the SpMV product. Folded into the
+ * `gather_spmv` stage, which is exact since `diff(alpha * g) == alpha *
+ * diff(g)`.
+ * @param beta Scaling factor of the incoming @p y. Ignored when @p y is not
+ * supplied. Following the BLAS convention, `beta == 0` overwrites @p y without
+ * reading it.
+ * @param y Optional output vector (length = rows), updated in place and
+ * returned. When omitted, a freshly allocated vector holding `alpha * A @ x`
+ * is returned instead.
  *
  * @note The gather_spmv tiling size is fixed at 128. Values above 512 cause
  * failures; no performance benefit was observed from tuning this parameter.
  *
- * @return Dense result vector of the SpMV product A @ x
+ * @return `y = alpha * A @ x + beta * y`
  */
 at::Tensor run_spmv_multi_cube(const at::Tensor& vals, const at::Tensor& indptr,
                                const at::Tensor& cols, const at::Tensor& x,
                                const at::Tensor& upper,
-                               const at::Tensor& lower_strict) {
+                               const at::Tensor& lower_strict,
+                               double alpha = 1.0, double beta = 0.0,
+                               c10::optional<at::Tensor> y = c10::nullopt) {
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
 
   const at::Tensor product = tcuscan::run_csr_gather(vals, cols, x);
   const at::Tensor scanned =
       tcuscan::run_scan_multi_cube(product, upper, lower_strict);
-  const at::Tensor gathered = tcuscan::run_gather_spmv(scanned, indptr, 128);
+  const at::Tensor gathered =
+      tcuscan::run_gather_spmv(scanned, indptr, 128, alpha);
   const at::Tensor z = torch::diff(gathered);
   aclrtSynchronizeStream(acl_stream);
 
-  return z;
+  if (!y.has_value()) {
+    return z;
+  }
+  at::Tensor y_ = y.value();
+  detail::check_output_vector(y_, static_cast<uint32_t>(indptr.numel() - 1),
+                              x.options().device(), "run_spmv_multi_cube");
+  return detail::accumulate_into(y_, z, beta);
 }
 
 /**
@@ -70,14 +143,25 @@ at::Tensor run_spmv_multi_cube(const at::Tensor& vals, const at::Tensor& indptr,
  * @param cols column index array of the CSR matrix
  * @param x dense vector to multiply: computes A @ x
  * @param s tile size for the multi-core prefix scan
+ * @param alpha Scaling factor of the SpMV product. Folded into the
+ * `gather_spmv` stage, which is exact since `diff(alpha * g) == alpha *
+ * diff(g)`.
+ * @param beta Scaling factor of the incoming @p y. Ignored when @p y is not
+ * supplied. Following the BLAS convention, `beta == 0` overwrites @p y without
+ * reading it.
+ * @param y Optional output vector (length = rows), updated in place and
+ * returned. When omitted, a freshly allocated vector holding `alpha * A @ x`
+ * is returned instead.
  *
  * @note The gather_spmv tiling size is fixed at 128. Values above 512 cause
  * failures; no performance benefit was observed from tuning this parameter.
  *
- * @return Dense result vector of the SpMV product A @ x
+ * @return `y = alpha * A @ x + beta * y`
  */
 at::Tensor run_spmv(const at::Tensor& vals, const at::Tensor& indptr,
-                    const at::Tensor& cols, const at::Tensor& x, int s) {
+                    const at::Tensor& cols, const at::Tensor& x, int s,
+                    double alpha = 1.0, double beta = 0.0,
+                    c10::optional<at::Tensor> y = c10::nullopt) {
   const auto dtype = vals.options().dtype();
   at::Tensor product;
   if (dtype == torch::kInt16) {
@@ -86,10 +170,17 @@ at::Tensor run_spmv(const at::Tensor& vals, const at::Tensor& indptr,
     product = tcuscan::run_csr_gather(vals, cols, x);
   }
   const at::Tensor scanned = tcuscan::run_scan_multi_core(product, s);
-  const at::Tensor gathered = tcuscan::run_gather_spmv(scanned, indptr, 128);
+  const at::Tensor gathered =
+      tcuscan::run_gather_spmv(scanned, indptr, 128, alpha);
   const at::Tensor z = torch::diff(gathered);
 
-  return z;
+  if (!y.has_value()) {
+    return z;
+  }
+  at::Tensor y_ = y.value();
+  detail::check_output_vector(y_, static_cast<uint32_t>(indptr.numel() - 1),
+                              x.options().device(), "run_spmv");
+  return detail::accumulate_into(y_, z, beta);
 }
 
 /**
@@ -107,11 +198,22 @@ at::Tensor run_spmv(const at::Tensor& vals, const at::Tensor& indptr,
  * @param x dense vector to multiply
  * @param s tile size for the multi-core segmented sum kernel
  * @param [in] segm_offsets Segment start index offset per block.
- * @return Dense result vector of the SpMV product A @ x
+ * @param alpha Scaling factor of the SpMV product, applied in-kernel by the
+ * segment reduction as it writes each segment sum (fp32).
+ * @param beta Scaling factor of the incoming @p y, applied in-kernel by a
+ * pre-pass over @p y that runs before the segment reduction accumulates onto
+ * it. Ignored when @p y is not supplied. Following the BLAS convention,
+ * `beta == 0` overwrites @p y without reading it.
+ * @param y Optional output vector (float32, length = rows), updated in place
+ * and returned. When omitted, a freshly zeroed vector holding `alpha * A @ x`
+ * is returned instead.
+ * @return `y = alpha * A @ x + beta * y`
  */
 at::Tensor run_spmv_v2(const at::Tensor& vals, const at::Tensor& indptr,
                        const at::Tensor& cols, const at::Tensor& x, int s,
-                       c10::optional<at::Tensor> segm_offsets = c10::nullopt) {
+                       c10::optional<at::Tensor> segm_offsets = c10::nullopt,
+                       double alpha = 1.0, double beta = 0.0,
+                       c10::optional<at::Tensor> y = c10::nullopt) {
   const auto vals_dtype = vals.options().dtype();
   const auto x_dtype = x.options().dtype();
   TORCH_CHECK((vals_dtype == torch::kHalf && x_dtype == torch::kHalf) ||
@@ -158,12 +260,24 @@ at::Tensor run_spmv_v2(const at::Tensor& vals, const at::Tensor& indptr,
                                         /*out_int32=*/true);
   }
 
-  const at::Tensor z =
-      at::zeros({num_segments},
-                at::TensorOptions().dtype(torch::kFloat32).device(device));
+  at::Tensor z;
+  float beta_kernel;
+  if (y.has_value()) {
+    z = y.value();
+    detail::check_output_vector(z, num_segments, device, "run_spmv_v2");
+    beta_kernel = static_cast<float>(beta);
+  } else {
+    // Without a caller-supplied `y` the output starts at zero, so `beta * y`
+    // vanishes for any beta. Pass 1 to skip the scaling pre-pass entirely.
+    z = at::zeros({num_segments},
+                  at::TensorOptions().dtype(torch::kFloat32).device(device));
+    beta_kernel = 1.0f;
+  }
 
-  const tcuscan::SpMVTiling tiling{nnz, num_segments, x_len, tile_len,
-                                   block_len};
+  const tcuscan::SpMVTiling tiling{nnz,        num_segments,
+                                   x_len,      tile_len,
+                                   block_len,  static_cast<float>(alpha),
+                                   beta_kernel};
   uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
 
   const uint32_t padded_nnz = host_utils::AlignUp(nnz, align_size);
@@ -226,17 +340,28 @@ at::Tensor run_spmv_v2(const at::Tensor& vals, const at::Tensor& indptr,
  * @param [in] upper pre-computed upper triangular all-ones matrix (SxS, fp16)
  * @param [in] lower_strict pre-computed strict lower triangular all-ones matrix
  * (SxS, fp16)
+ * @param alpha Scaling factor of the SpMV product, applied in-kernel by the
+ * segment reduction as it writes each segment sum (fp32).
+ * @param beta Scaling factor of the incoming @p y, applied in-kernel by a
+ * pre-pass over @p y that runs before the segment reduction accumulates onto
+ * it. Ignored when @p y is not supplied. Following the BLAS convention,
+ * `beta == 0` overwrites @p y without reading it.
+ * @param y Optional output vector (float32, length = rows), updated in place
+ * and returned. When omitted, a freshly zeroed vector holding `alpha * A @ x`
+ * is returned instead.
  *
  * @note Only fp16 is supported: the multi-cube block scan is a half-only
  * kernel.
  *
- * @return Dense result vector of the SpMV product A @ x
+ * @return `y = alpha * A @ x + beta * y`
  */
 at::Tensor run_spmv_v2_multi_cube(const at::Tensor& vals,
                                   const at::Tensor& indptr,
                                   const at::Tensor& cols, const at::Tensor& x,
                                   const at::Tensor& upper,
-                                  const at::Tensor& lower_strict) {
+                                  const at::Tensor& lower_strict,
+                                  double alpha = 1.0, double beta = 0.0,
+                                  c10::optional<at::Tensor> y = c10::nullopt) {
   const auto vals_dtype = vals.options().dtype();
   const auto x_dtype = x.options().dtype();
   TORCH_CHECK(vals_dtype == torch::kHalf && x_dtype == torch::kHalf,
@@ -265,12 +390,25 @@ at::Tensor run_spmv_v2_multi_cube(const at::Tensor& vals,
       host_utils::CeilDiv(num_tiles, block_dim);
   const uint32_t block_len = max_num_tiles_per_block * align_size;
 
-  const at::Tensor z =
-      at::zeros({num_segments},
-                at::TensorOptions().dtype(torch::kFloat32).device(device));
+  at::Tensor z;
+  float beta_kernel;
+  if (y.has_value()) {
+    z = y.value();
+    detail::check_output_vector(z, num_segments, device,
+                                "run_spmv_v2_multi_cube");
+    beta_kernel = static_cast<float>(beta);
+  } else {
+    // Without a caller-supplied `y` the output starts at zero, so `beta * y`
+    // vanishes for any beta. Pass 1 to skip the scaling pre-pass entirely.
+    z = at::zeros({num_segments},
+                  at::TensorOptions().dtype(torch::kFloat32).device(device));
+    beta_kernel = 1.0f;
+  }
 
-  const tcuscan::SpMVTiling tiling{nnz, num_segments, x_len, tile_len,
-                                   block_len};
+  const tcuscan::SpMVTiling tiling{nnz,        num_segments,
+                                   x_len,      tile_len,
+                                   block_len,  static_cast<float>(alpha),
+                                   beta_kernel};
   uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
 
   const uint32_t padded_nnz = host_utils::AlignUp(nnz, align_size);
