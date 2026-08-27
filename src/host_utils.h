@@ -54,8 +54,26 @@ template <typename T1, typename T2,
           typename std::enable_if<std::is_integral<T1>::value &&
                                       std::is_integral<T2>::value,
                                   int>::type = 0>
-T1 CeilDiv(T1 value, T2 divisor) {
+constexpr inline T1 CeilDiv(T1 value, T2 divisor) {
   return (value + divisor - 1) / divisor;
+}
+
+/**
+ * @brief Performs a division on two integral numbers and rounds the result down
+ * to the nearest integer.
+ *
+ * @tparam T1 Data type of dividend.
+ * @tparam T2 Data type of divisor.
+ * @param [in] value Dividend.
+ * @param [in] divisor Divisor.
+ * @return Result of division.
+ */
+template <typename T1, typename T2,
+          typename std::enable_if<std::is_integral<T1>::value &&
+                                      std::is_integral<T2>::value,
+                                  int>::type = 0>
+constexpr inline T1 FloorDiv(T1 value, T2 divisor) {
+  return value / divisor;
 }
 
 /**
