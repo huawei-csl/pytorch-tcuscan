@@ -16,11 +16,13 @@
 
 extern "C" {
 void launch_spmv_v2_fp16(uint32_t blockDim, void* stream, void* vec_in,
-                         void* cols_in, void* indptr, void* x_in, void* vec_out,
-                         void* workspace, void* tiling_gm);
+                         void* cols_in, void* indptr, void* x_in,
+                         void* segm_offsets, void* vec_out, void* workspace,
+                         void* tiling_gm);
 void launch_spmv_v2_fp32(uint32_t blockDim, void* stream, void* vec_in,
-                         void* cols_in, void* indptr, void* x_in, void* vec_out,
-                         void* workspace, void* tiling_gm);
+                         void* cols_in, void* indptr, void* x_in,
+                         void* segm_offsets, void* vec_out, void* workspace,
+                         void* tiling_gm);
 void launch_spmv_v2_multi_cube_fp16(uint32_t blockDim, void* stream,
                                     void* vec_in, void* cols_in, void* upper,
                                     void* lower, void* indptr, void* x_in,
@@ -314,6 +316,7 @@ at::Tensor run_spmv_v2(const at::Tensor& vals, const at::Tensor& indptr,
         block_dim, acl_stream, const_cast<void*>(vals.storage().data()),
         const_cast<void*>(cols.storage().data()),
         const_cast<void*>(indptr_data), const_cast<void*>(x.storage().data()),
+        const_cast<void*>(segm_offsets_.storage().data()),
         const_cast<void*>(z.storage().data()),
         const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else {
@@ -321,6 +324,7 @@ at::Tensor run_spmv_v2(const at::Tensor& vals, const at::Tensor& indptr,
         block_dim, acl_stream, const_cast<void*>(vals.storage().data()),
         const_cast<void*>(cols.storage().data()),
         const_cast<void*>(indptr_data), const_cast<void*>(x.storage().data()),
+        const_cast<void*>(segm_offsets_.storage().data()),
         const_cast<void*>(z.storage().data()),
         const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   }

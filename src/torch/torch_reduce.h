@@ -62,7 +62,6 @@ namespace tcuscan {
  */
 at::Tensor run_reduce_tiles(const at::Tensor& x, uint32_t tile_len,
                             uint32_t num_blocks) {
-
   const at::Device device = x.options().device();
   const auto dtype = x.options().dtype();
   const auto dtype_out =
