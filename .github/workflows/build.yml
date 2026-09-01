@@ -15,7 +15,7 @@ jobs:
     container:
       image: koalaman/shellcheck-alpine:stable
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4.2.2
       - name: Show version
         run: shellcheck --version
       - name: Run shellcheck
