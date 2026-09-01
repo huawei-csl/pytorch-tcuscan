@@ -33,16 +33,20 @@ Reducing kernels promote their accumulator: `fp16 -> fp32` and integer inputs `i
 | Operator | Input dtypes | Description |
 | --- | --- | --- |
 | `run_scan_single_core` | `fp16`, `fp32`, `int8` | Prefix sum of a 1D vector on a single AI Core |
-| `run_scan_multi_core` | `fp16`, `int8` | Multi-core prefix sum |
-| `run_scan_multi_core_no_l2` | `fp16`, `int8` | Multi-core prefix sum without the L2 cache splitting optimization |
+| `run_scan_multi_core` | `fp16`, `fp32`, `int8` | Multi-core prefix sum |
+| `run_scan_multi_core_no_l2` | `fp16`, `fp32`, `int8` | Multi-core prefix sum without the L2 cache splitting optimization |
 | `run_scan_multi_cube` | `fp16` | Multi-cube prefix sum, built on top of the block scan |
 | `run_scan_batch` | `fp16`, `fp32` | Row-wise prefix sum of a 2D matrix (one cube core per row) |
 | `run_row_scan` | `fp16` | Prefix sum of each consecutive block of length `S` |
 | `run_block_scan` | `fp16` | Prefix sum of each consecutive block of length `S^2` |
 | `run_scan_cpu` | `fp16`, `fp32`, `int8` | CPU reference implementation |
 
-`run_scan_multi_core` and `run_scan_multi_core_no_l2` route *any* non-`fp16` dtype to the
-`int8` kernel, so passing `fp32` there is silently incorrect.
+`run_scan_multi_core` and `run_scan_multi_core_no_l2` accept `fp32` input and return `fp32`
+output (no accumulator promotion). The `fp32` path uses dedicated
+`scan_multi_core_fp32` / `scan_multi_core_fp32_no_l2` kernels.
+
+Both wrappers reject any other dtype with a `TORCH_CHECK` error rather than silently
+falling through to the `int8` kernel.
 
 ### Segmented scan / segmented sum
 
@@ -70,8 +74,15 @@ Reducing kernels promote their accumulator: `fp16 -> fp32` and integer inputs `i
 | `run_mc_gather` | `fp16`, `fp32` | General multi-core gather of a 1D vector |
 
 For `run_spmv_v2`, `vals` and `x` must have the *same* dtype, and `indptr` must be
-`int32`/`uint32`. `run_gather_spmv` is hard-instantiated as `KernelGatherSpmv<float>`, so it
-consumes the 32-bit output of the preceding scan.
+`int32`/`uint32`.
+
+All four SpMV entry points (`run_spmv`, `run_spmv_v2`, `run_spmv_multi_cube`,
+`run_spmv_v2_multi_cube`) take the BLAS-style scalars `alpha`, `beta` and an optional
+output vector `y`, computing
+
+```python
+y = tcuscan_ops.run_spmv_v2(vals, indptr, cols, x, s, alpha=2.0, beta=1.0, y=y)  # y = 2*A@x + y
+```
 
 ### Sort, top-k, and split
 

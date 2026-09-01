@@ -53,9 +53,9 @@ extern "C" __global__ __aicore__ void split_ind_uint16(
   tcuscan::SplitTiling tiling_data;
   GetTilingData(&tiling_data, tiling);
 
-  tcuscan::run_split_ind_uint16(
-      vec_in, mask_in, indices_in, vec_out, indices_out, workspace,
-      tiling_data.num_elems, tiling_data.vec_tile_size, zeros_first);
+  tcuscan::run_split_ind_uint16(vec_in, mask_in, indices_in, vec_out,
+                                indices_out, workspace, tiling_data.num_elems,
+                                tiling_data.vec_tile_size, zeros_first);
 }
 
 /**

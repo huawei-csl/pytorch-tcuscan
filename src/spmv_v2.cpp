@@ -8,6 +8,7 @@
 #include "kernels/constants.h"
 #include "kernels/kernel_csr_gather.h"
 #include "kernels/kernel_row_scan.h"
+#include "kernels/kernel_scale.h"
 #include "kernels/kernel_seg_sum_vec_revert.h"
 #include "kernels/tcuscan_utils.h"
 #include "tiling/tiling_spmv.h"
@@ -35,13 +36,18 @@ using namespace tcuscan;
  * @param [in] x_len Length of the dense input vector.
  * @param [in] tile_len Tile size used for the matrix multiplication step.
  * @param [in] block_len Block length assigned to each AI Core group.
+ * @param [in] alpha Scaling factor of the SpMV product, applied by the
+ * segment reduction as it writes each segment sum.
+ * @param [in] beta Scaling factor applied in-place to @p vec_out before the
+ * segment reduction accumulates on top of it. Following the BLAS convention,
+ * `beta == 0` overwrites @p vec_out without reading it.
  */
 template <typename T>
 __aicore__ inline void run_spmv_v2(
     GM_ADDR vec_in, GM_ADDR cols_in, GM_ADDR segm_ind_in, GM_ADDR x_in,
     GM_ADDR upper_in, GM_ADDR segm_offset_per_block, GM_ADDR vec_out,
     GM_ADDR workspace, uint32_t vec_len, uint32_t num_segments, uint32_t x_len,
-    uint32_t tile_len, uint32_t block_len) {
+    uint32_t tile_len, uint32_t block_len, float alpha, float beta) {
   using OutputT = tcuscan::cube_unit::CubeOutType_t<T>;
 
   const uint32_t align_size = tile_len * tile_len;
@@ -50,6 +56,12 @@ __aicore__ inline void run_spmv_v2(
 
   GM_ADDR const csr_products_ws = workspace;
   GM_ADDR const spec_block_scan_ws = workspace + pad_size;
+
+  // `y = beta * y` pre-pass. It must complete before the segment reduction
+  // atomically accumulates `alpha * A @ x` into `vec_out`; the two `SyncAll`
+  // barriers below provide that ordering. No-op when `beta == 1`.
+  run_scale_inplace<OutputT, false>(vec_out, num_segments,
+                                    static_cast<OutputT>(beta));
 
   const uint32_t csr_gather_tile_len = align_size > 1024 ? 1024 : align_size;
   run_csr_gather<T, false>(vec_in, cols_in, x_in, csr_products_ws, vec_len,
@@ -100,7 +112,8 @@ __aicore__ inline void run_spmv_v2(
     }
 
     KernelSegSumVecRevert<OutputT, false, true> op(
-        block_len, num_segments_per_block, tile_len, block_vec_offset);
+        block_len, num_segments_per_block, tile_len, block_vec_offset,
+        static_cast<OutputT>(alpha));
     op.Init(spec_block_scan_ws, segm_ind_in + segm_ind_offset * sizeof(int32_t),
             vec_out + segm_ind_offset * sizeof(OutputT));
     op.Process();
@@ -137,12 +150,14 @@ extern "C" __global__ __aicore__ void spmv_v2_fp16(
   const uint32_t x_len = tiling.x_len;
   const uint32_t tile_len = tiling.tile_len;
   const uint32_t block_len = tiling.block_len;
+  const float alpha = tiling.alpha;
+  const float beta = tiling.beta;
 
   GM_ADDR const upper = load_tril_matrix<half>(tile_len);
 
   run_spmv_v2<half>(vec_in, cols_in, indptr, x_in, upper, segment_offsets,
                     vec_out, workspace, vec_len, num_segments, x_len, tile_len,
-                    block_len);
+                    block_len, alpha, beta);
 }
 
 /**
@@ -175,12 +190,14 @@ extern "C" __global__ __aicore__ void spmv_v2_fp32(
   const uint32_t x_len = tiling.x_len;
   const uint32_t tile_len = tiling.tile_len;
   const uint32_t block_len = tiling.block_len;
+  const float alpha = tiling.alpha;
+  const float beta = tiling.beta;
 
   GM_ADDR const upper = load_tril_matrix<float>(tile_len);
 
   run_spmv_v2<float>(vec_in, cols_in, indptr, x_in, upper, segment_offsets,
                      vec_out, workspace, vec_len, num_segments, x_len, tile_len,
-                     block_len);
+                     block_len, alpha, beta);
 }
 
 /**

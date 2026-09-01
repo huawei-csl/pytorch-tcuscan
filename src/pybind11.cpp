@@ -70,18 +70,32 @@ PYBIND11_MODULE(tcuscan_ops, m) {
         pybind11::arg("lower_strict"), pybind11::arg("indptr"),
         pybind11::arg("segm_offsets") = pybind11::none(),
         "Segmented Sum (multi-cube)");
-  m.def("run_spmv", &tcuscan::run_spmv, "Sparse Matrix-Vector Multiplication");
+  m.def("run_spmv", &tcuscan::run_spmv, pybind11::arg("vals"),
+        pybind11::arg("indptr"), pybind11::arg("cols"), pybind11::arg("x"),
+        pybind11::arg("s"), pybind11::arg("alpha") = 1.0,
+        pybind11::arg("beta") = 0.0, pybind11::arg("y") = pybind11::none(),
+        "Sparse Matrix-Vector Multiplication: y = alpha * A @ x + beta * y");
   m.def("run_spmv_v2", &tcuscan::run_spmv_v2, pybind11::arg("vals"),
         pybind11::arg("indptr"), pybind11::arg("cols"), pybind11::arg("x"),
-        pybind11::arg("s"),
-        "Sparse Matrix-Vector Multiplication Using Segmented Sum");
+        pybind11::arg("s"), pybind11::arg("segm_offsets") = pybind11::none(),
+        pybind11::arg("alpha") = 1.0, pybind11::arg("beta") = 0.0,
+        pybind11::arg("y") = pybind11::none(),
+        "Sparse Matrix-Vector Multiplication Using Segmented Sum: "
+        "y = alpha * A @ x + beta * y");
   m.def("run_spmv_multi_cube", &tcuscan::run_spmv_multi_cube,
-        "Sparse Matrix-Vector Multiplication Using Multi-cube Scan");
+        pybind11::arg("vals"), pybind11::arg("indptr"), pybind11::arg("cols"),
+        pybind11::arg("x"), pybind11::arg("upper"),
+        pybind11::arg("lower_strict"), pybind11::arg("alpha") = 1.0,
+        pybind11::arg("beta") = 0.0, pybind11::arg("y") = pybind11::none(),
+        "Sparse Matrix-Vector Multiplication Using Multi-cube Scan: "
+        "y = alpha * A @ x + beta * y");
   m.def("run_spmv_v2_multi_cube", &tcuscan::run_spmv_v2_multi_cube,
         pybind11::arg("vals"), pybind11::arg("indptr"), pybind11::arg("cols"),
         pybind11::arg("x"), pybind11::arg("upper"),
-        pybind11::arg("lower_strict"),
-        "Sparse Matrix-Vector Multiplication Using Multi-cube Segmented Sum");
+        pybind11::arg("lower_strict"), pybind11::arg("alpha") = 1.0,
+        pybind11::arg("beta") = 0.0, pybind11::arg("y") = pybind11::none(),
+        "Sparse Matrix-Vector Multiplication Using Multi-cube Segmented Sum: "
+        "y = alpha * A @ x + beta * y");
   m.def("run_searchsorted", &tcuscan::run_searchsorted, pybind11::arg("sorted"),
         pybind11::arg("values"),
         "Binary search (lower_bound) into a sorted int32 array");
@@ -107,8 +121,9 @@ PYBIND11_MODULE(tcuscan_ops, m) {
   m.def("run_split_ind", &tcuscan::run_split_ind,
         "Split with indices (16-bits)");
   m.def("run_mc_gather", &tcuscan::run_mc_gather, "Vector Multi Core Gather");
-  m.def("run_gather_spmv", &tcuscan::run_gather_spmv,
-        "Vector Multi Core Gather SPMV");
+  m.def("run_gather_spmv", &tcuscan::run_gather_spmv, pybind11::arg("values"),
+        pybind11::arg("idxs"), pybind11::arg("tile_len"),
+        pybind11::arg("alpha") = 1.0, "Vector Multi Core Gather SPMV");
   m.def("run_radix_sort", &tcuscan::run_radix_sort,
         "Radix sort using cube units");
   m.def("run_matmul_cce", &tcuscan::matmul_cce,
