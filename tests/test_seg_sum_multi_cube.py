@@ -75,7 +75,7 @@ def _test_seg_sum_multi_cube(
     dtype: torch.dtype,
     use_segm_offsets: bool,
 ):
-    sp_dtype = np.float32 if dtype == torch.float16 else np.int32
+    sp_dtype = np.float32 if dtype in (torch.float16, torch.float32) else np.int32
 
     num_segments = num_rows
 
@@ -161,7 +161,7 @@ def _test_seg_sum_multi_cube(
 )
 @pytest.mark.parametrize("num_cols", _NUM_COLUMNS, ids=lambda x: f"num_cols:({x})")
 @pytest.mark.parametrize("s", [32, 64, 128], ids=lambda s: f"s:({s})")
-@pytest.mark.parametrize("dtype", [torch.float16], ids=str)
+@pytest.mark.parametrize("dtype", [torch.float16, torch.float32], ids=str)
 @pytest.mark.parametrize("density", [0.1, 0.05, 0.01], ids=lambda x: f"density:({x})")
 @pytest.mark.parametrize(
     "use_segm_offsets",
