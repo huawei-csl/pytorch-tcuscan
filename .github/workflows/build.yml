@@ -15,7 +15,7 @@ jobs:
     container:
       image: koalaman/shellcheck-alpine:stable
     steps:
-      - uses: actions/checkout@v4.2.2
+      - uses: actions/checkout@v5
       - name: Show version
         run: shellcheck --version
       - name: Run shellcheck
@@ -29,7 +29,7 @@ jobs:
     container:
       image: python:3.10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - run: pip install -U pip
       - run: pip install black==25.12.0
       - run: black --check .
@@ -40,7 +40,7 @@ jobs:
     container:
       image: python:3.10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - run: pip install prospector==1.14.0
       - run: prospector
 
@@ -51,7 +51,7 @@ jobs:
       image: zricethezav/gitleaks:v8.18.2
       options: --entrypoint ""
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - run: gitleaks detect -v --source .
 
   build_cmake_docker:
@@ -73,7 +73,7 @@ jobs:
         run: cat /etc/os-release
 
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Run bash commands
         shell: bash
@@ -106,7 +106,7 @@ jobs:
         run: cat /etc/os-release
 
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Run bash commands
         shell: bash
