@@ -18,6 +18,8 @@
 #include "torch_npu/csrc/core/npu/NPUStream.h"
 #include "workspace.h"
 
+// Kernel launchers; documented at their definitions in src/*.cpp
+/// @cond
 extern "C" void launch_topk_fp16(uint32_t blockDim, void* stream, void* vec_in,
                                  void* vec_out, void* indices_out,
                                  void* workspace, void* tiling_ptr);
@@ -27,6 +29,7 @@ extern "C" void launch_topk_int16(uint32_t blockDim, void* stream, void* vec_in,
 extern "C" void launch_topk_pivot_fp16(uint32_t blockDim, void* stream,
                                        void* vec_in, void* vec_out,
                                        void* workspace, void* tiling_ptr);
+/// @endcond
 
 namespace tcuscan {
 

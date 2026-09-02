@@ -17,12 +17,15 @@
 #include "torch_npu/csrc/core/npu/NPUStream.h"
 #include "workspace.h"
 
+// Kernel launchers; documented at their definitions in src/*.cpp
+/// @cond
 extern "C" void launch_radix_sort_fp16(uint32_t blockDim, void* stream,
                                        void* in, void* out, void* indices,
                                        void* workspace, void* tiling);
 extern "C" void launch_radix_sort_int16(uint32_t blockDim, void* stream,
                                         void* in, void* out, void* indices,
                                         void* workspace, void* tiling);
+/// @endcond
 
 namespace tcuscan {
 

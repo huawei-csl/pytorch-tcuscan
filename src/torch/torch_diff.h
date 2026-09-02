@@ -15,12 +15,15 @@
 #include "tiling/platform/platform_ascendc.h"
 #include "torch_npu/csrc/core/npu/NPUStream.h"
 
+// Kernel launchers; documented at their definitions in src/*.cpp
+/// @cond
 extern "C" void launch_diff_fp16(uint32_t blockDim, void* stream, void* vec_in,
                                  void* vec_out, void* workspace,
                                  void* tilingGm);
 extern "C" void launch_diff_fp32(uint32_t blockDim, void* stream, void* vec_in,
                                  void* vec_out, void* workspace,
                                  void* tilingGm);
+/// @endcond
 
 namespace tcuscan {
 

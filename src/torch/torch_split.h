@@ -17,6 +17,8 @@
 #include "torch_npu/csrc/core/npu/NPUStream.h"
 #include "workspace.h"
 
+// Kernel launchers; documented at their definitions in src/*.cpp
+/// @cond
 extern "C" void launch_split_ind_uint16(uint32_t blockDim, void* stream,
                                         void* vec_in, void* mask_in,
                                         void* indices_in, void* vec_out,
@@ -25,6 +27,7 @@ extern "C" void launch_split_ind_uint16(uint32_t blockDim, void* stream,
 extern "C" void launch_split_uint16(uint32_t blockDim, void* stream, void* in,
                                     void* mask, void* out, void* workspace,
                                     void* tiling);
+/// @endcond
 
 namespace tcuscan {
 

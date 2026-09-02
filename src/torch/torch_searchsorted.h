@@ -15,9 +15,12 @@
 #include "tiling/platform/platform_ascendc.h"
 #include "torch_npu/csrc/core/npu/NPUStream.h"
 
+// Kernel launchers; documented at their definitions in src/*.cpp
+/// @cond
 extern "C" void launch_searchsorted_int32(uint32_t blockDim, void* stream,
                                           void* sorted, void* values, void* out,
                                           void* workspace, void* tilingGm);
+/// @endcond
 
 namespace tcuscan {
 

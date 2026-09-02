@@ -127,6 +127,16 @@ extern "C" void launch_greater_equal_fp16(uint32_t blockDim, void* stream,
                                                     tiling_gm);
 }
 
+/**
+ * @brief Call the `less_equal` kernel for FP16 data type.
+ *
+ * @param [in] blockDim Number of blocks for the kernel launch.
+ * @param [in] stream NPU stream.
+ * @param [in] vec_in Pointer to the input vector.
+ * @param [in] vec_out Pointer to the output vector.
+ * @param [in] workspace Pointer to workspace.
+ * @param [in] tiling_gm Pointer to the tiling buffer.
+ */
 extern "C" void launch_less_equal_fp16(uint32_t blockDim, void* stream,
                                        uint8_t* vec_in, uint8_t* vec_out,
                                        uint8_t* workspace, uint8_t* tiling_gm) {
