@@ -53,8 +53,12 @@ TORCH_NPU_PATH=$(python3 -c "import os; import torch_npu; print(os.path.dirname(
 export TORCH_NPU_PATH
 
 # See https://docs.pytorch.org/cppdocs/installing.html
-CMAKE_PREFIX_PATH=$(python3 -c "import torch; print(torch.utils.cmake_prefix_path)")
+# Keep the CMAKE_PREFIX_PATH exported by setenv.bash (it points at the CANN
+# cmake dirs where find_package(ASC) looks) and append the torch/pybind11 ones.
+export TORCH_DEVICE_BACKEND_AUTOLOAD=0
+CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:$(python3 -c 'import torch, pybind11; print(torch.utils.cmake_prefix_path + ":" + pybind11.get_cmake_dir())')
 export CMAKE_PREFIX_PATH
+echo "CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}"
 
 
 set -e

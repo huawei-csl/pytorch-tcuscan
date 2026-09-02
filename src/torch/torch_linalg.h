@@ -19,6 +19,8 @@
 #include "torch_npu/csrc/core/npu/NPUStream.h"
 #include "workspace.h"
 
+// Kernel launchers; documented at their definitions in src/*.cpp
+/// @cond
 extern "C" void launch_tri_inv_col_sweep_fp16(uint32_t blockDim, void* stream,
                                               void* vec_in, void* vec_out,
                                               void* workspace, void* tiling_gm);
@@ -33,6 +35,7 @@ extern "C" void launch_tri_inv_cube_col_sweep_fp16(uint32_t blockDim,
 extern "C" void launch_triu_inv_rec_unroll_fp16(uint32_t blockDim, void* stream,
                                                 void* vec_in, void* vec_out,
                                                 void* workspace, void* tiling);
+/// @endcond
 
 namespace tcuscan {
 

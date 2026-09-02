@@ -24,6 +24,8 @@
 
 // seg_scan_vec_single_core.cpp, seg_sum_multi_core.cpp, seg_sum_multi_cube.cpp,
 // seg_sum_single_core.cpp, seg_sum_single_cube.cpp.
+// Kernel launchers; documented at their definitions in src/*.cpp
+/// @cond
 extern "C" void launch_seg_scan_mc_revert(uint32_t blockDim, void* stream,
                                           void* vec_in, void* vec_f_in,
                                           void* vec_diff_in, void* vec_out,
@@ -65,6 +67,7 @@ extern "C" void launch_seg_sum_single_cube_fp16(uint32_t blockDim, void* stream,
                                                 void* lower, void* segm_ind_in,
                                                 void* vec_out, void* workspace,
                                                 void* tiling);
+/// @endcond
 
 namespace tcuscan {
 

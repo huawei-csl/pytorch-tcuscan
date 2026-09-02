@@ -120,3 +120,29 @@ jobs:
           pip3 install -r requirements.txt
           pip3 install torch-npu==2.10.0 --extra-index-url https://download.pytorch.org/whl/cpu
           export CMAKE_GENERATOR="Unix Makefiles" && pip install -v . --extra-index-url https://download.pytorch.org/whl/cpu
+
+  doxygen:
+    name: Doxygen
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install doxygen
+        run: |
+          sudo apt-get update
+          sudo apt-get install -yq doxygen graphviz
+
+      - name: Show version
+        run: doxygen --version
+
+      - name: Generate documentation
+        # Doxyfile sets WARN_AS_ERROR = FAIL_ON_WARNINGS, so any
+        # undocumented entity or malformed comment fails this job.
+        run: doxygen doxygen/Doxyfile
+
+      - name: Upload HTML documentation
+        uses: actions/upload-artifact@v4
+        with:
+          name: doxygen-html
+          path: doxygen/documentation/html
+          if-no-files-found: error
