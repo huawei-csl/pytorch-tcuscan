@@ -401,6 +401,12 @@ at::Tensor run_seg_sum_multi_core(
   at::Tensor segm_offsets_;
   if (segm_offsets.has_value()) {
     segm_offsets_ = segm_offsets.value();
+    TORCH_CHECK(
+        segm_offsets_.numel() == static_cast<int64_t>(block_dim) + 1,
+        "run_seg_sum_multi_core: segm_offsets must have block_dim + 1 = ",
+        block_dim + 1, " entries, got ", segm_offsets_.numel(),
+        ". This device has ", ascendc_platform->GetCoreNumAic(),
+        " AI cube cores; compute the tiling for that core count.");
   } else {
     const at::Tensor sstart = torch::clamp(
         torch::arange(
@@ -508,6 +514,12 @@ at::Tensor run_seg_sum_multi_cube(
   at::Tensor segm_offsets_;
   if (segm_offsets.has_value()) {
     segm_offsets_ = segm_offsets.value();
+    TORCH_CHECK(
+        segm_offsets_.numel() == static_cast<int64_t>(block_dim) + 1,
+        "run_seg_sum_multi_cube: segm_offsets must have block_dim + 1 = ",
+        block_dim + 1, " entries, got ", segm_offsets_.numel(),
+        ". This device has ", ascendc_platform->GetCoreNumAic(),
+        " AI cube cores; compute the tiling for that core count.");
   } else {
     const at::Tensor sstart = torch::clamp(
         torch::arange(
