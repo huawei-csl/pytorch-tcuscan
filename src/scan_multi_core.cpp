@@ -101,6 +101,8 @@ extern "C" __global__ __aicore__ void scan_multi_core_fp16(GM_ADDR input_vec,
                                                            GM_ADDR output_vec,
                                                            GM_ADDR workspace,
                                                            GM_ADDR tilingGm) {
+  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2);
+
   tcuscan::_run_scan_multi_core<half>(input_vec, output_vec, workspace,
                                       tilingGm);
 }
@@ -117,6 +119,8 @@ extern "C" __global__ __aicore__ void scan_multi_core_int8(GM_ADDR input_vec,
                                                            GM_ADDR output_vec,
                                                            GM_ADDR workspace,
                                                            GM_ADDR tilingGm) {
+  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2);
+
   tcuscan::_run_scan_multi_core<int8_t>(input_vec, output_vec, workspace,
                                         tilingGm);
 }
@@ -133,6 +137,8 @@ extern "C" __global__ __aicore__ void scan_multi_core_fp32(GM_ADDR input_vec,
                                                            GM_ADDR output_vec,
                                                            GM_ADDR workspace,
                                                            GM_ADDR tilingGm) {
+  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2);
+
   tcuscan::_run_scan_multi_core<float>(input_vec, output_vec, workspace,
                                        tilingGm);
 }
@@ -149,6 +155,8 @@ extern "C" __global__ __aicore__ void scan_multi_core_fp32(GM_ADDR input_vec,
 extern "C" __global__ __aicore__ void scan_multi_core_fp16_no_l2(
     GM_ADDR input_vec, GM_ADDR output_vec, GM_ADDR workspace,
     GM_ADDR tilingGm) {
+  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2);
+
   tcuscan::_run_scan_multi_core_no_l2_split<half>(input_vec, output_vec,
                                                   workspace, tilingGm);
 }
@@ -165,6 +173,8 @@ extern "C" __global__ __aicore__ void scan_multi_core_fp16_no_l2(
 extern "C" __global__ __aicore__ void scan_multi_core_int8_no_l2(
     GM_ADDR input_vec, GM_ADDR output_vec, GM_ADDR workspace,
     GM_ADDR tilingGm) {
+  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2);
+
   tcuscan::_run_scan_multi_core_no_l2_split<int8_t>(input_vec, output_vec,
                                                     workspace, tilingGm);
 }
@@ -181,6 +191,8 @@ extern "C" __global__ __aicore__ void scan_multi_core_int8_no_l2(
 extern "C" __global__ __aicore__ void scan_multi_core_fp32_no_l2(
     GM_ADDR input_vec, GM_ADDR output_vec, GM_ADDR workspace,
     GM_ADDR tilingGm) {
+  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2);
+
   tcuscan::_run_scan_multi_core_no_l2_split<float>(input_vec, output_vec,
                                                    workspace, tilingGm);
 }

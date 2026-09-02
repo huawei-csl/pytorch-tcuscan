@@ -19,7 +19,7 @@
  */
 extern "C" __global__ __aicore__ void tri_inv_col_sweep_fp16(
     GM_ADDR vec_in, GM_ADDR vec_out, GM_ADDR workspace, GM_ADDR tiling_gm) {
-  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2);
+  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_AIV_ONLY);
 
   (void)workspace;
   tcuscan::TriInvColumnSweepTiling tiling;
@@ -63,7 +63,7 @@ extern "C" __global__ __aicore__ void tri_inv_col_sweep_fp16(
  */
 extern "C" __global__ __aicore__ void tri_inv_col_sweep_fp32(
     GM_ADDR vec_in, GM_ADDR vec_out, GM_ADDR workspace, GM_ADDR tiling_gm) {
-  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2);
+  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_AIV_ONLY);
 
   (void)workspace;
   tcuscan::TriInvColumnSweepTiling tiling;
