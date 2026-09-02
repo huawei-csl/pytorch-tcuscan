@@ -17,9 +17,12 @@
 #include "torch_npu/csrc/core/npu/NPUStream.h"
 #include "workspace.h"
 
+// Kernel launchers; documented at their definitions in src/*.cpp
+/// @cond
 extern "C" void launch_matmul_cce(uint32_t blockDim, void* stream, void* x,
                                   void* y, void* z, void* workspace,
                                   void* tiling_gm);
+/// @endcond
 
 namespace tcuscan {
 

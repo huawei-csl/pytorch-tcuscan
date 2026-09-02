@@ -24,6 +24,8 @@
 #include "torch_scan_cpu.h"
 #include "workspace.h"
 
+// Kernel launchers; documented at their definitions in src/*.cpp
+/// @cond
 extern "C" {
 void launch_block_scan_fp16(uint32_t blockDim, void* stream, void* input_vec,
                             void* lower, void* upper_strict, void* output_vec,
@@ -73,6 +75,7 @@ void launch_scan_vec_only_fp16(uint32_t blockDim, void* stream, void* input_vec,
                                void* output_vec, void* workspace,
                                void* tilingGm);
 }
+/// @endcond
 
 namespace tcuscan {
 

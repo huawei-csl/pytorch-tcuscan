@@ -14,6 +14,8 @@
 #include "torch_scan.h"
 #include "torch_seg_ops.h"
 
+// Kernel launchers; documented at their definitions in src/*.cpp
+/// @cond
 extern "C" {
 void launch_spmv_v2_fp16(uint32_t blockDim, void* stream, void* vec_in,
                          void* cols_in, void* indptr, void* x_in,
@@ -29,6 +31,7 @@ void launch_spmv_v2_multi_cube_fp16(uint32_t blockDim, void* stream,
                                     void* vec_out, void* workspace,
                                     void* tiling_gm);
 }
+/// @endcond
 
 namespace tcuscan {
 

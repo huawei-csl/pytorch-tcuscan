@@ -48,6 +48,18 @@ extern "C" __global__ __aicore__ void scan_single_cube_fp16(
   }
 }
 
+/**
+ * @brief Call the single-cube scan kernel for FP16 data type.
+ *
+ * @param [in] blockDim Number of blocks for the kernel launch.
+ * @param [in] stream NPU stream.
+ * @param [in] input_vec Pointer to the input vector.
+ * @param [in] upper Pointer to an upper-triangular all-ones matrix.
+ * @param [in] lower Pointer to a strict lower-triangular all-ones matrix.
+ * @param [in] output_vec Pointer to the output vector.
+ * @param [in] workspace Pointer to workspace.
+ * @param [in] tiling Pointer to the tiling buffer.
+ */
 extern "C" void launch_scan_single_cube_fp16(uint32_t blockDim, void* stream,
                                              GM_ADDR input_vec, GM_ADDR upper,
                                              GM_ADDR lower, GM_ADDR output_vec,
