@@ -609,28 +609,18 @@ class KernelInvTriuRecUnroll {
    */
   __aicore__ inline void CopyOut() {
     tcuscan::exec_mode::AssertIsAIC();
-    constexpr uint16_t fractal_size = tcuscan::GetFractalMN<OutputT>();
 
-    LocalTensor<OutputT> lt = CO1_q_.template DeQue<OutputT>();
-    AscendC::PipeBarrier<PIPE_ALL>();
-    AscendC::DataSyncBarrier<MemDsbT::ALL>();
-    uint32_t height = matrix_size_;
-    uint32_t width = matrix_size_;
-    FixpipeParams<OutputT> params;
-    params.cburstNum = height;
-    params.burstLen = width * fractal_size * sizeof(OutputT) / 32;
-    params.dstStride = height;
-
-    Nz2NdParams nz2nd_params;
-    nz2nd_params.nz2ndEn = true;
-    nz2nd_params.originalNSize = height;
-    params.nz2ndParams = nz2nd_params;
-
-    Fixpipe(global_Z_out_[global_offset_], lt, params);
     AscendC::PipeBarrier<PIPE_ALL>();
     AscendC::DataSyncBarrier<MemDsbT::ALL>();
 
-    CO1_q_.FreeTensor(lt);
+    // The L0C->GM fixpipe API differs between dav-c220 and dav-c310 (A5); the
+    // helper carries both variants behind an arch guard. It de-queues from
+    // CO1_q_ and frees the tensor itself.
+    tcuscan::copy::CopyCL0ToGlobal(global_Z_out_[global_offset_], CO1_q_,
+                                   matrix_size_, matrix_size_);
+
+    AscendC::PipeBarrier<PIPE_ALL>();
+    AscendC::DataSyncBarrier<MemDsbT::ALL>();
   }
   /**
    * @brief Free queues
