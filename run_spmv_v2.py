@@ -179,7 +179,9 @@ def run_spmv_v2(
     # without the leading zero (see run_spmv_v2 in torch_spmv.h).
     indptr_kernel = indptr.to(torch.int32)[1:]
 
-    stream_ptr = torch.npu.current_stream()._as_parameter_  # noqa: SLF001  # pylint: disable=protected-access
+    stream_ptr = (
+        torch.npu.current_stream()._as_parameter_
+    )  # noqa: SLF001  # pylint: disable=protected-access
 
     kernel(
         block_dim,
