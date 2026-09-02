@@ -14,14 +14,25 @@
 #include "../tiling/tiling_tri_inv_col_sweep.h"
 #include "../tiling/tiling_tri_inv_cube_col_sweep.h"
 #include "../tiling/tiling_triu_inv_rec_unroll.h"
-#include "aclrtlaunch_tri_inv_col_sweep_fp16.h"
-#include "aclrtlaunch_tri_inv_col_sweep_fp32.h"
-#include "aclrtlaunch_tri_inv_cube_col_sweep_fp16.h"
-#include "aclrtlaunch_triu_inv_rec_unroll_fp16.h"
 #include "commons.h"
 #include "tiling/platform/platform_ascendc.h"
 #include "torch_npu/csrc/core/npu/NPUStream.h"
 #include "workspace.h"
+
+extern "C" void launch_tri_inv_col_sweep_fp16(uint32_t blockDim, void* stream,
+                                              void* vec_in, void* vec_out,
+                                              void* workspace, void* tiling_gm);
+extern "C" void launch_tri_inv_col_sweep_fp32(uint32_t blockDim, void* stream,
+                                              void* vec_in, void* vec_out,
+                                              void* workspace, void* tiling_gm);
+extern "C" void launch_tri_inv_cube_col_sweep_fp16(uint32_t blockDim,
+                                                   void* stream, void* vec_in,
+                                                   void* vec_out,
+                                                   void* workspace,
+                                                   void* tiling_gm);
+extern "C" void launch_triu_inv_rec_unroll_fp16(uint32_t blockDim, void* stream,
+                                                void* vec_in, void* vec_out,
+                                                void* workspace, void* tiling);
 
 namespace tcuscan {
 
@@ -58,15 +69,15 @@ at::Tensor run_tri_inv_col_sweep(const at::Tensor& x) {
 
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
   if (dtype == torch::kHalf) {
-    ACLRT_LAUNCH_KERNEL(tri_inv_col_sweep_fp16)
-    (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
-     const_cast<void*>(z.storage().data()),
-     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+    launch_tri_inv_col_sweep_fp16(
+        block_dim, acl_stream, const_cast<void*>(x.storage().data()),
+        const_cast<void*>(z.storage().data()),
+        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else {
-    ACLRT_LAUNCH_KERNEL(tri_inv_col_sweep_fp32)
-    (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
-     const_cast<void*>(z.storage().data()),
-     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+    launch_tri_inv_col_sweep_fp32(
+        block_dim, acl_stream, const_cast<void*>(x.storage().data()),
+        const_cast<void*>(z.storage().data()),
+        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   }
 
   aclrtFree(tiling_device);
@@ -113,10 +124,10 @@ at::Tensor run_tri_inv_cube_col_sweep(const at::Tensor& x) {
     const at::Tensor workspace_tensor =
         tcuscan::alloc_workspace(workspace_size, device);
 
-    ACLRT_LAUNCH_KERNEL(tri_inv_cube_col_sweep_fp16)
-    (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
-     const_cast<void*>(z.storage().data()),
-     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+    launch_tri_inv_cube_col_sweep_fp16(
+        block_dim, acl_stream, const_cast<void*>(x.storage().data()),
+        const_cast<void*>(z.storage().data()),
+        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else {
     throw std::runtime_error("Currently only half precision is supported.\n");
   }
@@ -164,10 +175,10 @@ at::Tensor run_triu_inv_rec_unroll(const at::Tensor& x) {
     uint32_t workspace_size = 3 * num_elems * sizeof(uint16_t);
     const at::Tensor workspace_tensor =
         tcuscan::alloc_zeros_workspace(workspace_size, device);
-    ACLRT_LAUNCH_KERNEL(triu_inv_rec_unroll_fp16)
-    (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
-     const_cast<void*>(z.storage().data()),
-     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+    launch_triu_inv_rec_unroll_fp16(
+        block_dim, acl_stream, const_cast<void*>(x.storage().data()),
+        const_cast<void*>(z.storage().data()),
+        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else {
     throw std::runtime_error("Currently only half precision is supported.\n");
   }

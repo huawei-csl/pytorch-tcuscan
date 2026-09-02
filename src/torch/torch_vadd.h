@@ -12,13 +12,15 @@
 
 #include "../host_utils.h"
 #include "../tiling/tiling_vadd.h"
-#include "aclrtlaunch_vadd_custom.h"
 #include "commons.h"
 #include "tiling/platform/platform_ascendc.h"
 #include "torch_npu/csrc/core/npu/NPUStream.h"
 
-namespace tcuscan {
+extern "C" void launch_vadd_fp16(uint32_t blockDim, void* stream, void* x,
+                                 void* y, void* z, void* workspace,
+                                 void* tiling);
 
+namespace tcuscan {
 /**
  * @brief Torch wrapper for vector add kernel.
  * @param x Input tensor.
@@ -38,10 +40,11 @@ at::Tensor run_add(const at::Tensor& x, const at::Tensor& y) {
 
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
-  ACLRT_LAUNCH_KERNEL(vadd_custom)
-  (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
-   const_cast<void*>(y.storage().data()), const_cast<void*>(z.storage().data()),
-   const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+  launch_vadd_fp16(block_dim, acl_stream, const_cast<void*>(x.storage().data()),
+                   const_cast<void*>(y.storage().data()),
+                   const_cast<void*>(z.storage().data()),
+                   const_cast<void*>(workspace_tensor.storage().data()),
+                   tiling_device);
 
   aclrtFree(tiling_device);
 

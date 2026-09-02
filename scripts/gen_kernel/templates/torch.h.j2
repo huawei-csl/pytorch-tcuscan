@@ -10,11 +10,15 @@
 #include <torch/extension.h>
 
 #include "../tiling/tiling_{{ kernel_cpp_name }}.h"
-#include "aclrtlaunch_{{ kernel_cpp_name }}_fp16.h"
 #include "commons.h"
 #include "tiling/platform/platform_ascendc.h"
 #include "torch_npu/csrc/core/npu/NPUStream.h"
 
+// AscendC kernel entry points launched below with `<<<>>>`; defined in
+// {{ kernel_cpp_name }}.cpp.
+extern "C" __global__ __aicore__ void {{ kernel_cpp_name }}_fp16(
+    __gm__ void* vec_in, __gm__ void* vec_out, __gm__ void* workspace,
+    __gm__ void* tiling_gm);
 
 namespace {{ cpp_namespace }} {
 
@@ -42,10 +46,10 @@ at::Tensor run_{{ kernel_cpp_name }}(const at::Tensor &x, int s) {
   uint8_t *tiling_device = allocCopyTiling(tiling);
 
   if (dtype == at::kHalf) {
-    ACLRT_LAUNCH_KERNEL({{ kernel_cpp_name }}_fp16)
-    (block_dim, acl_stream, const_cast<void *>(x.storage().data()),
-     const_cast<void *>(z.storage().data()),
-     const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
+    {{ kernel_cpp_name }}_fp16<<<block_dim, nullptr, acl_stream>>>(
+        const_cast<void *>(x.storage().data()),
+        const_cast<void *>(z.storage().data()),
+        const_cast<void *>(workspace_tensor.storage().data()), tiling_device);
   } else {
    /* Unsupported */
   }

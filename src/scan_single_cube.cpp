@@ -25,6 +25,8 @@
 extern "C" __global__ __aicore__ void scan_single_cube_fp16(
     GM_ADDR input_vec, GM_ADDR upper, GM_ADDR lower, GM_ADDR output_vec,
     GM_ADDR workspace, GM_ADDR tiling) {
+  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2);
+
   (void)workspace;
   using namespace tcuscan;
   ScanSingleCubeTiling tiling_data;
@@ -44,4 +46,13 @@ extern "C" __global__ __aicore__ void scan_single_cube_fp16(
     op.Init(output_vec, output_vec);
     op.Process();
   }
+}
+
+extern "C" void launch_scan_single_cube_fp16(uint32_t blockDim, void* stream,
+                                             GM_ADDR input_vec, GM_ADDR upper,
+                                             GM_ADDR lower, GM_ADDR output_vec,
+                                             GM_ADDR workspace,
+                                             GM_ADDR tiling) {
+  scan_single_cube_fp16<<<blockDim, nullptr, stream>>>(
+      input_vec, upper, lower, output_vec, workspace, tiling);
 }

@@ -10,12 +10,25 @@
 #include <pybind11/pybind11.h>
 
 #include "../tiling/tiling_spmv.h"
-#include "aclrtlaunch_spmv_v2_fp16.h"
-#include "aclrtlaunch_spmv_v2_fp32.h"
-#include "aclrtlaunch_spmv_v2_multi_cube_fp16.h"
 #include "torch_gather.h"
 #include "torch_scan.h"
 #include "torch_seg_ops.h"
+
+extern "C" {
+void launch_spmv_v2_fp16(uint32_t blockDim, void* stream, void* vec_in,
+                         void* cols_in, void* indptr, void* x_in,
+                         void* segm_offsets, void* vec_out, void* workspace,
+                         void* tiling_gm);
+void launch_spmv_v2_fp32(uint32_t blockDim, void* stream, void* vec_in,
+                         void* cols_in, void* indptr, void* x_in,
+                         void* segm_offsets, void* vec_out, void* workspace,
+                         void* tiling_gm);
+void launch_spmv_v2_multi_cube_fp16(uint32_t blockDim, void* stream,
+                                    void* vec_in, void* cols_in, void* upper,
+                                    void* lower, void* indptr, void* x_in,
+                                    void* vec_out, void* workspace,
+                                    void* tiling_gm);
+}
 
 namespace tcuscan {
 
@@ -299,21 +312,21 @@ at::Tensor run_spmv_v2(const at::Tensor& vals, const at::Tensor& indptr,
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
   if (is_fp32) {
-    ACLRT_LAUNCH_KERNEL(spmv_v2_fp32)
-    (block_dim, acl_stream, const_cast<void*>(vals.storage().data()),
-     const_cast<void*>(cols.storage().data()), const_cast<void*>(indptr_data),
-     const_cast<void*>(x.storage().data()),
-     const_cast<void*>(segm_offsets_.storage().data()),
-     const_cast<void*>(z.storage().data()),
-     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+    launch_spmv_v2_fp32(
+        block_dim, acl_stream, const_cast<void*>(vals.storage().data()),
+        const_cast<void*>(cols.storage().data()),
+        const_cast<void*>(indptr_data), const_cast<void*>(x.storage().data()),
+        const_cast<void*>(segm_offsets_.storage().data()),
+        const_cast<void*>(z.storage().data()),
+        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else {
-    ACLRT_LAUNCH_KERNEL(spmv_v2_fp16)
-    (block_dim, acl_stream, const_cast<void*>(vals.storage().data()),
-     const_cast<void*>(cols.storage().data()), const_cast<void*>(indptr_data),
-     const_cast<void*>(x.storage().data()),
-     const_cast<void*>(segm_offsets_.storage().data()),
-     const_cast<void*>(z.storage().data()),
-     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+    launch_spmv_v2_fp16(
+        block_dim, acl_stream, const_cast<void*>(vals.storage().data()),
+        const_cast<void*>(cols.storage().data()),
+        const_cast<void*>(indptr_data), const_cast<void*>(x.storage().data()),
+        const_cast<void*>(segm_offsets_.storage().data()),
+        const_cast<void*>(z.storage().data()),
+        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   }
 
   aclrtFree(tiling_device);
@@ -424,14 +437,15 @@ at::Tensor run_spmv_v2_multi_cube(const at::Tensor& vals,
 
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
-  ACLRT_LAUNCH_KERNEL(spmv_v2_multi_cube_fp16)
-  (block_dim, acl_stream, const_cast<void*>(vals.storage().data()),
-   const_cast<void*>(cols.storage().data()),
-   const_cast<void*>(upper.storage().data()),
-   const_cast<void*>(lower_strict.storage().data()),
-   const_cast<void*>(indptr.storage().data()),
-   const_cast<void*>(x.storage().data()), const_cast<void*>(z.storage().data()),
-   const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+  launch_spmv_v2_multi_cube_fp16(
+      block_dim, acl_stream, const_cast<void*>(vals.storage().data()),
+      const_cast<void*>(cols.storage().data()),
+      const_cast<void*>(upper.storage().data()),
+      const_cast<void*>(lower_strict.storage().data()),
+      const_cast<void*>(indptr.storage().data()),
+      const_cast<void*>(x.storage().data()),
+      const_cast<void*>(z.storage().data()),
+      const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
 
   aclrtFree(tiling_device);
   aclrtSynchronizeStream(acl_stream);

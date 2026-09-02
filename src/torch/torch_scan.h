@@ -18,27 +18,61 @@
 #include "../tiling/tiling_scan_single_core.h"
 #include "../tiling/tiling_scan_single_cube.h"
 #include "../tiling/tiling_scan_vec_only.h"
-#include "aclrtlaunch_block_scan_fp16.h"
-#include "aclrtlaunch_row_scan_fp16.h"
-#include "aclrtlaunch_scan_batch_fp16.h"
-#include "aclrtlaunch_scan_batch_fp32.h"
-#include "aclrtlaunch_scan_multi_core_fp16.h"
-#include "aclrtlaunch_scan_multi_core_fp16_no_l2.h"
-#include "aclrtlaunch_scan_multi_core_fp32.h"
-#include "aclrtlaunch_scan_multi_core_fp32_no_l2.h"
-#include "aclrtlaunch_scan_multi_core_int8.h"
-#include "aclrtlaunch_scan_multi_core_int8_no_l2.h"
-#include "aclrtlaunch_scan_multi_cube_fp16.h"
-#include "aclrtlaunch_scan_single_core_fp16.h"
-#include "aclrtlaunch_scan_single_core_fp32.h"
-#include "aclrtlaunch_scan_single_core_int8.h"
-#include "aclrtlaunch_scan_single_cube_fp16.h"
-#include "aclrtlaunch_scan_vec_only_fp16.h"
 #include "commons.h"
 #include "tiling/platform/platform_ascendc.h"
 #include "torch_npu/csrc/core/npu/NPUStream.h"
 #include "torch_scan_cpu.h"
 #include "workspace.h"
+
+extern "C" {
+void launch_block_scan_fp16(uint32_t blockDim, void* stream, void* input_vec,
+                            void* lower, void* upper_strict, void* output_vec,
+                            void* workspace, void* tilingGm);
+void launch_row_scan_fp16(uint32_t blockDim, void* stream, void* input_vec,
+                          void* output_vec, void* workspace, void* tilingGm);
+void launch_scan_batch_fp16(uint32_t blockDim, void* stream, void* input_vec,
+                            void* output_vec, void* workspace, void* tiling);
+void launch_scan_batch_fp32(uint32_t blockDim, void* stream, void* input_vec,
+                            void* output_vec, void* workspace, void* tiling);
+void launch_scan_multi_core_fp16(uint32_t blockDim, void* stream,
+                                 void* input_vec, void* output_vec,
+                                 void* workspace, void* tilingGm);
+void launch_scan_multi_core_fp32(uint32_t blockDim, void* stream,
+                                 void* input_vec, void* output_vec,
+                                 void* workspace, void* tilingGm);
+void launch_scan_multi_core_fp16_no_l2(uint32_t blockDim, void* stream,
+                                       void* input_vec, void* output_vec,
+                                       void* workspace, void* tilingGm);
+void launch_scan_multi_core_fp32_no_l2(uint32_t blockDim, void* stream,
+                                       void* input_vec, void* output_vec,
+                                       void* workspace, void* tilingGm);
+void launch_scan_multi_core_int8(uint32_t blockDim, void* stream,
+                                 void* input_vec, void* output_vec,
+                                 void* workspace, void* tilingGm);
+void launch_scan_multi_core_int8_no_l2(uint32_t blockDim, void* stream,
+                                       void* input_vec, void* output_vec,
+                                       void* workspace, void* tilingGm);
+void launch_scan_multi_cube_fp16(uint32_t blockDim, void* stream,
+                                 void* input_vec, void* lower,
+                                 void* upper_strict, void* output_vec,
+                                 void* workspace, void* tiling_gm);
+void launch_scan_single_core_fp16(uint32_t blockDim, void* stream, void* vec_in,
+                                  void* vec_out, void* workspace,
+                                  void* tilingGm);
+void launch_scan_single_core_fp32(uint32_t blockDim, void* stream, void* vec_in,
+                                  void* vec_out, void* workspace,
+                                  void* tilingGm);
+void launch_scan_single_core_int8(uint32_t blockDim, void* stream, void* vec_in,
+                                  void* vec_out, void* workspace,
+                                  void* tilingGm);
+void launch_scan_single_cube_fp16(uint32_t blockDim, void* stream,
+                                  void* input_vec, void* lower,
+                                  void* upper_strict, void* output_vec,
+                                  void* workspace, void* tilingGm);
+void launch_scan_vec_only_fp16(uint32_t blockDim, void* stream, void* input_vec,
+                               void* output_vec, void* workspace,
+                               void* tilingGm);
+}
 
 namespace tcuscan {
 
@@ -52,7 +86,6 @@ namespace tcuscan {
  */
 at::Tensor run_scan_single_core(const at::Tensor& x, int S,
                                 double starting_sum = 0) {
-  auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();
   const auto dtype = x.options().dtype();
   const auto dtype_out = dtype == torch::kHalf || dtype == torch::kFloat32
@@ -78,33 +111,34 @@ at::Tensor run_scan_single_core(const at::Tensor& x, int S,
 
   uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
 
+  auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
   if (dtype == torch::kInt8) {
     const uint32_t user_workspace_size =
         tcuscan::get_workspace_size<int8_t>(tiling);
     const at::Tensor workspace_tensor =
         alloc_zeros_workspace(user_workspace_size, device);
-    ACLRT_LAUNCH_KERNEL(scan_single_core_int8)
-    (1 /* single core*/, acl_stream, const_cast<void*>(x.storage().data()),
-     const_cast<void*>(z.storage().data()),
-     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+    launch_scan_single_core_int8(
+        1 /* single core*/, acl_stream, const_cast<void*>(x.storage().data()),
+        const_cast<void*>(z.storage().data()),
+        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else if (dtype == torch::kHalf) {
     const uint32_t user_workspace_size =
         tcuscan::get_workspace_size<int16_t>(tiling);
     const at::Tensor workspace_tensor =
         alloc_zeros_workspace(user_workspace_size, device);
-    ACLRT_LAUNCH_KERNEL(scan_single_core_fp16)
-    (1 /* single core*/, acl_stream, const_cast<void*>(x.storage().data()),
-     const_cast<void*>(z.storage().data()),
-     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+    launch_scan_single_core_fp16(
+        1 /* single core*/, acl_stream, const_cast<void*>(x.storage().data()),
+        const_cast<void*>(z.storage().data()),
+        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else if (dtype == torch::kFloat32) {
     const uint32_t user_workspace_size =
         tcuscan::get_workspace_size<float>(tiling);
     const at::Tensor workspace_tensor =
         alloc_zeros_workspace(user_workspace_size, device);
-    ACLRT_LAUNCH_KERNEL(scan_single_core_fp32)
-    (1 /* single core*/, acl_stream, const_cast<void*>(x.storage().data()),
-     const_cast<void*>(z.storage().data()),
-     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+    launch_scan_single_core_fp32(
+        1 /* single core*/, acl_stream, const_cast<void*>(x.storage().data()),
+        const_cast<void*>(z.storage().data()),
+        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else {
     /* Unsupported */
   }
@@ -157,19 +191,19 @@ at::Tensor run_scan_batch(const at::Tensor& x, int S) {
         tcuscan::get_workspace_size<int16_t>(tiling);
     const at::Tensor workspace_tensor =
         alloc_workspace(user_workspace_size, device);
-    ACLRT_LAUNCH_KERNEL(scan_batch_fp16)
-    (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
-     const_cast<void*>(z.storage().data()),
-     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+    launch_scan_batch_fp16(
+        block_dim, acl_stream, const_cast<void*>(x.storage().data()),
+        const_cast<void*>(z.storage().data()),
+        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else if (dtype == torch::kFloat32) {
     const uint32_t user_workspace_size =
         tcuscan::get_workspace_size<float>(tiling);
     const at::Tensor workspace_tensor =
         alloc_zeros_workspace(user_workspace_size, device);
-    ACLRT_LAUNCH_KERNEL(scan_batch_fp32)
-    (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
-     const_cast<void*>(z.storage().data()),
-     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+    launch_scan_batch_fp32(
+        block_dim, acl_stream, const_cast<void*>(x.storage().data()),
+        const_cast<void*>(z.storage().data()),
+        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else {
     /* Unsupported */
   }
@@ -227,31 +261,30 @@ at::Tensor run_scan_multi_core(const at::Tensor& x, int S) {
         tcuscan::get_workspace_size<int16_t>(tiling);
     const at::Tensor workspace_tensor =
         alloc_workspace(user_workspace_size, device);
-    ACLRT_LAUNCH_KERNEL(scan_multi_core_fp16)
-    (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
-     const_cast<void*>(z.storage().data()),
-     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+    launch_scan_multi_core_fp16(
+        block_dim, acl_stream, const_cast<void*>(x.storage().data()),
+        const_cast<void*>(z.storage().data()),
+        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else if (dtype == torch::kFloat32) {
     const uint32_t user_workspace_size =
         tcuscan::get_workspace_size<float>(tiling);
     const at::Tensor workspace_tensor =
         alloc_workspace(user_workspace_size, device);
 
-    ACLRT_LAUNCH_KERNEL(scan_multi_core_fp32)
-    (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
-     const_cast<void*>(z.storage().data()),
-     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
-
-  } else if (dtype == torch::kInt8) {
+    launch_scan_multi_core_fp32(
+        block_dim, acl_stream, const_cast<void*>(x.storage().data()),
+        const_cast<void*>(z.storage().data()),
+        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+  } else {
     const uint32_t user_workspace_size =
         tcuscan::get_workspace_size<int8_t>(tiling);
     const at::Tensor workspace_tensor =
         alloc_workspace(user_workspace_size, device);
 
-    ACLRT_LAUNCH_KERNEL(scan_multi_core_int8)
-    (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
-     const_cast<void*>(z.storage().data()),
-     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+    launch_scan_multi_core_int8(
+        block_dim, acl_stream, const_cast<void*>(x.storage().data()),
+        const_cast<void*>(z.storage().data()),
+        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   }
 
   aclrtFree(tiling_device);
@@ -271,7 +304,7 @@ at::Tensor run_scan_multi_core(const at::Tensor& x, int S) {
 at::Tensor run_scan_multi_core_no_l2(const at::Tensor& x, int S) {
   const auto ascendc_platform =
       platform_ascendc::PlatformAscendCManager::GetInstance();
-  auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
+
   const at::Device device = x.options().device();
   const auto dtype = x.options().dtype();
   const auto dtype_out = dtype == torch::kHalf || dtype == torch::kFloat32
@@ -299,34 +332,35 @@ at::Tensor run_scan_multi_core_no_l2(const at::Tensor& x, int S) {
   const MultiCoreScanTiling tiling{block_dim, total_length, matmul_size};
   uint8_t* tiling_device = alloc_copy_tiling(tiling);
 
+  auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
   if (dtype == torch::kHalf) {
     const uint32_t user_workspace_size =
         tcuscan::get_workspace_size<int16_t>(tiling);
     const at::Tensor workspace_tensor =
         alloc_workspace(user_workspace_size, device);
-    ACLRT_LAUNCH_KERNEL(scan_multi_core_fp16_no_l2)
-    (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
-     const_cast<void*>(z.storage().data()),
-     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+    launch_scan_multi_core_fp16_no_l2(
+        block_dim, acl_stream, const_cast<void*>(x.storage().data()),
+        const_cast<void*>(z.storage().data()),
+        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else if (dtype == torch::kFloat32) {
     const uint32_t user_workspace_size =
         tcuscan::get_workspace_size<float>(tiling);
     const at::Tensor workspace_tensor =
         alloc_workspace(user_workspace_size, device);
-    ACLRT_LAUNCH_KERNEL(scan_multi_core_fp32_no_l2)
-    (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
-     const_cast<void*>(z.storage().data()),
-     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+    launch_scan_multi_core_fp32_no_l2(
+        block_dim, acl_stream, const_cast<void*>(x.storage().data()),
+        const_cast<void*>(z.storage().data()),
+        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else {
     const uint32_t user_workspace_size =
         tcuscan::get_workspace_size<int8_t>(tiling);
     const at::Tensor workspace_tensor =
-        tcuscan::alloc_workspace(user_workspace_size, device);
+        alloc_workspace(user_workspace_size, device);
 
-    ACLRT_LAUNCH_KERNEL(scan_multi_core_int8_no_l2)
-    (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
-     const_cast<void*>(z.storage().data()),
-     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+    launch_scan_multi_core_int8_no_l2(
+        block_dim, acl_stream, const_cast<void*>(x.storage().data()),
+        const_cast<void*>(z.storage().data()),
+        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   }
 
   aclrtFree(tiling_device);
@@ -370,10 +404,10 @@ at::Tensor run_row_scan(const at::Tensor& x, int S) {
 
   if (dtype == torch::kHalf) {
     const at::Tensor workspace_tensor = alloc_workspace(0, device);
-    ACLRT_LAUNCH_KERNEL(row_scan_fp16)
-    (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
-     const_cast<void*>(z.storage().data()),
-     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+    launch_row_scan_fp16(
+        block_dim, acl_stream, const_cast<void*>(x.storage().data()),
+        const_cast<void*>(z.storage().data()),
+        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else {
     /* Unsupported*/
   }
@@ -422,12 +456,12 @@ at::Tensor run_block_scan(const at::Tensor& x, const at::Tensor& upper,
 
   if (dtype == torch::kHalf) {
     const at::Tensor workspace_tensor = tcuscan::alloc_workspace(0, device);
-    ACLRT_LAUNCH_KERNEL(block_scan_fp16)
-    (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
-     const_cast<void*>(upper.storage().data()),
-     const_cast<void*>(lower_strict.storage().data()),
-     const_cast<void*>(z.storage().data()),
-     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+    launch_block_scan_fp16(
+        block_dim, acl_stream, const_cast<void*>(x.storage().data()),
+        const_cast<void*>(upper.storage().data()),
+        const_cast<void*>(lower_strict.storage().data()),
+        const_cast<void*>(z.storage().data()),
+        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else {
     /* Unsupported*/
   }
@@ -483,12 +517,12 @@ at::Tensor run_scan_multi_cube(const at::Tensor& x, const at::Tensor& upper,
         tcuscan::get_workspace_size<int16_t>(tiling);
     const at::Tensor workspace_tensor =
         alloc_workspace(user_workspace_size, device);
-    ACLRT_LAUNCH_KERNEL(scan_multi_cube_fp16)
-    (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
-     const_cast<void*>(upper.storage().data()),
-     const_cast<void*>(lower_strict.storage().data()),
-     const_cast<void*>(z.storage().data()),
-     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+    launch_scan_multi_cube_fp16(
+        block_dim, acl_stream, const_cast<void*>(x.storage().data()),
+        const_cast<void*>(upper.storage().data()),
+        const_cast<void*>(lower_strict.storage().data()),
+        const_cast<void*>(z.storage().data()),
+        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else {
     /* Unsupported*/
   }
@@ -530,12 +564,12 @@ at::Tensor run_scan_single_cube(const at::Tensor& x, const at::Tensor& upper,
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
 
   if (dtype == torch::kHalf) {
-    ACLRT_LAUNCH_KERNEL(scan_single_cube_fp16)
-    (1 /* single core*/, acl_stream, const_cast<void*>(x.storage().data()),
-     const_cast<void*>(upper.storage().data()),
-     const_cast<void*>(lower_strict.storage().data()),
-     const_cast<void*>(z.storage().data()),
-     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+    launch_scan_single_cube_fp16(
+        1 /* single core*/, acl_stream, const_cast<void*>(x.storage().data()),
+        const_cast<void*>(upper.storage().data()),
+        const_cast<void*>(lower_strict.storage().data()),
+        const_cast<void*>(z.storage().data()),
+        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else {
     /* Unsupported */
   }
@@ -577,10 +611,10 @@ at::Tensor run_scan_vec_only(const at::Tensor& x, int S) {
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
   if (dtype == torch::kHalf) {
-    ACLRT_LAUNCH_KERNEL(scan_vec_only_fp16)
-    (1 /* single core*/, acl_stream, const_cast<void*>(x.storage().data()),
-     const_cast<void*>(z.storage().data()),
-     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+    launch_scan_vec_only_fp16(
+        1 /* single core*/, acl_stream, const_cast<void*>(x.storage().data()),
+        const_cast<void*>(z.storage().data()),
+        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else {
     /* Unsupported */
   }
