@@ -64,7 +64,7 @@ extern "C" __global__ __aicore__ void matmul_cce(GM_ADDR a, GM_ADDR b,
  * @brief Launch the `matmul_cce` kernel.
  *
  * @param [in] blockDim Number of blocks for the kernel launch.
- * @param [in] stream CUDA stream.
+ * @param [in] stream NPU stream.
  * @param [in] x Pointer to an input buffer.
  * @param [in] y Pointer to an input buffer.
  * @param [in] z Pointer to an input buffer.

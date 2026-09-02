@@ -33,7 +33,7 @@ extern "C" __global__ __aicore__ void triu_inv_rec_unroll_fp16(
  * @brief Call the `triu_inv_rec_unroll` kernel for FP16 data type.
  *
  * @param [in] blockDim Number of blocks for the kernel launch.
- * @param [in] stream CUDA stream.
+ * @param [in] stream NPU stream.
  * @param [in] vec_in Pointer to an input buffer.
  * @param [in] vec_out Pointer to an output buffer.
  * @param [in] workspace Pointer to workspace.

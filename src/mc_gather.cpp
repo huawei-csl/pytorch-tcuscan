@@ -60,7 +60,7 @@ extern "C" __global__ __aicore__ void mc_gather_fp16(GM_ADDR values_in,
  * @brief Call the `mc_gather` kernel for FP32 data type.
  *
  * @param [in] blockDim Number of blocks for the kernel launch.
- * @param [in] stream CUDA stream.
+ * @param [in] stream NPU stream.
  * @param [in] values_in Pointer to an input buffer.
  * @param [in] indexes_in Pointer to an input buffer.
  * @param [in] z_out Pointer to an output buffer.
@@ -79,7 +79,7 @@ extern "C" void launch_mc_gather_fp32(uint32_t blockDim, void* stream,
  * @brief Call the `mc_gather` kernel for FP16 data type.
  *
  * @param [in] blockDim Number of blocks for the kernel launch.
- * @param [in] stream CUDA stream.
+ * @param [in] stream NPU stream.
  * @param [in] values_in Pointer to an input buffer.
  * @param [in] indexes_in Pointer to an input buffer.
  * @param [in] z_out Pointer to an output buffer.

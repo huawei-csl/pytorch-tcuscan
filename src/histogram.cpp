@@ -41,7 +41,7 @@ extern "C" __global__ __aicore__ void histogram_fp16(GM_ADDR vec_in,
  * @brief Call the `histogram` kernel for FP16 data type.
  *
  * @param [in] blockDim Number of blocks for the kernel launch.
- * @param [in] stream CUDA stream.
+ * @param [in] stream NPU stream.
  * @param [in] vec_in Pointer to an input buffer.
  * @param [in] vec_out Pointer to an output buffer.
  * @param [in] workspace Pointer to workspace.

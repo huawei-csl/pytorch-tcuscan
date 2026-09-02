@@ -96,7 +96,7 @@ extern "C" __global__ __aicore__ void less_equal_fp16(GM_ADDR vec_in,
  * @brief Call the `count_if` kernel for FP16 data type.
  *
  * @param [in] blockDim Number of blocks for the kernel launch.
- * @param [in] stream CUDA stream.
+ * @param [in] stream NPU stream.
  * @param [in] vec_in Pointer to the input vector.
  * @param [in] vec_out Pointer to the output vector.
  * @param [in] workspace Pointer to workspace.
@@ -113,7 +113,7 @@ extern "C" void launch_count_if_fp16(uint32_t blockDim, void* stream,
  * @brief Call the `greater_equal` kernel for FP16 data type.
  *
  * @param [in] blockDim Number of blocks for the kernel launch.
- * @param [in] stream CUDA stream.
+ * @param [in] stream NPU stream.
  * @param [in] vec_in Pointer to the input vector.
  * @param [in] vec_out Pointer to the output vector.
  * @param [in] workspace Pointer to workspace.

@@ -94,7 +94,7 @@ extern "C" __global__ __aicore__ void scan_batch_fp32(GM_ADDR input_vec,
  * @brief Call the `scan_batch` kernel for FP16 data type.
  *
  * @param [in] blockDim Number of blocks for the kernel launch.
- * @param [in] stream CUDA stream.
+ * @param [in] stream NPU stream.
  * @param [in] input_vec Pointer to an input buffer.
  * @param [in] output_vec Pointer to an output buffer.
  * @param [in] workspace Pointer to workspace.
@@ -111,7 +111,7 @@ extern "C" void launch_scan_batch_fp16(uint32_t blockDim, void* stream,
  * @brief Call the `scan_batch` kernel for FP32 data type.
  *
  * @param [in] blockDim Number of blocks for the kernel launch.
- * @param [in] stream CUDA stream.
+ * @param [in] stream NPU stream.
  * @param [in] input_vec Pointer to an input buffer.
  * @param [in] output_vec Pointer to an output buffer.
  * @param [in] workspace Pointer to workspace.

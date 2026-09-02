@@ -87,7 +87,7 @@ extern "C" __global__ __aicore__ void complete_rows_int32(GM_ADDR input_vec,
  * @brief Call the `complete_rows` kernel for FP32 data type.
  *
  * @param [in] blockDim Number of blocks for the kernel launch.
- * @param [in] stream CUDA stream.
+ * @param [in] stream NPU stream.
  * @param [in] input_vec Pointer to an input buffer.
  * @param [in] input_sums Pointer to an input buffer.
  * @param [in] output_vec Pointer to an output buffer.
@@ -105,7 +105,7 @@ extern "C" void launch_complete_rows_fp32(
  * @brief Call the `complete_rows` kernel for INT32 data type.
  *
  * @param [in] blockDim Number of blocks for the kernel launch.
- * @param [in] stream CUDA stream.
+ * @param [in] stream NPU stream.
  * @param [in] input_vec Pointer to an input buffer.
  * @param [in] input_sums Pointer to an input buffer.
  * @param [in] output_vec Pointer to an output buffer.

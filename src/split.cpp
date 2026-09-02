@@ -62,7 +62,7 @@ extern "C" __global__ __aicore__ void split_ind_uint16(
  * @brief Call the `split` kernel for UINT16 data type.
  *
  * @param [in] blockDim Number of blocks for the kernel launch.
- * @param [in] stream CUDA stream.
+ * @param [in] stream NPU stream.
  * @param [in] in Pointer to an input buffer.
  * @param [in] mask Pointer to an input buffer.
  * @param [in] out Pointer to an output buffer.
@@ -79,7 +79,7 @@ extern "C" void launch_split_uint16(uint32_t blockDim, void* stream,
  * @brief Call the `split_ind` kernel for UINT16 data type.
  *
  * @param [in] blockDim Number of blocks for the kernel launch.
- * @param [in] stream CUDA stream.
+ * @param [in] stream NPU stream.
  * @param [in] vec_in Pointer to an input buffer.
  * @param [in] mask_in Pointer to an input buffer.
  * @param [in] indices_in Pointer to an input buffer.

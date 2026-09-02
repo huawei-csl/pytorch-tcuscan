@@ -37,7 +37,7 @@ extern "C" __global__ __aicore__ void gather_spmv(GM_ADDR values_in,
  * @brief Launch the `gather_spmv` kernel.
  *
  * @param [in] blockDim Number of blocks for the kernel launch.
- * @param [in] stream CUDA stream.
+ * @param [in] stream NPU stream.
  * @param [in] values_in Pointer to an input buffer.
  * @param [in] cols_in Pointer to an input buffer.
  * @param [in] vec_out Pointer to an output buffer.

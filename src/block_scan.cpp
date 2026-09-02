@@ -69,7 +69,7 @@ extern "C" __global__ __aicore__ void block_scan_fp16(
  * @brief Call the `block_scan` kernel for FP16 data type.
  *
  * @param [in] blockDim Number of blocks for the kernel launch.
- * @param [in] stream CUDA stream.
+ * @param [in] stream NPU stream.
  * @param [in] input_vec Pointer to an input buffer.
  * @param [in] lower Pointer to an input buffer.
  * @param [in] upper_strict Pointer to an input buffer.

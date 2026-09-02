@@ -173,7 +173,7 @@ extern "C" __global__ __aicore__ void seg_sum_multi_core_int8(
  * @brief Call the `seg_sum_multi_core` kernel for FP16 data type.
  *
  * @param [in] blockDim Number of blocks for the kernel launch.
- * @param [in] stream CUDA stream.
+ * @param [in] stream NPU stream.
  * @param [in] vec_in Pointer to an input buffer.
  * @param [in] indptr Pointer to an input buffer.
  * @param [in] segment_offsets Pointer to an input buffer.
@@ -195,7 +195,7 @@ extern "C" void launch_seg_sum_multi_core_fp16(uint32_t blockDim, void* stream,
  * @brief Call the `seg_sum_multi_core` kernel for INT8 data type.
  *
  * @param [in] blockDim Number of blocks for the kernel launch.
- * @param [in] stream CUDA stream.
+ * @param [in] stream NPU stream.
  * @param [in] vec_in Pointer to an input buffer.
  * @param [in] indptr Pointer to an input buffer.
  * @param [in] segment_offsets Pointer to an input buffer.

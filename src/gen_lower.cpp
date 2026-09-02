@@ -65,7 +65,7 @@ extern "C" __global__ __aicore__ void gen_lower_int8(GM_ADDR dst,
  * @brief Call the `gen_lower` kernel for FP16 data type.
  *
  * @param [in] blockDim Number of blocks for the kernel launch.
- * @param [in] stream CUDA stream.
+ * @param [in] stream NPU stream.
  * @param [in] dst Pointer to an input buffer.
  * @param [in] workspace Pointer to workspace.
  * @param [in] tiling Pointer to the tiling buffer.
@@ -80,7 +80,7 @@ extern "C" void launch_gen_lower_fp16(uint32_t blockDim, void* stream,
  * @brief Call the `gen_lower` kernel for INT8 data type.
  *
  * @param [in] blockDim Number of blocks for the kernel launch.
- * @param [in] stream CUDA stream.
+ * @param [in] stream NPU stream.
  * @param [in] dst Pointer to an input buffer.
  * @param [in] workspace Pointer to workspace.
  * @param [in] tiling Pointer to the tiling buffer.

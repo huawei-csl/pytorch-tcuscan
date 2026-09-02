@@ -63,7 +63,7 @@ extern "C" __global__ __aicore__ void row_scan_fp16(GM_ADDR input_vec,
  * @brief Call the `row_scan` kernel for FP16 data type.
  *
  * @param [in] blockDim Number of blocks for the kernel launch.
- * @param [in] stream CUDA stream.
+ * @param [in] stream NPU stream.
  * @param [in] input_vec Pointer to an input buffer.
  * @param [in] output_vec Pointer to an output buffer.
  * @param [in] workspace Pointer to workspace.

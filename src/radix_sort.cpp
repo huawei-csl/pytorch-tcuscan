@@ -171,7 +171,7 @@ extern "C" __global__ __aicore__ void radix_sort_int16(GM_ADDR in, GM_ADDR out,
  * @brief Call the `radix_sort` kernel for FP16 data type.
  *
  * @param [in] blockDim Number of blocks for the kernel launch.
- * @param [in] stream CUDA stream.
+ * @param [in] stream NPU stream.
  * @param [in] in Pointer to an input buffer.
  * @param [in] out Pointer to an output buffer.
  * @param [in] indices Pointer to an input buffer.
@@ -190,7 +190,7 @@ extern "C" void launch_radix_sort_fp16(uint32_t blockDim, void* stream,
  * @brief Call the `radix_sort` kernel for INT16 data type.
  *
  * @param [in] blockDim Number of blocks for the kernel launch.
- * @param [in] stream CUDA stream.
+ * @param [in] stream NPU stream.
  * @param [in] in Pointer to an input buffer.
  * @param [in] out Pointer to an output buffer.
  * @param [in] indices Pointer to an input buffer.

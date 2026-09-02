@@ -36,7 +36,7 @@ extern "C" __global__ __aicore__ void searchsorted_int32(GM_ADDR sorted,
  * @brief Call the `searchsorted` kernel for INT32 data type.
  *
  * @param [in] blockDim Number of blocks for the kernel launch.
- * @param [in] stream CUDA stream.
+ * @param [in] stream NPU stream.
  * @param [in] sorted Pointer to an input buffer.
  * @param [in] values Pointer to an input buffer.
  * @param [in] out Pointer to an output buffer.

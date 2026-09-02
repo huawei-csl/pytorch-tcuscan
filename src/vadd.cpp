@@ -38,7 +38,7 @@ extern "C" __global__ __aicore__ void vadd_fp16(GM_ADDR x, GM_ADDR y, GM_ADDR z,
  * @brief Call the `vadd` kernel for FP16 data type.
  *
  * @param [in] blockDim Number of blocks for the kernel launch.
- * @param [in] stream CUDA stream.
+ * @param [in] stream NPU stream.
  * @param [in] x Pointer to the input vector.
  * @param [in] y Pointer to the input vector.
  * @param [in] z Pointer to the output vector.

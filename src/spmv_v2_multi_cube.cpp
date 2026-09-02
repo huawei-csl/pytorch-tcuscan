@@ -189,7 +189,7 @@ extern "C" __global__ __aicore__ void spmv_v2_multi_cube_fp16(
  * @brief Call the `spmv_v2_multi_cube` kernel for FP16 data type.
  *
  * @param [in] blockDim Number of blocks for the kernel launch.
- * @param [in] stream CUDA stream.
+ * @param [in] stream NPU stream.
  * @param [in] vec_in Pointer to an input buffer.
  * @param [in] cols_in Pointer to an input buffer.
  * @param [in] upper Pointer to an input buffer.

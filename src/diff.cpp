@@ -56,7 +56,7 @@ extern "C" __global__ __aicore__ void diff_fp32(GM_ADDR vec_in, GM_ADDR vec_out,
  * @brief Call the `diff` kernel for FP16 data type.
  *
  * @param [in] blockDim Number of blocks for the kernel launch.
- * @param [in] stream CUDA stream.
+ * @param [in] stream NPU stream.
  * @param [in] vec_in Pointer to the input vector.
  * @param [in] vec_out Pointer to the output vector.
  * @param [in] workspace Pointer to workspace.
@@ -73,7 +73,7 @@ extern "C" void launch_diff_fp16(uint32_t blockDim, void* stream,
  * @brief Call the `diff` kernel for FP32 data type.
  *
  * @param [in] blockDim Number of blocks for the kernel launch.
- * @param [in] stream CUDA stream.
+ * @param [in] stream NPU stream.
  * @param [in] vec_in Pointer to the input vector.
  * @param [in] vec_out Pointer to the output vector.
  * @param [in] workspace Pointer to workspace.

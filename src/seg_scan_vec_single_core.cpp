@@ -39,7 +39,7 @@ extern "C" __global__ __aicore__ void seg_scan_vec_single_core(
  * @brief Launch the `seg_scan_vec_single_core` kernel.
  *
  * @param [in] blockDim Number of blocks for the kernel launch.
- * @param [in] stream CUDA stream.
+ * @param [in] stream NPU stream.
  * @param [in] vec_in Pointer to an input buffer.
  * @param [in] f_in Pointer to an input buffer.
  * @param [in] vec_out Pointer to an output buffer.

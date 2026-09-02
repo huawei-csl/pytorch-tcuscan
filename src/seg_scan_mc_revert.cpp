@@ -39,7 +39,7 @@ extern "C" __global__ __aicore__ void seg_scan_mc_revert(
  * @brief Launch the `seg_scan_mc_revert` kernel.
  *
  * @param [in] blockDim Number of blocks for the kernel launch.
- * @param [in] stream CUDA stream.
+ * @param [in] stream NPU stream.
  * @param [in] vec_in Pointer to an input buffer.
  * @param [in] vec_f_in Pointer to an input buffer.
  * @param [in] vec_diff_in Pointer to an input buffer.

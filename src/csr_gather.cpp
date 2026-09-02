@@ -48,7 +48,7 @@ extern "C" __global__ __aicore__ void csr_gather_fp32(
  * @brief Call the `csr_gather` kernel for FP16 data type.
  *
  * @param [in] blockDim Number of blocks for the kernel launch.
- * @param [in] stream CUDA stream.
+ * @param [in] stream NPU stream.
  * @param [in] values_in Pointer to an input buffer.
  * @param [in] cols_in Pointer to an input buffer.
  * @param [in] x_in Pointer to an input buffer.
@@ -68,7 +68,7 @@ extern "C" void launch_csr_gather_fp16(uint32_t blockDim, void* stream,
  * @brief Call the `csr_gather` kernel for INT16 data type.
  *
  * @param [in] blockDim Number of blocks for the kernel launch.
- * @param [in] stream CUDA stream.
+ * @param [in] stream NPU stream.
  * @param [in] values_in Pointer to an input buffer.
  * @param [in] cols_in Pointer to an input buffer.
  * @param [in] x_in Pointer to an input buffer.
@@ -89,7 +89,7 @@ extern "C" void launch_csr_gather_int16(uint32_t blockDim, void* stream,
  * @brief Call the `csr_gather` kernel for FP32 data type.
  *
  * @param [in] blockDim Number of blocks for the kernel launch.
- * @param [in] stream CUDA stream.
+ * @param [in] stream NPU stream.
  * @param [in] values_in Pointer to an input buffer.
  * @param [in] cols_in Pointer to an input buffer.
  * @param [in] x_in Pointer to an input buffer.
