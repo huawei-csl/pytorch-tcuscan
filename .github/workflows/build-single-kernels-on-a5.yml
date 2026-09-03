@@ -1,0 +1,80 @@
+name: CI (A5 kernels)
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:            # runs on every commit pushed to a pull request
+  schedule:
+    - cron: "0 2 * * *"   # runs every day at 02:00 UTC
+  workflow_dispatch:       # allows manual trigger
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build_single_kernel_a5:
+    name: Build all kernels for A5 (x86_64, py3.12)
+    runs-on: ubuntu-latest
+    # A5 support is still being migrated (see branch 100-migrate-to-a5), so a
+    # failing kernel must not block the rest of the pipeline yet.
+    continue-on-error: true
+
+    container:
+      image: quay.io/ascend/cann:9.1.0-950-ubuntu22.04-py3.12
+
+    steps:
+      - name: Show OS
+        run: cat /etc/os-release
+
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Compile every A5 kernel
+        shell: bash
+        run: |
+          set -uo pipefail   # no -e: the loop below handles compile failures itself
+
+          source /usr/local/Ascend/ascend-toolkit/set_env.sh
+          source /usr/local/Ascend/nnal/atb/set_env.sh
+          # to avoid libascend_hal.so issue
+          export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/Ascend/ascend-toolkit/latest/$(uname -i)-linux/devlib
+
+          # src/pybind11.cpp is the host-side torch extension, not a device kernel.
+          mapfile -t kernels < <(find src -maxdepth 1 -name '*.cpp' ! -name 'pybind11.cpp' -printf '%f\n' | sed 's/\.cpp$//' | sort)
+          failed=()
+
+          {
+            echo "## A5 kernel compilation"
+            echo
+            echo "| Kernel | Result | Library size |"
+            echo "|---|---|---|"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          for kernel in "${kernels[@]}"; do
+            echo "::group::make compile_a5_${kernel}"
+            lib="build/lib/libkernel_${kernel}_a5.so"
+            if make compile_a5_"${kernel}" && [ -f "$lib" ]; then
+              ls -lh "$lib"
+              echo "| \`${kernel}\` | ✅ | $(du -h "$lib" | cut -f1) |" >> "$GITHUB_STEP_SUMMARY"
+            else
+              failed+=("${kernel}")
+              echo "::error title=compile_a5_${kernel}::A5 compilation failed for src/${kernel}.cpp"
+              echo "| \`${kernel}\` | ❌ | — |" >> "$GITHUB_STEP_SUMMARY"
+            fi
+            echo "::endgroup::"
+          done
+
+          {
+            echo
+            echo "${#kernels[@]} kernels attempted, ${#failed[@]} failed."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ ${#failed[@]} -ne 0 ]; then
+            echo "Failed kernels: ${failed[*]}"
+            exit 1
+          fi
+          echo "All ${#kernels[@]} A5 kernels compiled successfully."
