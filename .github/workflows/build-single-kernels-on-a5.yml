@@ -39,9 +39,6 @@ jobs:
           set -uo pipefail   # no -e: the loop below handles compile failures itself
 
           source /usr/local/Ascend/ascend-toolkit/set_env.sh
-          source /usr/local/Ascend/nnal/atb/set_env.sh
-          # to avoid libascend_hal.so issue
-          export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/Ascend/ascend-toolkit/latest/$(uname -i)-linux/devlib
 
           # src/pybind11.cpp is the host-side torch extension, not a device kernel.
           mapfile -t kernels < <(find src -maxdepth 1 -name '*.cpp' ! -name 'pybind11.cpp' -printf '%f\n' | sed 's/\.cpp$//' | sort)

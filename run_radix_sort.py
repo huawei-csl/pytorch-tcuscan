@@ -143,9 +143,7 @@ def run_radix_sort(lib, x: torch.Tensor, s: int):
         device=DEVICE,
     )
 
-    stream_ptr = (
-        torch.npu.current_stream()._as_parameter_
-    )  # noqa: SLF001  # pylint: disable=protected-access
+    stream_ptr = torch.npu.current_stream()._as_parameter_  # noqa
 
     kernel(
         block_dim,
