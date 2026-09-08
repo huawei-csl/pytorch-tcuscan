@@ -77,9 +77,8 @@ PYBIND11_MODULE(tcuscan_ops, m) {
         "Sparse Matrix-Vector Multiplication: y = alpha * A @ x + beta * y");
   m.def("run_spmv_v2", &tcuscan::run_spmv_v2, pybind11::arg("vals"),
         pybind11::arg("indptr"), pybind11::arg("cols"), pybind11::arg("x"),
-        pybind11::arg("s"), pybind11::arg("segm_offsets") = pybind11::none(),
-        pybind11::arg("alpha") = 1.0, pybind11::arg("beta") = 0.0,
-        pybind11::arg("y") = pybind11::none(),
+        pybind11::arg("s"), pybind11::arg("alpha") = 1.0,
+        pybind11::arg("beta") = 0.0, pybind11::arg("y") = pybind11::none(),
         "Sparse Matrix-Vector Multiplication Using Segmented Sum: "
         "y = alpha * A @ x + beta * y");
   m.def("run_spmv_multi_cube", &tcuscan::run_spmv_multi_cube,

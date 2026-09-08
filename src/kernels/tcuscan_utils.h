@@ -1193,22 +1193,6 @@ enum class GroupSyncDirection {
 };
 
 /**
- * @brief Synchronize all blocks.
- *
- * @param [in] global_workspace Global tensor used to synchronize blocks.
- * @param [in] local_workspace_q Queue from which the local synchronization
- * tensor will be allocated. Position must be VECIN.
- */
-__aicore__ inline void SyncAllBlocks(
-    const GlobalTensor<int32_t>& global_workspace,
-    TQue<QuePosition::VECIN, 1>& local_workspace_q) {
-  exec_mode::AssertIsAIV();
-  LocalTensor<int32_t> lt = local_workspace_q.AllocTensor<int32_t>();
-  SyncAll(global_workspace, lt);
-  local_workspace_q.FreeTensor(lt);
-}
-
-/**
  * @brief Returns a synchronization config.
  *
  * @param [in] mode Synchronization mode.
