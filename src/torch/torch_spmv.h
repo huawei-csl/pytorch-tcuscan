@@ -288,25 +288,22 @@ at::Tensor run_spmv_v2(const at::Tensor& vals, const at::Tensor& indptr,
   const at::Tensor workspace_tensor =
       tcuscan::alloc_zeros_workspace(workspace_size, device);
 
-  // Offset indptr by one element, since first element is always zero.
-  void* indptr_data = static_cast<void*>(
-      static_cast<uint8_t*>(const_cast<void*>(indptr.storage().data())) +
-      indptr.element_size());
-
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
   if (is_fp32) {
     launch_spmv_v2_fp32(
         block_dim, acl_stream, const_cast<void*>(vals.storage().data()),
         const_cast<void*>(cols.storage().data()),
-        const_cast<void*>(indptr_data), const_cast<void*>(x.storage().data()),
+        const_cast<void*>(indptr.storage().data()),
+        const_cast<void*>(x.storage().data()),
         const_cast<void*>(z.storage().data()),
         const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else {
     launch_spmv_v2_fp16(
         block_dim, acl_stream, const_cast<void*>(vals.storage().data()),
         const_cast<void*>(cols.storage().data()),
-        const_cast<void*>(indptr_data), const_cast<void*>(x.storage().data()),
+        const_cast<void*>(indptr.storage().data()),
+        const_cast<void*>(x.storage().data()),
         const_cast<void*>(z.storage().data()),
         const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   }

@@ -117,7 +117,8 @@ __aicore__ inline void run_spmv_v2(GM_ADDR vec_in, GM_ADDR cols_in,
     KernelSegSumVecRevert<OutputT, false, true> op(
         block_len, num_segments_per_block, tile_len, block_vec_offset,
         static_cast<OutputT>(alpha));
-    op.Init(spec_block_scan_ws, segm_ind_in + segm_ind_offset * sizeof(int32_t),
+    op.Init(spec_block_scan_ws,
+            segm_ind_in + (segm_ind_offset + 1) * sizeof(int32_t),
             vec_out + segm_ind_offset * sizeof(OutputT));
     op.Process();
   }
