@@ -18,13 +18,11 @@
 /// @cond
 extern "C" {
 void launch_spmv_v2_fp16(uint32_t blockDim, void* stream, void* vec_in,
-                         void* cols_in, void* indptr, void* x_in,
-                         void* segm_offsets, void* vec_out, void* workspace,
-                         void* tiling_gm);
+                         void* cols_in, void* indptr, void* x_in, void* vec_out,
+                         void* workspace, void* tiling_gm);
 void launch_spmv_v2_fp32(uint32_t blockDim, void* stream, void* vec_in,
-                         void* cols_in, void* indptr, void* x_in,
-                         void* segm_offsets, void* vec_out, void* workspace,
-                         void* tiling_gm);
+                         void* cols_in, void* indptr, void* x_in, void* vec_out,
+                         void* workspace, void* tiling_gm);
 void launch_spmv_v2_multi_cube_fp16(uint32_t blockDim, void* stream,
                                     void* vec_in, void* cols_in, void* upper,
                                     void* lower, void* indptr, void* x_in,
@@ -213,7 +211,6 @@ at::Tensor run_spmv(const at::Tensor& vals, const at::Tensor& indptr,
  * @param cols column index array of the CSR matrix
  * @param x dense vector to multiply
  * @param s tile size for the multi-core segmented sum kernel
- * @param [in] segm_offsets Segment start index offset per block.
  * @param alpha Scaling factor of the SpMV product, applied in-kernel by the
  * segment reduction as it writes each segment sum (fp32).
  * @param beta Scaling factor of the incoming @p y, applied in-kernel by a
@@ -227,7 +224,6 @@ at::Tensor run_spmv(const at::Tensor& vals, const at::Tensor& indptr,
  */
 at::Tensor run_spmv_v2(const at::Tensor& vals, const at::Tensor& indptr,
                        const at::Tensor& cols, const at::Tensor& x, int s,
-                       c10::optional<at::Tensor> segm_offsets = c10::nullopt,
                        double alpha = 1.0, double beta = 0.0,
                        c10::optional<at::Tensor> y = c10::nullopt) {
   const auto vals_dtype = vals.options().dtype();
@@ -261,21 +257,6 @@ at::Tensor run_spmv_v2(const at::Tensor& vals, const at::Tensor& indptr,
       host_utils::CeilDiv(num_tiles, block_dim);
   const uint32_t block_len = max_num_tiles_per_block * align_size;
 
-  at::Tensor segm_offsets_;
-  if (segm_offsets.has_value()) {
-    segm_offsets_ = segm_offsets.value();
-  } else {
-    const at::Tensor sstart = torch::clamp(
-        torch::arange(
-            0, block_dim + 1,
-            torch::TensorOptions().dtype(torch::kInt32).device(device)) *
-            block_len,
-        c10::nullopt, static_cast<int32_t>(nnz));
-
-    segm_offsets_ = torch::searchsorted(indptr.to(torch::kInt32), sstart,
-                                        /*out_int32=*/true);
-  }
-
   at::Tensor z;
   float beta_kernel;
   if (y.has_value()) {
@@ -307,27 +288,22 @@ at::Tensor run_spmv_v2(const at::Tensor& vals, const at::Tensor& indptr,
   const at::Tensor workspace_tensor =
       tcuscan::alloc_zeros_workspace(workspace_size, device);
 
-  // Offset indptr by one element, since first element is always zero.
-  void* indptr_data = static_cast<void*>(
-      static_cast<uint8_t*>(const_cast<void*>(indptr.storage().data())) +
-      indptr.element_size());
-
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
   if (is_fp32) {
     launch_spmv_v2_fp32(
         block_dim, acl_stream, const_cast<void*>(vals.storage().data()),
         const_cast<void*>(cols.storage().data()),
-        const_cast<void*>(indptr_data), const_cast<void*>(x.storage().data()),
-        const_cast<void*>(segm_offsets_.storage().data()),
+        const_cast<void*>(indptr.storage().data()),
+        const_cast<void*>(x.storage().data()),
         const_cast<void*>(z.storage().data()),
         const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else {
     launch_spmv_v2_fp16(
         block_dim, acl_stream, const_cast<void*>(vals.storage().data()),
         const_cast<void*>(cols.storage().data()),
-        const_cast<void*>(indptr_data), const_cast<void*>(x.storage().data()),
-        const_cast<void*>(segm_offsets_.storage().data()),
+        const_cast<void*>(indptr.storage().data()),
+        const_cast<void*>(x.storage().data()),
         const_cast<void*>(z.storage().data()),
         const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   }
