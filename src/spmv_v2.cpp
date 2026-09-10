@@ -8,6 +8,7 @@
 #include "kernels/constants.h"
 #include "kernels/kernel_csr_gather.h"
 #include "kernels/kernel_row_scan.h"
+#include "kernels/kernel_scale.h"
 #include "kernels/kernel_seg_sum_vec_revert.h"
 #include "kernels/tcuscan_utils.h"
 #include "tiling/tiling_spmv.h"
@@ -25,9 +26,8 @@ using namespace tcuscan;
  * @param [in] cols_in Pointer to the CSR column indices array.
  * @param [in] segm_ind_in Pointer to the segment indices vector.
  * @param [in] x_in Pointer to the dense input vector.
- * @param [in] upper Pointer to an upper-triangular all-ones square matrix of
+ * @param [in] upper_in Pointer to an upper-triangular all-ones square matrix of
  * size \f$\textit{tile\_len} \times \textit{tile\_len}\f$.
- * @param [in] segm_offset_per_block Pointer to segment index offset per block.
  * @param [out] vec_out Pointer to the output vector.
  * @param [in,out] workspace Pointer to a memory region used as workspace.
  * @param [in] vec_len Input vector length (number of non-zeros).
@@ -37,13 +37,20 @@ using namespace tcuscan;
  * @param [in] block_len Block length assigned to each vector core. Must be a
  * multiple of \f$\textit{tile\_len}^2\f$ so that blocks split on matrix tile
  * boundaries.
+ * @param [in] alpha Scaling factor of the SpMV product, applied by the
+ * segment reduction as it writes each segment sum.
+ * @param [in] beta Scaling factor applied in-place to @p vec_out before the
+ * segment reduction accumulates on top of it. Following the BLAS convention,
+ * `beta == 0` overwrites @p vec_out without reading it.
  */
 template <typename T>
-__aicore__ inline void run_spmv_v2(
-    GM_ADDR vec_in, GM_ADDR cols_in, GM_ADDR segm_ind_in, GM_ADDR x_in,
-    GM_ADDR upper_in, GM_ADDR segm_offset_per_block, GM_ADDR vec_out,
-    GM_ADDR workspace, uint32_t vec_len, uint32_t num_segments, uint32_t x_len,
-    uint32_t tile_len, uint32_t block_len) {
+__aicore__ inline void run_spmv_v2(GM_ADDR vec_in, GM_ADDR cols_in,
+                                   GM_ADDR segm_ind_in, GM_ADDR x_in,
+                                   GM_ADDR upper_in, GM_ADDR vec_out,
+                                   GM_ADDR workspace, uint32_t vec_len,
+                                   uint32_t num_segments, uint32_t x_len,
+                                   uint32_t tile_len, uint32_t block_len,
+                                   float alpha, float beta) {
   using OutputT = tcuscan::cube_unit::CubeOutType_t<T>;
 
   const uint32_t align_size = tile_len * tile_len;
@@ -53,12 +60,18 @@ __aicore__ inline void run_spmv_v2(
   GM_ADDR const csr_products_ws = workspace;
   GM_ADDR const spec_block_scan_ws = workspace + pad_size;
 
+  // `y = beta * y` pre-pass. It must complete before the segment reduction
+  // atomically accumulates `alpha * A @ x` into `vec_out`; the two `SyncAll`
+  // barriers below provide that ordering. No-op when `beta == 1`.
+  run_scale_inplace<OutputT, false>(vec_out, num_segments,
+                                    static_cast<OutputT>(beta));
+
   const uint32_t csr_gather_tile_len = align_size > 1024 ? 1024 : align_size;
   run_csr_gather<T, false>(vec_in, cols_in, x_in, csr_products_ws, vec_len,
                            x_len, csr_gather_tile_len);
 
   sync::SyncGroup<sync::GroupSyncDirection::FULL>();
-  sync::SyncAllCores();
+  AscendC::SyncAll<false /*isAIVOnly*/>();
 
   if ASCEND_IS_AIC {
     KernelRowScan<T> op_cube(tile_len, tile_len, padded_vec_len);
@@ -67,7 +80,7 @@ __aicore__ inline void run_spmv_v2(
   }
 
   sync::SyncGroup<sync::GroupSyncDirection::FULL>();
-  sync::SyncAllCores();
+  AscendC::SyncAll<false /*isAIVOnly*/>();
   AscendC::PipeBarrier<PIPE_ALL>();
 
   if ASCEND_IS_AIV {
@@ -78,10 +91,18 @@ __aicore__ inline void run_spmv_v2(
     const uint32_t num_vec_blocks = AscendC::GetBlockNum() * GetTaskRation();
     const auto id = GetBlockIdx();
 
-    int32_t segm_ind_offset = scalar::GetGMValue<int32_t>(
-        segm_offset_per_block, id, num_vec_blocks + 1);
-    const int32_t next_offset = scalar::GetGMValue<int32_t>(
-        segm_offset_per_block, id + 1, num_vec_blocks + 1);
+    // Fused searchsorted: each group derives its own two per-block segment
+    // offsets by binary-searching the full indptr for its block boundaries
+    // `sstart[id] = min(id * block_len, vec_len)`
+    const uint32_t sstart_id = scalar::Min<uint32_t>(id * block_len, vec_len);
+    const uint32_t sstart_next =
+        scalar::Min<uint32_t>((id + 1) * block_len, vec_len);
+    int32_t segm_ind_offset =
+        static_cast<int32_t>(scalar::LowerBoundGM<int32_t>(
+            segm_ind_in, num_segments + 1, sstart_id));
+    const int32_t next_offset =
+        static_cast<int32_t>(scalar::LowerBoundGM<int32_t>(
+            segm_ind_in, num_segments + 1, sstart_next));
     const int32_t num_segments_per_block = next_offset - segm_ind_offset;
 
     // The boundaries of each segment must overlap
@@ -100,8 +121,10 @@ __aicore__ inline void run_spmv_v2(
     }
 
     KernelSegSumVecRevert<OutputT, false, true> op(
-        block_len, num_segments_per_block, tile_len, block_vec_offset);
-    op.Init(spec_block_scan_ws, segm_ind_in + segm_ind_offset * sizeof(int32_t),
+        block_len, num_segments_per_block, tile_len, block_vec_offset,
+        static_cast<OutputT>(alpha));
+    op.Init(spec_block_scan_ws,
+            segm_ind_in + (segm_ind_offset + 1) * sizeof(int32_t),
             vec_out + segm_ind_offset * sizeof(OutputT));
     op.Process();
   }
@@ -118,15 +141,15 @@ __aicore__ inline void run_spmv_v2(
  * @param [in] cols_in Pointer to the CSR column indices array.
  * @param [in] indptr Pointer to the segment indices vector (CSR row pointers).
  * @param [in] x_in Pointer to the dense input vector.
- * @param [in] segment_offsets Pointer to the segment offset per block.
  * @param [out] vec_out Pointer to the output vector.
  * @param [in,out] workspace Pointer to workspace.
  * @param [in] tiling_gm Pointer to the tiling buffer.
  */
 extern "C" __global__ __aicore__ void spmv_v2_fp16(
     GM_ADDR vec_in, GM_ADDR cols_in, GM_ADDR indptr, GM_ADDR x_in,
-    GM_ADDR segment_offsets, GM_ADDR vec_out, GM_ADDR workspace,
-    GM_ADDR tiling_gm) {
+    GM_ADDR vec_out, GM_ADDR workspace, GM_ADDR tiling_gm) {
+  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2);
+
   tcuscan::SpMVTiling tiling;
   GetTilingData(&tiling, tiling_gm);
 
@@ -135,12 +158,14 @@ extern "C" __global__ __aicore__ void spmv_v2_fp16(
   const uint32_t x_len = tiling.x_len;
   const uint32_t tile_len = tiling.tile_len;
   const uint32_t block_len = tiling.block_len;
+  const float alpha = tiling.alpha;
+  const float beta = tiling.beta;
 
   GM_ADDR const upper = load_tril_matrix<half>(tile_len);
 
-  run_spmv_v2<half>(vec_in, cols_in, indptr, x_in, upper, segment_offsets,
-                    vec_out, workspace, vec_len, num_segments, x_len, tile_len,
-                    block_len);
+  run_spmv_v2<half>(vec_in, cols_in, indptr, x_in, upper, vec_out, workspace,
+                    vec_len, num_segments, x_len, tile_len, block_len, alpha,
+                    beta);
 }
 
 /**
@@ -154,15 +179,15 @@ extern "C" __global__ __aicore__ void spmv_v2_fp16(
  * @param [in] cols_in Pointer to the CSR column indices array.
  * @param [in] indptr Pointer to the segment indices vector (CSR row pointers).
  * @param [in] x_in Pointer to the dense input vector.
- * @param [in] segment_offsets Pointer to the segment offset per block.
  * @param [out] vec_out Pointer to the output vector.
  * @param [in,out] workspace Pointer to workspace.
  * @param [in] tiling_gm Pointer to the tiling buffer.
  */
 extern "C" __global__ __aicore__ void spmv_v2_fp32(
     GM_ADDR vec_in, GM_ADDR cols_in, GM_ADDR indptr, GM_ADDR x_in,
-    GM_ADDR segment_offsets, GM_ADDR vec_out, GM_ADDR workspace,
-    GM_ADDR tiling_gm) {
+    GM_ADDR vec_out, GM_ADDR workspace, GM_ADDR tiling_gm) {
+  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2);
+
   tcuscan::SpMVTiling tiling;
   GetTilingData(&tiling, tiling_gm);
 
@@ -171,10 +196,56 @@ extern "C" __global__ __aicore__ void spmv_v2_fp32(
   const uint32_t x_len = tiling.x_len;
   const uint32_t tile_len = tiling.tile_len;
   const uint32_t block_len = tiling.block_len;
+  const float alpha = tiling.alpha;
+  const float beta = tiling.beta;
 
   GM_ADDR const upper = load_tril_matrix<float>(tile_len);
 
-  run_spmv_v2<float>(vec_in, cols_in, indptr, x_in, upper, segment_offsets,
-                     vec_out, workspace, vec_len, num_segments, x_len, tile_len,
-                     block_len);
+  run_spmv_v2<float>(vec_in, cols_in, indptr, x_in, upper, vec_out, workspace,
+                     vec_len, num_segments, x_len, tile_len, block_len, alpha,
+                     beta);
+}
+
+/**
+ * @brief Call the `spmv_v2` kernel for FP16 data type.
+ *
+ * @param [in] blockDim Number of blocks for the kernel launch.
+ * @param [in] stream NPU stream.
+ * @param [in] vec_in Pointer to an input buffer.
+ * @param [in] cols_in Pointer to an input buffer.
+ * @param [in] indptr Pointer to an input buffer.
+ * @param [in] x_in Pointer to an input buffer.
+ * @param [in] vec_out Pointer to an output buffer.
+ * @param [in] workspace Pointer to workspace.
+ * @param [in] tiling_gm Pointer to the tiling buffer.
+ */
+extern "C" void launch_spmv_v2_fp16(uint32_t blockDim, void* stream,
+                                    uint8_t* vec_in, uint8_t* cols_in,
+                                    uint8_t* indptr, uint8_t* x_in,
+                                    uint8_t* vec_out, uint8_t* workspace,
+                                    uint8_t* tiling_gm) {
+  spmv_v2_fp16<<<blockDim, nullptr, stream>>>(vec_in, cols_in, indptr, x_in,
+                                              vec_out, workspace, tiling_gm);
+}
+
+/**
+ * @brief Call the `spmv_v2` kernel for FP32 data type.
+ *
+ * @param [in] blockDim Number of blocks for the kernel launch.
+ * @param [in] stream NPU stream.
+ * @param [in] vec_in Pointer to an input buffer.
+ * @param [in] cols_in Pointer to an input buffer.
+ * @param [in] indptr Pointer to an input buffer.
+ * @param [in] x_in Pointer to an input buffer.
+ * @param [in] vec_out Pointer to an output buffer.
+ * @param [in] workspace Pointer to workspace.
+ * @param [in] tiling_gm Pointer to the tiling buffer.
+ */
+extern "C" void launch_spmv_v2_fp32(uint32_t blockDim, void* stream,
+                                    uint8_t* vec_in, uint8_t* cols_in,
+                                    uint8_t* indptr, uint8_t* x_in,
+                                    uint8_t* vec_out, uint8_t* workspace,
+                                    uint8_t* tiling_gm) {
+  spmv_v2_fp32<<<blockDim, nullptr, stream>>>(vec_in, cols_in, indptr, x_in,
+                                              vec_out, workspace, tiling_gm);
 }

@@ -22,6 +22,10 @@ struct CSRGatherTiling {
   uint32_t num_x_elems;
   /// @brief Width of the tile: length of the vectors processed by CumSum
   uint32_t tile_len;
+  /// @brief Maximum number of `x` elements held in Unified Buffer at once.
+  /// Determines the fast-path threshold and the chunk size used for larger `x`
+  /// vectors.
+  uint32_t x_tile_elems_max;
 };
 
 #pragma pack(pop)
