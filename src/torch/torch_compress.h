@@ -12,21 +12,54 @@
 
 #include "../tiling/tiling_compress.h"
 #include "../tiling/tiling_where.h"
-#include "aclrtlaunch_compress_fp16.h"
-#include "aclrtlaunch_compress_fp32.h"
-#include "aclrtlaunch_compress_ind_fp16.h"
-#include "aclrtlaunch_compress_ind_fp32.h"
-#include "aclrtlaunch_compress_ind_no_arange_fp16.h"
-#include "aclrtlaunch_compress_ind_no_arange_fp32.h"
-#include "aclrtlaunch_compress_with_sums_fp16.h"
-#include "aclrtlaunch_compress_with_sums_fp32.h"
-#include "aclrtlaunch_where_fp16.h"
 #include "commons.h"
 #include "tiling/platform/platform_ascendc.h"
 #include "torch_compare.h"
 #include "torch_npu/csrc/core/npu/NPUStream.h"
 #include "torch_reduce.h"
 #include "workspace.h"
+
+// Kernel launchers; documented at their definitions in src/*.cpp
+/// @cond
+extern "C" void launch_compress_fp16(uint32_t blockDim, void* stream, void* x,
+                                     void* mask, void* z, void* workspace,
+                                     void* tiling_gm);
+extern "C" void launch_compress_fp32(uint32_t blockDim, void* stream, void* x,
+                                     void* mask, void* z, void* workspace,
+                                     void* tiling_gm);
+extern "C" void launch_compress_ind_fp16(uint32_t blockDim, void* stream,
+                                         void* vec_in, void* indices_in,
+                                         void* mask, void* num_ones_per_block,
+                                         void* vec_out, void* indices_out,
+                                         void* workspace, void* tiling_gm);
+extern "C" void launch_compress_ind_fp32(uint32_t blockDim, void* stream,
+                                         void* vec_in, void* indices_in,
+                                         void* mask, void* num_ones_per_block,
+                                         void* vec_out, void* indices_out,
+                                         void* workspace, void* tiling_gm);
+extern "C" void launch_compress_ind_no_arange_fp16(
+    uint32_t blockDim, void* stream, void* vec_in, void* mask,
+    void* num_ones_per_block, void* vec_out, void* indices_out, void* workspace,
+    void* tiling_gm);
+extern "C" void launch_compress_ind_no_arange_fp32(
+    uint32_t blockDim, void* stream, void* vec_in, void* mask,
+    void* num_ones_per_block, void* vec_out, void* indices_out, void* workspace,
+    void* tiling_gm);
+extern "C" void launch_compress_with_sums_fp16(uint32_t blockDim, void* stream,
+                                               void* x, void* mask,
+                                               void* num_ones_per_block,
+                                               void* z, void* workspace,
+                                               void* tiling_gm);
+extern "C" void launch_compress_with_sums_fp32(uint32_t blockDim, void* stream,
+                                               void* x, void* mask,
+                                               void* num_ones_per_block,
+                                               void* z, void* workspace,
+                                               void* tiling_gm);
+extern "C" void launch_where_fp16(uint32_t blockDim, void* stream,
+                                  void* mask_in, void* num_ones_per_block,
+                                  void* vec_out, void* workspace,
+                                  void* tiling_gm);
+/// @endcond
 
 namespace tcuscan {
 
@@ -76,19 +109,19 @@ at::Tensor run_compress(const at::Tensor& x, const at::Tensor& mask, int S) {
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
   if (dtype == torch::kHalf or dtype == torch::kInt16) {
-    ACLRT_LAUNCH_KERNEL(compress_with_sums_fp16)
-    (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
-     const_cast<void*>(mask.storage().data()),
-     const_cast<void*>(num_ones_per_block.storage().data()),
-     const_cast<void*>(z.storage().data()),
-     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+    launch_compress_with_sums_fp16(
+        block_dim, acl_stream, const_cast<void*>(x.storage().data()),
+        const_cast<void*>(mask.storage().data()),
+        const_cast<void*>(num_ones_per_block.storage().data()),
+        const_cast<void*>(z.storage().data()),
+        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else {
-    ACLRT_LAUNCH_KERNEL(compress_with_sums_fp32)
-    (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
-     const_cast<void*>(mask.storage().data()),
-     const_cast<void*>(num_ones_per_block.storage().data()),
-     const_cast<void*>(z.storage().data()),
-     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+    launch_compress_with_sums_fp32(
+        block_dim, acl_stream, const_cast<void*>(x.storage().data()),
+        const_cast<void*>(mask.storage().data()),
+        const_cast<void*>(num_ones_per_block.storage().data()),
+        const_cast<void*>(z.storage().data()),
+        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   }
 
   aclrtFree(tiling_device);
@@ -141,17 +174,17 @@ at::Tensor run_compress_pos(const at::Tensor& x, const at::Tensor& mask,
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
   if (dtype == torch::kHalf or dtype == torch::kInt16) {
-    ACLRT_LAUNCH_KERNEL(compress_fp16)
-    (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
-     const_cast<void*>(mask.storage().data()),
-     const_cast<void*>(z.storage().data()),
-     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+    launch_compress_fp16(
+        block_dim, acl_stream, const_cast<void*>(x.storage().data()),
+        const_cast<void*>(mask.storage().data()),
+        const_cast<void*>(z.storage().data()),
+        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else {
-    ACLRT_LAUNCH_KERNEL(compress_fp32)
-    (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
-     const_cast<void*>(mask.storage().data()),
-     const_cast<void*>(z.storage().data()),
-     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+    launch_compress_fp32(
+        block_dim, acl_stream, const_cast<void*>(x.storage().data()),
+        const_cast<void*>(mask.storage().data()),
+        const_cast<void*>(z.storage().data()),
+        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   }
 
   aclrtFree(tiling_device);
@@ -213,23 +246,23 @@ std::tuple<at::Tensor, at::Tensor> run_compress_ind(
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
   if (dtype == torch::kHalf or dtype == torch::kInt16) {
-    ACLRT_LAUNCH_KERNEL(compress_ind_fp16)
-    (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
-     const_cast<void*>(indices_in.storage().data()),
-     const_cast<void*>(mask.storage().data()),
-     const_cast<void*>(num_ones_per_block.storage().data()),
-     const_cast<void*>(z.storage().data()),
-     const_cast<void*>(indices_out.storage().data()),
-     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+    launch_compress_ind_fp16(
+        block_dim, acl_stream, const_cast<void*>(x.storage().data()),
+        const_cast<void*>(indices_in.storage().data()),
+        const_cast<void*>(mask.storage().data()),
+        const_cast<void*>(num_ones_per_block.storage().data()),
+        const_cast<void*>(z.storage().data()),
+        const_cast<void*>(indices_out.storage().data()),
+        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else {
-    ACLRT_LAUNCH_KERNEL(compress_ind_fp32)
-    (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
-     const_cast<void*>(indices_in.storage().data()),
-     const_cast<void*>(mask.storage().data()),
-     const_cast<void*>(num_ones_per_block.storage().data()),
-     const_cast<void*>(z.storage().data()),
-     const_cast<void*>(indices_out.storage().data()),
-     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+    launch_compress_ind_fp32(
+        block_dim, acl_stream, const_cast<void*>(x.storage().data()),
+        const_cast<void*>(indices_in.storage().data()),
+        const_cast<void*>(mask.storage().data()),
+        const_cast<void*>(num_ones_per_block.storage().data()),
+        const_cast<void*>(z.storage().data()),
+        const_cast<void*>(indices_out.storage().data()),
+        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   }
 
   aclrtFree(tiling_device);
@@ -286,21 +319,21 @@ std::tuple<at::Tensor, at::Tensor> run_compress_ind_no_arange(
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
   if (dtype == torch::kHalf or dtype == torch::kInt16) {
-    ACLRT_LAUNCH_KERNEL(compress_ind_no_arange_fp16)
-    (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
-     const_cast<void*>(mask.storage().data()),
-     const_cast<void*>(num_ones_per_block.storage().data()),
-     const_cast<void*>(z.storage().data()),
-     const_cast<void*>(indices_out.storage().data()),
-     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+    launch_compress_ind_no_arange_fp16(
+        block_dim, acl_stream, const_cast<void*>(x.storage().data()),
+        const_cast<void*>(mask.storage().data()),
+        const_cast<void*>(num_ones_per_block.storage().data()),
+        const_cast<void*>(z.storage().data()),
+        const_cast<void*>(indices_out.storage().data()),
+        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else {
-    ACLRT_LAUNCH_KERNEL(compress_ind_no_arange_fp32)
-    (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
-     const_cast<void*>(mask.storage().data()),
-     const_cast<void*>(num_ones_per_block.storage().data()),
-     const_cast<void*>(z.storage().data()),
-     const_cast<void*>(indices_out.storage().data()),
-     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+    launch_compress_ind_no_arange_fp32(
+        block_dim, acl_stream, const_cast<void*>(x.storage().data()),
+        const_cast<void*>(mask.storage().data()),
+        const_cast<void*>(num_ones_per_block.storage().data()),
+        const_cast<void*>(z.storage().data()),
+        const_cast<void*>(indices_out.storage().data()),
+        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   }
 
   aclrtFree(tiling_device);
@@ -330,7 +363,18 @@ at::Tensor run_filter_greater_equal(const at::Tensor& x, float pivot, int S) {
  * @return The subvector of `x`: `x[x <= pivot]`.
  */
 at::Tensor run_filter_less_equal(const at::Tensor& x, float pivot, int S) {
-  const at::Tensor mask = (x <= pivot).to(torch::kInt8);
+  const auto dtype = x.options().dtype();
+  at::Tensor mask;
+  if (dtype == at::kHalf) {
+    mask = run_less_equal(x, pivot, static_cast<uint32_t>(S * S));
+  } else {
+    // For non-fp16 dtypes the PyTorch op runs on the NPU stream; synchronize
+    // before launching ACLRT kernels in run_compress to avoid a data race on
+    // the mask.
+    mask = (x <= pivot).to(torch::kInt8);
+    auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
+    aclrtSynchronizeStream(acl_stream);
+  }
   return run_compress(x, mask, S);
 }
 
@@ -383,11 +427,11 @@ at::Tensor run_where(const at::Tensor& x, float pivot, int S) {
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
   if (dtype == at::kHalf) {
-    ACLRT_LAUNCH_KERNEL(where_fp16)
-    (block_dim, acl_stream, const_cast<void*>(mask.storage().data()),
-     const_cast<void*>(num_ones_per_block.storage().data()),
-     const_cast<void*>(z.storage().data()),
-     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+    launch_where_fp16(
+        block_dim, acl_stream, const_cast<void*>(mask.storage().data()),
+        const_cast<void*>(num_ones_per_block.storage().data()),
+        const_cast<void*>(z.storage().data()),
+        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else {
     /* Unsupported */
   }

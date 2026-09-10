@@ -43,17 +43,21 @@ class KernelGatherSpmv {
    * @param [in] idx_in_len Length of the input index vector.
    * @param [in] values_in_len Length of the input values_in_len vector.
    * @param [in] tile_len Length of the tile processed in a single iteration.
+   * @param [in] alpha Scaling factor applied to the gathered values. Default
+   * value is `1` (no scaling).
    */
 
   __aicore__ inline KernelGatherSpmv(uint32_t idx_in_len,
-                                     uint32_t values_in_len, uint32_t tile_len)
+                                     uint32_t values_in_len, uint32_t tile_len,
+                                     DataType alpha = 1)
       : vec_core_num_(GetBlockNum() * GetTaskRation()),
         values_in_len_(values_in_len),
         idx_in_len_(idx_in_len),
         tile_len_(tile_len),
         num_tiles_idx_(scalar::CeilDiv(idx_in_len, tile_len_)),
         max_num_tiles_per_block_idx_(
-            scalar::CeilDiv(num_tiles_idx_, vec_core_num_)) {}
+            scalar::CeilDiv(num_tiles_idx_, vec_core_num_)),
+        alpha_(alpha) {}
 
   /**
    * @brief Initialize global and local memory structures.
@@ -201,6 +205,9 @@ class KernelGatherSpmv {
         values_q_gather_.DeQue<DataType>();
     GatherWithOffset(z_lt, idx_lt, sync_fetched_values, start, this_tile_len);
     values_q_gather_.FreeTensor<DataType>(sync_fetched_values);
+    if (alpha_ != static_cast<DataType>(1)) {
+      AscendC::Muls(z_lt, z_lt, alpha_, this_tile_len);
+    }
     output_q_.EnQue<DataType>(z_lt);
     copy::CopyVecToGm(global_z_[output_gm], output_q_, this_tile_len);
   }
@@ -377,6 +384,7 @@ class KernelGatherSpmv {
   const uint32_t tile_len_;
   const uint32_t num_tiles_idx_;
   const uint32_t max_num_tiles_per_block_idx_;
+  const DataType alpha_;
 };
 
 /**
@@ -392,17 +400,22 @@ class KernelGatherSpmv {
  * @param [in] idx_in_len length of the indices array
  * @param [in] val_in_len length of the val_len array
  * @param [in] tile_len Length of the tile processed in a single iteration.
+ * @param [in] alpha Scaling factor applied to the gathered values. Since the
+ * SpMV pipeline finishes with a `diff` of this kernel's output and
+ * `diff(alpha * g) == alpha * diff(g)`, scaling here is equivalent to scaling
+ * the final SpMV product. Default value is `1` (no scaling).
  */
 
 template <bool ForceMixMode = true>
 __aicore__ inline void run_gather_spmv(GM_ADDR values_in, GM_ADDR idx_in,
                                        GM_ADDR z_out, uint32_t idx_in_len,
-                                       uint32_t val_in_len, uint32_t tile_len) {
+                                       uint32_t val_in_len, uint32_t tile_len,
+                                       float alpha = 1.0f) {
   if constexpr (ForceMixMode) {
     exec_mode::EnableCubeCores();
   }
   if ASCEND_IS_AIV {
-    KernelGatherSpmv<float> op(idx_in_len, val_in_len, tile_len);
+    KernelGatherSpmv<float> op(idx_in_len, val_in_len, tile_len, alpha);
     op.Init(values_in, idx_in, z_out);
     op.Process();
   }
