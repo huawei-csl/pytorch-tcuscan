@@ -110,7 +110,9 @@ class KernelPad {
 
  private:
   TPipe pipe;
-  constexpr static uint32_t buf_num_ = 2;
+  /// @brief Double buffering is enabled for all types but float/fp32, whose
+  /// tiles (`align_len` elements) would otherwise overflow the UB.
+  constexpr static uint32_t buf_num_ = std::is_same_v<DataType, float> ? 1 : 2;
 
   GlobalTensor<DataType> global_src_;
   GlobalTensor<DataType> global_dst_;

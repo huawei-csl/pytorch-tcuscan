@@ -31,6 +31,7 @@ using namespace tcuscan;
  * @param [in] workspace Pointer to a memory region used as workspace.
  * @param [in] vec_len Input vector length.
  * @param [in] num_segments Number of segments.
+ * @param [in] tile_len Tile size used for the matrix multiplication step.
  * @param [in] block_len Block length.
  */
 template <typename T>
@@ -51,7 +52,7 @@ __aicore__ inline void run_seg_sum_multi_cube(
   run_pad_kernel<T, false>(vec_in, padded_input, vec_len, align_size);
 
   sync::SyncGroup<sync::GroupSyncDirection::FULL>();
-  sync::SyncAllCores();
+  AscendC::SyncAll<false /*isAIVOnly*/>();
 
   if ASCEND_IS_AIC {
     KernelBlockScan<T, /* SyncAfter*/ true> op_cube(padded_vec_len, tile_len);
@@ -106,6 +107,10 @@ __aicore__ inline void run_seg_sum_multi_cube(
  * (https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.csr_matrix.html).
  *
  * @param [in] vec_in Pointer to the input vector.
+ * @param [in] upper Pointer to an upper-triangular all-ones square matrix of
+ * size \f$\textit{matmul_size}\f$.
+ * @param [in] lower Pointer to an lower-triangular all-ones square matrix of
+ * size \f$\textit{matmul_size}\f$.
  * @param [in] indptr Pointer to the segment indices vector.
  * @param [in] segment_offsets Pointer to the segment offset per block.
  * @param [in] vec_out Pointer to the output vector.
@@ -116,6 +121,8 @@ extern "C" __global__ __aicore__ void seg_sum_multi_cube_fp16(
     GM_ADDR vec_in, GM_ADDR upper, GM_ADDR lower, GM_ADDR indptr,
     GM_ADDR segment_offsets, GM_ADDR vec_out, GM_ADDR workspace,
     GM_ADDR tiling_gm) {
+  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2);
+
   tcuscan::SegSumMultiCubeTiling tiling;
   GetTilingData(&tiling, tiling_gm);
 
@@ -127,4 +134,27 @@ extern "C" __global__ __aicore__ void seg_sum_multi_cube_fp16(
   run_seg_sum_multi_cube<half>(vec_in, upper, lower, indptr, segment_offsets,
                                vec_out, workspace, vec_len, num_segments,
                                matmul_size, block_len);
+}
+
+/**
+ * @brief Call the `seg_sum_multi_cube` kernel for FP16 data type.
+ *
+ * @param [in] blockDim Number of blocks for the kernel launch.
+ * @param [in] stream NPU stream.
+ * @param [in] vec_in Pointer to an input buffer.
+ * @param [in] upper Pointer to an input buffer.
+ * @param [in] lower Pointer to an input buffer.
+ * @param [in] indptr Pointer to an input buffer.
+ * @param [in] segment_offsets Pointer to an input buffer.
+ * @param [in] vec_out Pointer to an output buffer.
+ * @param [in] workspace Pointer to workspace.
+ * @param [in] tiling_gm Pointer to the tiling buffer.
+ */
+extern "C" void launch_seg_sum_multi_cube_fp16(
+    uint32_t blockDim, void* stream, uint8_t* vec_in, uint8_t* upper,
+    uint8_t* lower, uint8_t* indptr, uint8_t* segment_offsets, uint8_t* vec_out,
+    uint8_t* workspace, uint8_t* tiling_gm) {
+  seg_sum_multi_cube_fp16<<<blockDim, nullptr, stream>>>(
+      vec_in, upper, lower, indptr, segment_offsets, vec_out, workspace,
+      tiling_gm);
 }

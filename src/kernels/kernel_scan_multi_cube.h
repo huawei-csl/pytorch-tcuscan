@@ -90,7 +90,7 @@ __aicore__ inline void run_scan_multi_cube_kernel(
     tcuscan::run_pad_kernel<InputT, false>(input_vec, padded_input, vec_len,
                                            align_size);
 
-    sync::SyncAllCores();
+    AscendC::SyncAll<false /*isAIVOnly*/>();
     sync::SyncGroup<sync::GroupSyncDirection::FULL>();
     PipeBarrier<PIPE_ALL>();
 

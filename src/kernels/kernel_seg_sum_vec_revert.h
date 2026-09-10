@@ -43,17 +43,23 @@ class KernelSegSumVecRevert {
    * @param [in] tile_len Tile length.
    * @param [in] vec_start_offset Start offset of input data vector. Segment
    * values will be offset accordindly. Default value is `0`.
+   * @param [in] alpha Scaling factor applied to every segment sum on write.
+   * Default value is `1` (no scaling). Scaling at the output stage (instead of
+   * scaling the input vector) keeps the running scan accumulator unscaled and
+   * distributes over the atomic-add writes of overlapping blocks.
    */
   __aicore__ inline KernelSegSumVecRevert(uint32_t vec_len,
                                           uint32_t num_segments,
                                           uint32_t tile_len,
-                                          uint32_t vec_start_offset = 0)
+                                          uint32_t vec_start_offset = 0,
+                                          T alpha = 1)
       : vec_len_(vec_len),
         num_segments_(num_segments),
         tile_len_(tile_len),
         matrix_tile_len_(tile_len * tile_len),
         num_tiles_(scalar::CeilDiv(vec_len_, matrix_tile_len_)),
-        vec_start_offset_(vec_start_offset) {
+        vec_start_offset_(vec_start_offset),
+        alpha_(alpha) {
     constexpr bool IS_DT_SUPPORTED =
         std::is_same_v<T, float> || std::is_same_v<T, int32_t>;
     static_assert(IS_DT_SUPPORTED, "Unsupported data type.");
@@ -216,7 +222,7 @@ class KernelSegSumVecRevert {
           const T delta = is_on_end_of_tile
                               ? 0
                               : vec_in_lt.GetValue(matrix_tile_segm_end - 1);
-          SafeOutWrite(vec_out_lt, out_idx, accumulation + delta);
+          SafeOutWrite(vec_out_lt, out_idx, alpha_ * (accumulation + delta));
 
           // Keep track of the value of the last segment's end to
           // subtract it from the next segment (recall scan
@@ -243,7 +249,7 @@ class KernelSegSumVecRevert {
     segm_q_.template FreeTensor<uint32_t>(segm_ind_lt);
 
     // The last segment contains the remaining accumulation values.
-    vec_out_lt.SetValue(out_idx, accumulation);
+    vec_out_lt.SetValue(out_idx, alpha_ * accumulation);
 
     const uint32_t tail_len = out_idx + 1;
     out_q_.template EnQue<T>(vec_out_lt);
@@ -273,6 +279,7 @@ class KernelSegSumVecRevert {
   const uint32_t matrix_tile_len_;
   const uint32_t num_tiles_;
   const uint32_t vec_start_offset_;
+  const T alpha_;
 
   uint32_t segments_offset_ = 0;
   uint32_t out_offset_ = 0;

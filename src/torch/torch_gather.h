@@ -13,16 +13,38 @@
 #include "../tiling/tiling_csr_gather.h"
 #include "../tiling/tiling_gather_spmv.h"
 #include "../tiling/tiling_mc_gather.h"
-#include "aclrtlaunch_csr_gather_fp16.h"
-#include "aclrtlaunch_csr_gather_fp32.h"
-#include "aclrtlaunch_csr_gather_int16.h"
-#include "aclrtlaunch_gather_spmv.h"
-#include "aclrtlaunch_mc_gather_fp16.h"
-#include "aclrtlaunch_mc_gather_fp32.h"
 #include "commons.h"
 #include "tiling/platform/platform_ascendc.h"
 #include "torch_npu/csrc/core/npu/NPUStream.h"
 #include "workspace.h"
+
+// Kernel launchers; documented at their definitions in src/*.cpp
+/// @cond
+extern "C" void launch_csr_gather_fp16(uint32_t blockDim, void* stream,
+                                       void* values_in, void* cols_in,
+                                       void* x_in, void* z_out, void* workspace,
+                                       void* tiling_gm);
+extern "C" void launch_csr_gather_fp32(uint32_t blockDim, void* stream,
+                                       void* values_in, void* cols_in,
+                                       void* x_in, void* z_out, void* workspace,
+                                       void* tiling_gm);
+extern "C" void launch_csr_gather_int16(uint32_t blockDim, void* stream,
+                                        void* values_in, void* cols_in,
+                                        void* x_in, void* z_out,
+                                        void* workspace, void* tiling_gm);
+extern "C" void launch_gather_spmv(uint32_t blockDim, void* stream,
+                                   void* values_in, void* cols_in,
+                                   void* vec_out, void* workspace,
+                                   void* tilingGm);
+extern "C" void launch_mc_gather_fp16(uint32_t blockDim, void* stream,
+                                      void* values_in, void* indexes_in,
+                                      void* z_out, void* workspace,
+                                      void* tiling_gm);
+extern "C" void launch_mc_gather_fp32(uint32_t blockDim, void* stream,
+                                      void* values_in, void* indexes_in,
+                                      void* z_out, void* workspace,
+                                      void* tiling_gm);
+/// @endcond
 
 namespace tcuscan {
 
@@ -62,17 +84,17 @@ at::Tensor run_mc_gather(const at::Tensor& values, const at::Tensor& idxs,
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
   if (dtype == torch::kHalf) {
-    ACLRT_LAUNCH_KERNEL(mc_gather_fp16)
-    (block_dim, acl_stream, const_cast<void*>(values.storage().data()),
-     const_cast<void*>(idxs.storage().data()),
-     const_cast<void*>(z.storage().data()),
-     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+    launch_mc_gather_fp16(
+        block_dim, acl_stream, const_cast<void*>(values.storage().data()),
+        const_cast<void*>(idxs.storage().data()),
+        const_cast<void*>(z.storage().data()),
+        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else {
-    ACLRT_LAUNCH_KERNEL(mc_gather_fp32)
-    (block_dim, acl_stream, const_cast<void*>(values.storage().data()),
-     const_cast<void*>(idxs.storage().data()),
-     const_cast<void*>(z.storage().data()),
-     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+    launch_mc_gather_fp32(
+        block_dim, acl_stream, const_cast<void*>(values.storage().data()),
+        const_cast<void*>(idxs.storage().data()),
+        const_cast<void*>(z.storage().data()),
+        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   }
 
   aclrtFree(tiling_device);
@@ -130,7 +152,29 @@ at::Tensor run_csr_gather(const at::Tensor& values, const at::Tensor& cols,
 
   constexpr uint32_t TILE_LEN = 1024;
 
-  const CSRGatherTiling tiling{values_len, x_len, TILE_LEN};
+  // Size the `x` staging buffer to the largest chunk that fits in Unified
+  // Buffer alongside the other buffers resident during the chunked path,
+  // instead of a fixed cap. Buffers co-resident with `x` (see
+  // KernelCSRGather::Init), with BUFFER_NUM == 2:
+  //   `T`-typed      : values_q_(2) + output_q_(2) + gather_buf_(1)
+  //   uint32_t-typed : cols_q_(2)   + tbuf_(1)      + clamp_buf_(1)
+  //   uint8_t-typed  : sel_buf_(1)
+  const uint32_t elem_size = static_cast<uint32_t>(values.element_size());
+  uint64_t ub_size = 0;
+  ascendc_platform->GetCoreMemSize(platform_ascendc::CoreMemType::UB, ub_size);
+  const uint32_t reserved_bytes = 5 * TILE_LEN * elem_size +
+                                  4 * TILE_LEN * sizeof(uint32_t) +
+                                  1 * TILE_LEN * sizeof(uint8_t);
+  TORCH_CHECK(ub_size > reserved_bytes, "run_csr_gather: Unified Buffer (",
+              ub_size, " bytes) too small for the required scratch buffers (",
+              reserved_bytes, " bytes)");
+  // Floor to a 32-byte boundary so the buffer allocation stays aligned.
+  const uint32_t x_bytes_max =
+      (static_cast<uint32_t>(ub_size) - reserved_bytes) & ~uint32_t{31};
+  const uint32_t X_TILE_ELEMS_MAX =
+      host_utils::FloorDiv(x_bytes_max, elem_size);
+
+  const CSRGatherTiling tiling{values_len, x_len, TILE_LEN, X_TILE_ELEMS_MAX};
   uint8_t* tiling_device = alloc_copy_tiling(tiling);
 
   uint32_t block_dim = host_utils::CeilDiv(values_len, TILE_LEN);
@@ -143,26 +187,26 @@ at::Tensor run_csr_gather(const at::Tensor& values, const at::Tensor& cols,
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
   if (dtype == torch::kHalf) {
-    ACLRT_LAUNCH_KERNEL(csr_gather_fp16)
-    (block_dim, acl_stream, const_cast<void*>(values.storage().data()),
-     const_cast<void*>(cols.storage().data()),
-     const_cast<void*>(x.storage().data()),
-     const_cast<void*>(z.storage().data()),
-     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+    launch_csr_gather_fp16(
+        block_dim, acl_stream, const_cast<void*>(values.storage().data()),
+        const_cast<void*>(cols.storage().data()),
+        const_cast<void*>(x.storage().data()),
+        const_cast<void*>(z.storage().data()),
+        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else if (dtype == torch::kInt16) {
-    ACLRT_LAUNCH_KERNEL(csr_gather_int16)
-    (block_dim, acl_stream, const_cast<void*>(values.storage().data()),
-     const_cast<void*>(cols.storage().data()),
-     const_cast<void*>(x.storage().data()),
-     const_cast<void*>(z.storage().data()),
-     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+    launch_csr_gather_int16(
+        block_dim, acl_stream, const_cast<void*>(values.storage().data()),
+        const_cast<void*>(cols.storage().data()),
+        const_cast<void*>(x.storage().data()),
+        const_cast<void*>(z.storage().data()),
+        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else if (dtype == torch::kFloat) {
-    ACLRT_LAUNCH_KERNEL(csr_gather_fp32)
-    (block_dim, acl_stream, const_cast<void*>(values.storage().data()),
-     const_cast<void*>(cols.storage().data()),
-     const_cast<void*>(x.storage().data()),
-     const_cast<void*>(z.storage().data()),
-     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+    launch_csr_gather_fp32(
+        block_dim, acl_stream, const_cast<void*>(values.storage().data()),
+        const_cast<void*>(cols.storage().data()),
+        const_cast<void*>(x.storage().data()),
+        const_cast<void*>(z.storage().data()),
+        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   }
 
   aclrtFree(tiling_device);
@@ -177,10 +221,14 @@ at::Tensor run_csr_gather(const at::Tensor& values, const at::Tensor& cols,
  * @param values Input 1D vector.
  * @param idxs Input 1D indices vector.
  * @param tile_len Tile length.
+ * @param alpha Scaling factor applied to the gathered values. Because the SpMV
+ * pipeline finishes with a `diff` of this output, and
+ * `diff(alpha * g) == alpha * diff(g)`, this is exactly the `alpha` of
+ * `y = alpha * A @ x + beta * y`. Defaults to `1.0` (no scaling).
  * @return Special gather for SpMV.
  */
 at::Tensor run_gather_spmv(const at::Tensor& values, const at::Tensor& idxs,
-                           const uint32_t tile_len) {
+                           const uint32_t tile_len, const double alpha = 1.0) {
   const auto ascendc_platform =
       platform_ascendc::PlatformAscendCManager::GetInstance();
   const uint32_t max_aiv_cores = ascendc_platform->GetCoreNumAiv();
@@ -196,16 +244,17 @@ at::Tensor run_gather_spmv(const at::Tensor& values, const at::Tensor& idxs,
   const at::Tensor z = at::empty({idx_len}, values.options());
   const at::Tensor workspace_tensor = alloc_workspace(0, device);
 
-  const GatherSpmvTiling tiling{block_dim, values_len, idx_len, tile_len};
+  const GatherSpmvTiling tiling{block_dim, values_len, idx_len, tile_len,
+                                static_cast<float>(alpha)};
   uint8_t* tiling_device = alloc_copy_tiling(tiling);
 
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
-  ACLRT_LAUNCH_KERNEL(gather_spmv)
-  (block_dim, acl_stream, const_cast<void*>(values.storage().data()),
-   const_cast<void*>(idxs.storage().data()),
-   const_cast<void*>(z.storage().data()),
-   const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+  launch_gather_spmv(
+      block_dim, acl_stream, const_cast<void*>(values.storage().data()),
+      const_cast<void*>(idxs.storage().data()),
+      const_cast<void*>(z.storage().data()),
+      const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   aclrtFree(tiling_device);
   aclrtSynchronizeStream(acl_stream);
 
