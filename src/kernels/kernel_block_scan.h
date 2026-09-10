@@ -173,12 +173,22 @@ class KernelBlockScan {
                           true /* free_b */>(a2_2_q_, b2_2_q_, co1_q_, M_, N_,
                                              K_);
 
+      // Wait for Vec, before writing tile back to GM
+      if constexpr (SyncAfter) {
+        if (idx > 0) {
+          sync::WaitCrossFlag(sync::FLAG_V2C);
+        }
+      }
+
       // A2: L; B1: U; B2: [1]
       copy::CopyCL0ToGlobal(global_output_[idx * c_cube_tile_size_], co1_q_,
                             matmul_size_, N_);
 
       if constexpr (SyncAfter) {
-        sync::SyncGroup<sync::GroupSyncDirection::FULL>();
+        pipe_barrier(
+            PIPE_ALL);  // FIX: wait for DMA to complete before signaling Vec
+        sync::SetCrossFlag<PIPE_FIX>(
+            sync::FLAG_C2V);  // signal Vec: workspace tile is ready
       }
     }
     // B1: U; B2: [1];

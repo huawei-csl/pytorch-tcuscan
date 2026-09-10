@@ -107,7 +107,10 @@ class KernelRowScan {
     for (uint32_t idx = 0; idx < num_tiles_to_process; ++idx) {
       CubeIter(idx);
       if constexpr (SyncAfter) {
-        sync::SyncGroup<sync::GroupSyncDirection::FULL>();
+        pipe_barrier(
+            PIPE_ALL);  // FIX: wait for DMA to complete before signaling Vec
+        sync::SetCrossFlag<PIPE_FIX>(
+            sync::FLAG_C2V);  // signal Vec: workspace tile is ready
       }
     }
     queue::FreeFromQ<InputT>(b2_q_);
@@ -124,6 +127,14 @@ class KernelRowScan {
     cube_unit::Multiply<InputT, false /* accumulate_c */, true /* free_a*/,
                         false /* free_b */>(a2_q_, b2_q_, co1_q_,
                                             matmul_m_size_, N_, K_);
+
+    // Wait for Vec, before writing tile back to GM
+    if constexpr (SyncAfter) {
+      if (iter_idx > 0) {
+        sync::WaitCrossFlag(sync::FLAG_V2C);
+      }
+    }
+
     copy::CopyCL0ToGlobal(
         global_C_[GetBlockIdx() * c_cube_tile_size_ * max_num_tiles_per_block_ +
                   iter_idx * c_cube_tile_size_],
