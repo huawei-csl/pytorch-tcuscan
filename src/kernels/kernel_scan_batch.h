@@ -342,7 +342,7 @@ __aicore__ inline void run_scan_batch_kernel(
         input_vec, padded_input, vec_len, batch_size, align_size,
         align_size == 128 * 128 && sizeof(InputT) == 4 ? 128 * 64 : align_size);
 
-    sync::SyncAllCores();
+    AscendC::SyncAll<false /*isAIVOnly*/>();
     sync::SyncGroup<sync::GroupSyncDirection::FULL>();
     PipeBarrier<PIPE_ALL>();
 

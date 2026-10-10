@@ -11,11 +11,17 @@
 #include <torch/extension.h>
 
 #include "../tiling/tiling_copy.h"
-#include "aclrtlaunch_copy_fp16.h"
-#include "aclrtlaunch_copy_fp32.h"
 #include "commons.h"
 #include "tiling/platform/platform_ascendc.h"
 #include "torch_npu/csrc/core/npu/NPUStream.h"
+
+// Kernel launchers; documented at their definitions in src/*.cpp
+/// @cond
+extern "C" void launch_copy_fp16(uint32_t blockDim, void* stream, void* in,
+                                 void* out, void* workspace, void* tiling);
+extern "C" void launch_copy_fp32(uint32_t blockDim, void* stream, void* in,
+                                 void* out, void* workspace, void* tiling);
+/// @endcond
 
 namespace tcuscan {
 
@@ -44,15 +50,15 @@ at::Tensor run_copy(const at::Tensor& x, int s) {
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
   if (dtype == at::kFloat) {
-    ACLRT_LAUNCH_KERNEL(copy_fp32)
-    (1 /* single core*/, acl_stream, const_cast<void*>(x.storage().data()),
-     const_cast<void*>(z.storage().data()),
-     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+    launch_copy_fp32(
+        1 /* single core*/, acl_stream, const_cast<void*>(x.storage().data()),
+        const_cast<void*>(z.storage().data()),
+        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else {
-    ACLRT_LAUNCH_KERNEL(copy_fp16)
-    (1 /* single core*/, acl_stream, const_cast<void*>(x.storage().data()),
-     const_cast<void*>(z.storage().data()),
-     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+    launch_copy_fp16(
+        1 /* single core*/, acl_stream, const_cast<void*>(x.storage().data()),
+        const_cast<void*>(z.storage().data()),
+        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   }
 
   aclrtFree(tiling_device);

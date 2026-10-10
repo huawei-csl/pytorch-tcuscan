@@ -26,6 +26,12 @@ struct SpMVTiling {
   uint32_t tile_len;
   /// @brief Block length.
   uint32_t block_len;
+  /// @brief Scaling factor applied to the SpMV product, i.e. the `alpha` of
+  /// `y = alpha * A @ x + beta * y`.
+  float alpha;
+  /// @brief Scaling factor applied to the incoming output vector, i.e. the
+  /// `beta` of `y = alpha * A @ x + beta * y`.
+  float beta;
 };
 
 #pragma pack(pop)

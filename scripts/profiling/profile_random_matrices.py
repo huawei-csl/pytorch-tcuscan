@@ -241,7 +241,7 @@ def baseline_diff_benchmark(device: Device, x: torch.Tensor) -> float:
     return _run_benchmark(device, run_diff)
 
 
-def baseline_gather_spmv(device: Device, x: torch.Tensor, idx: torch.Tensor, s: int):
+def gather_spmv_benchmark(device: Device, x: torch.Tensor, idx: torch.Tensor, s: int):
     x_npu = x.npu()
     idx_npu = idx.npu()
 
@@ -271,7 +271,7 @@ def copy_benchmark(device: Device, x: torch.Tensor, s: int) -> float:
     return _run_benchmark(device, run_copy)
 
 
-def baseline_spmv(
+def spmv_benchmark(
     device: Device,
     B: csr_matrix,
     s: int,
@@ -290,7 +290,7 @@ def baseline_spmv(
     rng = np.random.default_rng(seed=42)
     vals = torch.from_numpy((B.data).astype(np.float16))
     idx = torch.from_numpy((B.indptr).astype(np.uint32))
-    cols = torch.from_numpy((B.indices).astype(np.uint32))
+    cols = torch.from_numpy((B.indices).astype(np.int32))
     vector = torch.from_numpy(rng.uniform(1, 9, len(idx) - 1).astype(np.float16))
     vals_npu = vals.npu()
     idx_npu = idx.npu()
@@ -301,6 +301,112 @@ def baseline_spmv(
         _ = tcuscan_ops.run_spmv(vals_npu, idx_npu, col_npu, vec_npu, s)
 
     return _run_benchmark(device, run_spmv)
+
+
+def spmv_v2_benchmark(
+    device: Device,
+    B: csr_matrix,
+    s: int,
+):
+    """
+    Baseline for SPMV v2 (segmented-sum based) kernel.
+
+    Args:
+        device: Device to run benchmark on.
+        B: CSR random matrix
+        s: Tiling Size for the matrix unit, used for mcscan
+
+    Returns:
+        Average time in microseconds.
+    """
+    rng = np.random.default_rng(seed=42)
+    vals = torch.from_numpy((B.data).astype(np.float16))
+    idx = torch.from_numpy((B.indptr).astype(np.uint32))
+    cols = torch.from_numpy((B.indices).astype(np.int32))
+    vector = torch.from_numpy(rng.uniform(1, 9, len(idx) - 1).astype(np.float16))
+    vals_npu = vals.npu()
+    idx_npu = idx.npu()
+    col_npu = cols.npu()
+    vec_npu = vector.npu()
+
+    def run_spmv_v2():
+        _ = tcuscan_ops.run_spmv_v2(vals_npu, idx_npu, col_npu, vec_npu, s)
+
+    return _run_benchmark(device, run_spmv_v2)
+
+
+def spmv_multi_cube_benchmark(
+    device: Device,
+    B: csr_matrix,
+    s: int,
+):
+    """
+    Baseline for the multi-cube SPMV kernel.
+
+    Args:
+        device: Device to run benchmark on.
+        B: CSR random matrix
+        s: Tiling Size for the matrix unit, used for mcscan
+
+    Returns:
+        Average time in microseconds.
+    """
+    rng = np.random.default_rng(seed=42)
+    vals = torch.from_numpy((B.data).astype(np.float16))
+    idx = torch.from_numpy((B.indptr).astype(np.uint32))
+    cols = torch.from_numpy((B.indices).astype(np.int32))
+    vector = torch.from_numpy(rng.uniform(1, 9, len(idx) - 1).astype(np.float16))
+    vals_npu = vals.npu()
+    idx_npu = idx.npu()
+    col_npu = cols.npu()
+    vec_npu = vector.npu()
+    ones = torch.ones((s, s), dtype=torch.float16, device=NPU_DEVICE)
+    upper = torch.triu(ones)
+    lower_strict = torch.tril(ones, -1)
+
+    def run_spmv_multi_cube():
+        _ = tcuscan_ops.run_spmv_multi_cube(
+            vals_npu, idx_npu, col_npu, vec_npu, upper, lower_strict
+        )
+
+    return _run_benchmark(device, run_spmv_multi_cube)
+
+
+def spmv_v2_multi_cube_benchmark(
+    device: Device,
+    B: csr_matrix,
+    s: int,
+):
+    """
+    Baseline for the SpMV v2 multi-cube kernel (segmented-sum based).
+
+    Args:
+        device: Device to run benchmark on.
+        B: CSR random matrix
+        s: Tiling Size for the matrix unit, used for mcscan
+
+    Returns:
+        Average time in microseconds.
+    """
+    rng = np.random.default_rng(seed=42)
+    vals = torch.from_numpy((B.data).astype(np.float16))
+    idx = torch.from_numpy((B.indptr).astype(np.int32))
+    cols = torch.from_numpy((B.indices).astype(np.int32))
+    vector = torch.from_numpy(rng.uniform(1, 9, len(idx) - 1).astype(np.float16))
+    vals_npu = vals.npu()
+    idx_npu = idx.npu()
+    col_npu = cols.npu()
+    vec_npu = vector.npu()
+    ones = torch.ones((s, s), dtype=torch.float16, device=NPU_DEVICE)
+    upper = torch.triu(ones)
+    lower_strict = torch.tril(ones, -1)
+
+    def run_spmv_v2_multi_cube():
+        _ = tcuscan_ops.run_spmv_v2_multi_cube(
+            vals_npu, idx_npu, col_npu, vec_npu, upper, lower_strict
+        )
+
+    return _run_benchmark(device, run_spmv_v2_multi_cube)
 
 
 def benchmark(  # noqa
@@ -338,19 +444,18 @@ def benchmark(  # noqa
     else:
         alpha_str = ""
     filename = f"random_matrices_{distr}_{op_name}_{dtype}_{ '' if (density is None) else str(density)}.csv"
+    write_header = not os.path.exists(filename) or os.path.getsize(filename) == 0
     with open(
         filename,
         "a",
         encoding="UTF-8",
     ) as fd:
-        global once
-        if once is True:
+        if write_header:
             fd.write(f"operator,dtype,size,nrow,{alpha_str}{density_str}time_us\n")
-            once = False
         time = fn(device)
         op_name = f"{op_name}" + f"{'' if (density is None) else '_' + str(density)}"
-        density_str = "" if (density is None) else "f{density},"
-        dist_str = "" if (distr == "Uniform") else str(alpha)
+        density_str = "" if (density is None) else f"{density},"
+        dist_str = "" if (distr == "Uniform") else f"{alpha},"
         fd.write(f"{op_name},{dtype},{size},{nnr},{dist_str}{density_str}{time:.2f}\n")
         logger.info(
             f" OP:{op_name}, dtype: {dtype}, device: {device.str}, density: {density} size: {size}"
@@ -358,9 +463,7 @@ def benchmark(  # noqa
     fd.close()
 
 
-once = True
-
-if __name__ == "__main__":
+if __name__ == "__main__":  # noqa
 
     parser = argparse.ArgumentParser(
         prog="torch_profile", description="Profiler for torch_npu operators"
@@ -377,6 +480,9 @@ if __name__ == "__main__":
             "custom_copy",
             "gather_spmv",
             "spmv",
+            "spmv_v2",
+            "spmv_multi_cube",
+            "spmv_v2_multi_cube",
         ],
     )
     parser.add_argument("--dtype", choices=["int8", "fp16", "int16", "fp32"])
@@ -520,7 +626,7 @@ if __name__ == "__main__":
                 f"gather_spmv_{s}",
                 dtype,
                 partial(
-                    baseline_gather_spmv,
+                    gather_spmv_benchmark,
                     x=torch.from_numpy(values),
                     idx=torch.from_numpy(indexes),
                     s=s,
@@ -537,7 +643,55 @@ if __name__ == "__main__":
                 f"spmv_{alpha}_{s}",
                 dtype,
                 partial(
-                    baseline_spmv,
+                    spmv_benchmark,
+                    B=B,
+                    s=s,
+                ),
+                len(B.data),
+                density,
+                nnr,
+                distr,
+                alpha,
+            )
+        elif bench == "spmv_v2" and dtype in ["fp16"]:
+            benchmark(
+                device,
+                f"spmv_v2_{alpha}_{s}",
+                dtype,
+                partial(
+                    spmv_v2_benchmark,
+                    B=B,
+                    s=s,
+                ),
+                len(B.data),
+                density,
+                nnr,
+                distr,
+                alpha,
+            )
+        elif bench == "spmv_multi_cube" and dtype in ["fp16"]:
+            benchmark(
+                device,
+                f"spmv_multi_cube_{alpha}_{s}",
+                dtype,
+                partial(
+                    spmv_multi_cube_benchmark,
+                    B=B,
+                    s=s,
+                ),
+                len(B.data),
+                density,
+                nnr,
+                distr,
+                alpha,
+            )
+        elif bench == "spmv_v2_multi_cube" and dtype in ["fp16"]:
+            benchmark(
+                device,
+                f"spmv_v2_multi_cube_{alpha}_{s}",
+                dtype,
+                partial(
+                    spmv_v2_multi_cube_benchmark,
                     B=B,
                     s=s,
                 ),

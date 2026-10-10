@@ -17,19 +17,57 @@
 #include "../tiling/tiling_seg_sum_multi_cube.h"
 #include "../tiling/tiling_seg_sum_single_core.h"
 #include "../tiling/tiling_seg_sum_single_cube.h"
-#include "aclrtlaunch_seg_scan_mc_revert.h"
-#include "aclrtlaunch_seg_scan_single_core.h"
-#include "aclrtlaunch_seg_scan_vec_single_core.h"
-#include "aclrtlaunch_seg_sum_multi_core_fp16.h"
-#include "aclrtlaunch_seg_sum_multi_core_int8.h"
-#include "aclrtlaunch_seg_sum_multi_cube_fp16.h"
-#include "aclrtlaunch_seg_sum_single_core_fp16.h"
-#include "aclrtlaunch_seg_sum_single_core_int8.h"
-#include "aclrtlaunch_seg_sum_single_cube_fp16.h"
 #include "commons.h"
 #include "tiling/platform/platform_ascendc.h"
 #include "torch_npu/csrc/core/npu/NPUStream.h"
 #include "workspace.h"
+
+// seg_scan_vec_single_core.cpp, seg_sum_multi_core.cpp, seg_sum_multi_cube.cpp,
+// seg_sum_single_core.cpp, seg_sum_single_cube.cpp.
+// Kernel launchers; documented at their definitions in src/*.cpp
+/// @cond
+extern "C" void launch_seg_scan_mc_revert(uint32_t blockDim, void* stream,
+                                          void* vec_in, void* vec_f_in,
+                                          void* vec_diff_in, void* vec_out,
+                                          void* workspace, void* tiling);
+extern "C" void launch_seg_scan_single_core(uint32_t blockDim, void* stream,
+                                            void* input_vec, void* input_flag,
+                                            void* output_vec, void* workspace,
+                                            void* tilingGm);
+extern "C" void launch_seg_scan_vec_single_core(uint32_t blockDim, void* stream,
+                                                void* vec_in, void* f_in,
+                                                void* vec_out, void* workspace,
+                                                void* tilingGm);
+extern "C" void launch_seg_sum_multi_core_fp16(uint32_t blockDim, void* stream,
+                                               void* vec_in, void* indptr,
+                                               void* segment_offsets,
+                                               void* vec_out, void* workspace,
+                                               void* tiling_gm);
+extern "C" void launch_seg_sum_multi_core_int8(uint32_t blockDim, void* stream,
+                                               void* vec_in, void* indptr,
+                                               void* segment_offsets,
+                                               void* vec_out, void* workspace,
+                                               void* tiling_gm);
+extern "C" void launch_seg_sum_multi_cube_fp16(uint32_t blockDim, void* stream,
+                                               void* vec_in, void* upper,
+                                               void* lower, void* indptr,
+                                               void* segment_offsets,
+                                               void* vec_out, void* workspace,
+                                               void* tiling_gm);
+extern "C" void launch_seg_sum_single_core_fp16(uint32_t blockDim, void* stream,
+                                                void* vec_in, void* indptr,
+                                                void* vec_out, void* workspace,
+                                                void* tiling_gm);
+extern "C" void launch_seg_sum_single_core_int8(uint32_t blockDim, void* stream,
+                                                void* vec_in, void* indptr,
+                                                void* vec_out, void* workspace,
+                                                void* tiling_gm);
+extern "C" void launch_seg_sum_single_cube_fp16(uint32_t blockDim, void* stream,
+                                                void* vec_in, void* upper,
+                                                void* lower, void* segm_ind_in,
+                                                void* vec_out, void* workspace,
+                                                void* tiling);
+/// @endcond
 
 namespace tcuscan {
 
@@ -61,13 +99,13 @@ at::Tensor run_seg_scan_vec(const at::Tensor& x, const at::Tensor& f, int S) {
 
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
-  ACLRT_LAUNCH_KERNEL(seg_scan_vec_single_core)
-  (1 /* single core*/, acl_stream, const_cast<void*>(x.storage().data()),
-   const_cast<void*>(f.storage().data()), const_cast<void*>(z.storage().data()),
-   const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+  launch_seg_scan_vec_single_core(
+      1 /* single core*/, acl_stream, const_cast<void*>(x.storage().data()),
+      const_cast<void*>(f.storage().data()),
+      const_cast<void*>(z.storage().data()),
+      const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
 
   aclrtFree(tiling_device);
-  aclrtSynchronizeStream(acl_stream);
 
   return z;
 }
@@ -86,7 +124,6 @@ at::Tensor run_seg_sum(const at::Tensor& x, const at::Tensor& f, int S) {
   using tcuscan::run_compress_pos;
   using tcuscan::run_scan_multi_core;
 
-  auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
   const at::Device device = x.options().device();
 
   const at::Tensor scan_x = run_scan_multi_core(x, S);
@@ -96,7 +133,6 @@ at::Tensor run_seg_sum(const at::Tensor& x, const at::Tensor& f, int S) {
 
   const at::Tensor prepend =
       at::zeros({1}, at::TensorOptions().dtype(at::kFloat).device(device));
-  aclrtSynchronizeStream(acl_stream);
 
   const at::Tensor prep_compress_scan_x =
       torch::cat({prepend, compress_scan_x});
@@ -139,15 +175,14 @@ at::Tensor run_seg_scan_mc_revert(const at::Tensor& x, const at::Tensor& f,
 
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
-  ACLRT_LAUNCH_KERNEL(seg_scan_mc_revert)
-  (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
-   const_cast<void*>(f.storage().data()),
-   const_cast<void*>(diff.storage().data()),
-   const_cast<void*>(z.storage().data()),
-   const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+  launch_seg_scan_mc_revert(
+      block_dim, acl_stream, const_cast<void*>(x.storage().data()),
+      const_cast<void*>(f.storage().data()),
+      const_cast<void*>(diff.storage().data()),
+      const_cast<void*>(z.storage().data()),
+      const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
 
   aclrtFree(tiling_device);
-  aclrtSynchronizeStream(acl_stream);
 
   return z;
 }
@@ -181,13 +216,13 @@ at::Tensor run_seg_scan(const at::Tensor& x, const at::Tensor& f, int S) {
 
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
-  ACLRT_LAUNCH_KERNEL(seg_scan_single_core)
-  (1 /* single core*/, acl_stream, const_cast<void*>(x.storage().data()),
-   const_cast<void*>(f.storage().data()), const_cast<void*>(z.storage().data()),
-   const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+  launch_seg_scan_single_core(
+      1 /* single core*/, acl_stream, const_cast<void*>(x.storage().data()),
+      const_cast<void*>(f.storage().data()),
+      const_cast<void*>(z.storage().data()),
+      const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
 
   aclrtFree(tiling_device);
-  aclrtSynchronizeStream(acl_stream);
 
   return z;
 }
@@ -229,7 +264,76 @@ at::Tensor run_seg_sum_single_core(const at::Tensor& x,
                                                matmul_size};
   uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
 
-  auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
+  // Offset indptr by one element, since first element is always zero.
+  void* indptr_data = static_cast<void*>(
+      static_cast<uint8_t*>(const_cast<void*>(indptr.storage().data())) +
+      indptr.element_size());
+
+  if (dtype == torch::kHalf) {
+    const uint32_t user_workspace_size =
+        tcuscan::get_workspace_size<int16_t /* half */>(tiling);
+
+    const at::Tensor workspace_tensor =
+        tcuscan::alloc_workspace(user_workspace_size, device);
+
+    auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
+    launch_seg_sum_single_core_fp16(
+        BLOCK_DIM, acl_stream, const_cast<void*>(x.storage().data()),
+        indptr_data, const_cast<void*>(z.storage().data()),
+        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+  } else if (dtype == torch::kInt8) {
+    const uint32_t user_workspace_size =
+        tcuscan::get_workspace_size<int8_t>(tiling);
+
+    const at::Tensor workspace_tensor =
+        tcuscan::alloc_workspace(user_workspace_size, device);
+
+    auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
+    launch_seg_sum_single_core_int8(
+        BLOCK_DIM, acl_stream, const_cast<void*>(x.storage().data()),
+        indptr_data, const_cast<void*>(z.storage().data()),
+        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+  }
+
+  aclrtFree(tiling_device);
+
+  return z;
+}
+
+/**
+ * @brief Segmented sum single cube
+ *
+ * @param [in] x Input data vector.
+ * @param [in] upper Upper triangular all-ones matrix of size S.
+ * @param [in] lower_strict Strict lower triangular all-ones matrix of size S.
+ * @param [in] indptr Input segment starts vector following the
+ * `scipy.sparse.csr_matrix` notation, i.e., it starts with `0` and its last
+ * entry equals `len(x)`.
+ * @param [in] s Tiling parameter. Typical values: 32, 64, 128.
+ * @return Segmented sum of (x, indptr). Output length is the number of
+ * segments and equals to `len(indptr) - 1`.
+ */
+at::Tensor run_seg_sum_single_cube(const at::Tensor& x, const at::Tensor& upper,
+                                   const at::Tensor& lower_strict,
+                                   const at::Tensor& indptr, int s) {
+  const at::Device device = x.options().device();
+  const auto dtype = x.options().dtype();
+  const auto dtype_out =
+      dtype == torch::kHalf ? torch::kFloat32 : torch::kInt32;
+
+  constexpr uint32_t BLOCK_DIM = 1;  // single core
+  const uint32_t matmul_size = static_cast<uint32_t>(s);
+  const uint32_t total_length = x.numel();
+  // The kernel consumes the segment *ending* indices, i.e., the indptr without
+  // its (always zero) first entry. Hence, the number of segments are -1.
+  const uint32_t num_segments = indptr.numel() - 1;
+
+  const at::Tensor z = at::empty(
+      {num_segments}, at::TensorOptions().dtype(dtype_out).device(device));
+
+  const tcuscan::SegSumSingleCubeTiling tiling{total_length, num_segments,
+                                               matmul_size};
+  uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
 
   // Offset indptr by one element, since first element is always zero.
   void* indptr_data = static_cast<void*>(
@@ -243,80 +347,18 @@ at::Tensor run_seg_sum_single_core(const at::Tensor& x,
     const at::Tensor workspace_tensor =
         tcuscan::alloc_workspace(user_workspace_size, device);
 
-    ACLRT_LAUNCH_KERNEL(seg_sum_single_core_fp16)
-    (BLOCK_DIM, acl_stream, const_cast<void*>(x.storage().data()), indptr_data,
-     const_cast<void*>(z.storage().data()),
-     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
-  } else if (dtype == torch::kInt8) {
-    const uint32_t user_workspace_size =
-        tcuscan::get_workspace_size<int8_t>(tiling);
-
-    const at::Tensor workspace_tensor =
-        tcuscan::alloc_workspace(user_workspace_size, device);
-    ACLRT_LAUNCH_KERNEL(seg_sum_single_core_int8)
-    (BLOCK_DIM, acl_stream, const_cast<void*>(x.storage().data()), indptr_data,
-     const_cast<void*>(z.storage().data()),
-     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
-  }
-
-  aclrtFree(tiling_device);
-  aclrtSynchronizeStream(acl_stream);
-
-  return z;
-}
-
-/**
- * @brief Segmented sum single cube
- *
- * @param [in] x Input data vector.
- * @param [in] upper Upper triangular all-ones matrix of size S.
- * @param [in] lower_strict Strict lower triangular all-ones matrix of size S.
- * @param [in] indptr Input segment starts vector.
- * @param [in] s Tiling parameter. Typical values: 32, 64, 128.
- * @return Segmented sum of (x, indptr).
- */
-at::Tensor run_seg_sum_single_cube(const at::Tensor& x, const at::Tensor& upper,
-                                   const at::Tensor& lower_strict,
-                                   const at::Tensor& indptr, int s) {
-  const at::Device device = x.options().device();
-  const auto dtype = x.options().dtype();
-  const auto dtype_out =
-      dtype == torch::kHalf ? torch::kFloat32 : torch::kInt32;
-
-  constexpr uint32_t BLOCK_DIM = 1;  // single core
-  const uint32_t matmul_size = static_cast<uint32_t>(s);
-  const uint32_t total_length = x.numel();
-  const uint32_t num_segments = indptr.numel();
-
-  const at::Tensor z = at::empty(
-      {num_segments}, at::TensorOptions().dtype(dtype_out).device(device));
-
-  const tcuscan::SegSumSingleCubeTiling tiling{total_length, num_segments,
-                                               matmul_size};
-  uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
-
-  auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
-
-  if (dtype == torch::kHalf) {
-    const uint32_t user_workspace_size =
-        tcuscan::get_workspace_size<int16_t /* half */>(tiling);
-
-    const at::Tensor workspace_tensor =
-        tcuscan::alloc_workspace(user_workspace_size, device);
-
-    ACLRT_LAUNCH_KERNEL(seg_sum_single_cube_fp16)
-    (BLOCK_DIM, acl_stream, const_cast<void*>(x.storage().data()),
-     const_cast<void*>(upper.storage().data()),
-     const_cast<void*>(lower_strict.storage().data()),
-     const_cast<void*>(indptr.storage().data()),
-     const_cast<void*>(z.storage().data()),
-     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+    auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
+    launch_seg_sum_single_cube_fp16(
+        BLOCK_DIM, acl_stream, const_cast<void*>(x.storage().data()),
+        const_cast<void*>(upper.storage().data()),
+        const_cast<void*>(lower_strict.storage().data()),
+        const_cast<void*>(indptr_data), const_cast<void*>(z.storage().data()),
+        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else {
     /* Unsupported*/
   }
 
   aclrtFree(tiling_device);
-  aclrtSynchronizeStream(acl_stream);
 
   return z;
 }
@@ -362,6 +404,12 @@ at::Tensor run_seg_sum_multi_core(
   at::Tensor segm_offsets_;
   if (segm_offsets.has_value()) {
     segm_offsets_ = segm_offsets.value();
+    TORCH_CHECK(
+        segm_offsets_.numel() == static_cast<int64_t>(block_dim) + 1,
+        "run_seg_sum_multi_core: segm_offsets must have block_dim + 1 = ",
+        block_dim + 1, " entries, got ", segm_offsets_.numel(),
+        ". This device has ", ascendc_platform->GetCoreNumAic(),
+        " AI cube cores; compute the tiling for that core count.");
   } else {
     const at::Tensor sstart = torch::clamp(
         torch::arange(
@@ -394,15 +442,12 @@ at::Tensor run_seg_sum_multi_core(
 
     auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
-    ACLRT_LAUNCH_KERNEL(seg_sum_multi_core_fp16)
-    (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
-     const_cast<void*>(indptr_data),
-     const_cast<void*>(segm_offsets_.storage().data()),
-     const_cast<void*>(z.storage().data()),
-     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
-
-    aclrtFree(tiling_device);
-    aclrtSynchronizeStream(acl_stream);
+    launch_seg_sum_multi_core_fp16(
+        block_dim, acl_stream, const_cast<void*>(x.storage().data()),
+        const_cast<void*>(indptr_data),
+        const_cast<void*>(segm_offsets_.storage().data()),
+        const_cast<void*>(z.storage().data()),
+        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
 
   } else if (dtype == torch::kInt8) {
     const uint32_t workspace_size = tcuscan::get_workspace_size<int8_t>(tiling);
@@ -411,16 +456,14 @@ at::Tensor run_seg_sum_multi_core(
         tcuscan::alloc_workspace(workspace_size, device);
 
     auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
-    ACLRT_LAUNCH_KERNEL(seg_sum_multi_core_int8)
-    (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
-     const_cast<void*>(indptr_data),
-     const_cast<void*>(segm_offsets_.storage().data()),
-     const_cast<void*>(z.storage().data()),
-     const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
-
-    aclrtFree(tiling_device);
-    aclrtSynchronizeStream(acl_stream);
+    launch_seg_sum_multi_core_int8(
+        block_dim, acl_stream, const_cast<void*>(x.storage().data()),
+        const_cast<void*>(indptr_data),
+        const_cast<void*>(segm_offsets_.storage().data()),
+        const_cast<void*>(z.storage().data()),
+        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   }
+  aclrtFree(tiling_device);
 
   return z;
 }
@@ -474,6 +517,12 @@ at::Tensor run_seg_sum_multi_cube(
   at::Tensor segm_offsets_;
   if (segm_offsets.has_value()) {
     segm_offsets_ = segm_offsets.value();
+    TORCH_CHECK(
+        segm_offsets_.numel() == static_cast<int64_t>(block_dim) + 1,
+        "run_seg_sum_multi_cube: segm_offsets must have block_dim + 1 = ",
+        block_dim + 1, " entries, got ", segm_offsets_.numel(),
+        ". This device has ", ascendc_platform->GetCoreNumAic(),
+        " AI cube cores; compute the tiling for that core count.");
   } else {
     const at::Tensor sstart = torch::clamp(
         torch::arange(
@@ -506,17 +555,16 @@ at::Tensor run_seg_sum_multi_cube(
 
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
-  ACLRT_LAUNCH_KERNEL(seg_sum_multi_cube_fp16)
-  (block_dim, acl_stream, const_cast<void*>(x.storage().data()),
-   const_cast<void*>(upper.storage().data()),
-   const_cast<void*>(lower_strict.storage().data()),
-   const_cast<void*>(indptr_data),
-   const_cast<void*>(segm_offsets_.storage().data()),
-   const_cast<void*>(z.storage().data()),
-   const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+  launch_seg_sum_multi_cube_fp16(
+      block_dim, acl_stream, const_cast<void*>(x.storage().data()),
+      const_cast<void*>(upper.storage().data()),
+      const_cast<void*>(lower_strict.storage().data()),
+      const_cast<void*>(indptr_data),
+      const_cast<void*>(segm_offsets_.storage().data()),
+      const_cast<void*>(z.storage().data()),
+      const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
 
   aclrtFree(tiling_device);
-  aclrtSynchronizeStream(acl_stream);
 
   return z;
 }
