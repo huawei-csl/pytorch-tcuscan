@@ -11,7 +11,6 @@ import types
 import typing
 from dataclasses import dataclass
 from functools import partial
-from math import ceil
 
 import numpy as np
 from scipy.sparse import random as sp_random
@@ -146,17 +145,6 @@ def _build_csr_inputs(
     return torch_values, torch_indexes, torch_cols, torch_vector, B.nnz
 
 
-def _spmv_v2_tiling(
-    nnz: int, s: int, max_aic_cores: int = 20
-) -> typing.Tuple[int, int]:
-    matmul_tile_len = s * s
-    num_tiles = ceil(nnz / matmul_tile_len)
-    num_blocks = min(num_tiles, max_aic_cores)
-    max_num_tiles_per_block = ceil(num_tiles / num_blocks)
-    block_len = max_num_tiles_per_block * matmul_tile_len
-    return block_len, num_blocks
-
-
 def spmv_benchmark(
     device: Device,
     torch_values: torch.Tensor,
@@ -181,20 +169,9 @@ def spmv_v2_benchmark(
     torch_vector: torch.Tensor,
     s: int,
 ) -> float:
-    nnz = torch_values.numel()
-    block_len, num_blocks = _spmv_v2_tiling(nnz, s)
-    sstart = torch.clamp(
-        torch.arange(0, num_blocks + 1, dtype=torch.int32, device=device.str)
-        * block_len,
-        max=nnz,
-    )
-    device.sync()
-    segm_offsets = torch.searchsorted(torch_indexes, sstart, out_int32=True)
-    device.sync()
-
     def run() -> None:
         _ = tcuscan_ops.run_spmv_v2(
-            torch_values, torch_indexes, torch_cols, torch_vector, s, segm_offsets
+            torch_values, torch_indexes, torch_cols, torch_vector, s
         )
 
     return _run_benchmark(device, run)
