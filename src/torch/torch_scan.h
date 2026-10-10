@@ -11,6 +11,7 @@
 #include <torch/extension.h>
 
 #include "../tiling/tiling_block_scan.h"
+#include "../tiling/tiling_block_scan_vec_only.h"
 #include "../tiling/tiling_row_scan.h"
 #include "../tiling/tiling_scan_batch.h"
 #include "../tiling/tiling_scan_multi_core.h"
@@ -74,6 +75,9 @@ void launch_scan_single_cube_fp16(uint32_t blockDim, void* stream,
 void launch_scan_vec_only_fp16(uint32_t blockDim, void* stream, void* input_vec,
                                void* output_vec, void* workspace,
                                void* tilingGm);
+void launch_block_scan_vec_only_fp16(uint32_t blockDim, void* stream,
+                                     void* input_vec, void* output_vec,
+                                     void* workspace, void* tilingGm);
 }
 /// @endcond
 
@@ -616,6 +620,45 @@ at::Tensor run_scan_vec_only(const at::Tensor& x, int S) {
   if (dtype == torch::kHalf) {
     launch_scan_vec_only_fp16(
         1 /* single core*/, acl_stream, const_cast<void*>(x.storage().data()),
+        const_cast<void*>(z.storage().data()),
+        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+  } else {
+    /* Unsupported */
+  }
+
+  aclrtFree(tiling_device);
+  aclrtSynchronizeStream(acl_stream);
+
+  return z;
+}
+
+/**
+ * @brief Vector block_scan_vec_only kernel
+ *
+ * @param x Input data vector.
+ * @param s Tiling length
+ * @return Copy of input vector `x`.
+ */
+at::Tensor run_block_scan_vec_only(const at::Tensor& x, int s) {
+  const at::Device device = x.options().device();
+  const auto dtype = x.options().dtype();
+
+  const uint32_t total_len = x.numel();
+  const at::Tensor z =
+      at::empty({total_len}, at::TensorOptions().dtype(dtype).device(device));
+
+  const at::Tensor workspace_tensor = alloc_workspace(0, device);
+
+  const uint32_t block_dim = 8;
+  const uint32_t tile_size = static_cast<uint32_t>(s);
+  const BlockScanVecOnlyTiling tiling{block_dim, total_len, tile_size};
+  uint8_t* tiling_device = alloc_copy_tiling(tiling);
+
+  auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
+
+  if (dtype == at::kHalf) {
+    launch_block_scan_vec_only_fp16(
+        block_dim, acl_stream, const_cast<void*>(x.storage().data()),
         const_cast<void*>(z.storage().data()),
         const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else {
