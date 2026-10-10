@@ -1157,22 +1157,6 @@ enum class GroupSyncDirection {
 };
 
 /**
- * @brief Synchronize all blocks.
- *
- * @param [in] global_workspace Global tensor used to synchronize blocks.
- * @param [in] local_workspace_q Queue from which the local synchronization
- * tensor will be allocated. Position must be VECIN.
- */
-__aicore__ inline void SyncAllBlocks(
-    const GlobalTensor<int32_t>& global_workspace,
-    TQue<QuePosition::VECIN, 1>& local_workspace_q) {
-  exec_mode::AssertIsAIV();
-  LocalTensor<int32_t> lt = local_workspace_q.AllocTensor<int32_t>();
-  SyncAll(global_workspace, lt);
-  local_workspace_q.FreeTensor(lt);
-}
-
-/**
  * @brief Returns a synchronization config.
  *
  * @param [in] mode Synchronization mode.
@@ -1224,29 +1208,6 @@ __aicore__ inline void SyncGroup() {
       wait_flag_dev(AIV_SET_FLAG_ID);
     }
     return;
-  }
-}
-
-/**
- * @brief Synchronize all vector and all cube cores.
- *
- * This function provides an inter-AIV and inter-AIC synchronization.
- * If called from vector cores, will synchronize all vector cores, if called
- * from cube cores, will synchronize all cube cores.
- * The synchronization between vector and cube cores is not guaranteed, for that
- * `SyncGroup` should be used.
- */
-__aicore__ inline void SyncAllCores() {
-  const int mode = 0;
-  if ASCEND_IS_AIV {
-    const int flag_id = 13;
-    ffts_cross_core_sync(PIPE_MTE3, GetSyncConf(mode, flag_id));
-    wait_flag_dev(flag_id);
-  }
-  if ASCEND_IS_AIC {
-    const int flag_id = 14;
-    ffts_cross_core_sync(PIPE_FIX, GetSyncConf(mode, flag_id));
-    wait_flag_dev(flag_id);
   }
 }
 
@@ -1500,6 +1461,37 @@ __aicore__ inline T GetGMValue(GM_ADDR addr, uint32_t offset,
   data_cache::InvalidateLine(gt);
 
   return gt.GetValue(offset);
+}
+
+/**
+ * @brief Binary search (lower_bound) of @p value into a sorted GM array.
+ *
+ * Reproduces `torch.searchsorted(sorted, value, side='left')`: returns the
+ * first index `j` such that `sorted[j] >= value` (equivalently, the count of
+ * elements `< value`). The haystack is read one element at a time from global
+ * memory via `GetGMValue`, so no Unified Buffer staging is required.
+ *
+ * @tparam T Data type of the sorted array and search value.
+ *
+ * @param [in] sorted Pointer to the sorted (ascending) array in global memory.
+ * @param [in] len Number of elements in @p sorted.
+ * @param [in] value Value to search for.
+ * @return Insertion index in `[0, len]`.
+ */
+template <typename T>
+__aicore__ inline uint32_t LowerBoundGM(GM_ADDR sorted, uint32_t len, T value) {
+  uint32_t lo = 0;
+  uint32_t hi = len;
+  while (lo < hi) {
+    const uint32_t mid = lo + (hi - lo) / 2;
+    const T pivot = GetGMValue<T>(sorted, mid, len);
+    if (pivot < value) {
+      lo = mid + 1;
+    } else {
+      hi = mid;
+    }
+  }
+  return lo;
 }
 
 /**

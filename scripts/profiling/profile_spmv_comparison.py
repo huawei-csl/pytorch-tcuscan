@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding:utf-8 -*-
 #
-# PyTorch profiling code is part of TCUSCAN-CH CSTT project.
-#
 # Copyright 2024 Huawei Technologies Co., Ltd
 
 import argparse
@@ -104,11 +102,11 @@ def _dtype_bytes(dtype: torch.dtype) -> int:
 def _spmv_bytes(nrow: int, nnz: int, dtype: torch.dtype) -> int:
     elem = _dtype_bytes(dtype)
     return (
-        nnz * elem          # values
-        + nnz * 4           # col indices (int32)
-        + (nrow + 1) * 4    # row pointers (uint32)
-        + nrow * elem       # input vector
-        + nrow * elem       # output vector
+        nnz * elem  # values
+        + nnz * 4  # col indices (int32)
+        + (nrow + 1) * 4  # row pointers (uint32)
+        + nrow * elem  # input vector
+        + nrow * elem  # output vector
     )
 
 
@@ -148,7 +146,9 @@ def _build_csr_inputs(
     return torch_values, torch_indexes, torch_cols, torch_vector, B.nnz
 
 
-def _spmv_v2_tiling(nnz: int, s: int, max_aic_cores: int = 20) -> typing.Tuple[int, int]:
+def _spmv_v2_tiling(
+    nnz: int, s: int, max_aic_cores: int = 20
+) -> typing.Tuple[int, int]:
     matmul_tile_len = s * s
     num_tiles = ceil(nnz / matmul_tile_len)
     num_blocks = min(num_tiles, max_aic_cores)
@@ -166,7 +166,9 @@ def spmv_benchmark(
     s: int,
 ) -> float:
     def run() -> None:
-        _ = tcuscan_ops.run_spmv(torch_values, torch_indexes, torch_cols, torch_vector, s)
+        _ = tcuscan_ops.run_spmv(
+            torch_values, torch_indexes, torch_cols, torch_vector, s
+        )
 
     return _run_benchmark(device, run)
 
@@ -182,7 +184,8 @@ def spmv_v2_benchmark(
     nnz = torch_values.numel()
     block_len, num_blocks = _spmv_v2_tiling(nnz, s)
     sstart = torch.clamp(
-        torch.arange(0, num_blocks + 1, dtype=torch.int32, device=device.str) * block_len,
+        torch.arange(0, num_blocks + 1, dtype=torch.int32, device=device.str)
+        * block_len,
         max=nnz,
     )
     device.sync()
@@ -208,19 +211,25 @@ def run_comparison(
 ) -> None:
     os.makedirs(output_dir, exist_ok=True)
 
-    comparison_path = os.path.join(
-        output_dir, f"spmv_comparison_{dtype_str}.csv"
-    )
+    comparison_path = os.path.join(output_dir, f"spmv_comparison_{dtype_str}.csv")
 
     with open(comparison_path, "w", encoding="UTF-8") as cmp_fd:
-        cmp_fd.write("nrow,nnz,density,s,dtype,time_v1_us,time_v2_us,speedup_v2_vs_v1,bw_v1_GBs,bw_v2_GBs\n")
+        cmp_fd.write(
+            "nrow,nnz,density,s,dtype,time_v1_us,time_v2_us,speedup_v2_vs_v1,bw_v1_GBs,bw_v2_GBs\n"
+        )
 
         for density in densities:
-            v1_path = os.path.join(output_dir, f"spmv_v1_{dtype_str}_density{density}.csv")
-            v2_path = os.path.join(output_dir, f"spmv_v2_{dtype_str}_density{density}.csv")
+            v1_path = os.path.join(
+                output_dir, f"spmv_v1_{dtype_str}_density{density}.csv"
+            )
+            v2_path = os.path.join(
+                output_dir, f"spmv_v2_{dtype_str}_density{density}.csv"
+            )
 
-            with open(v1_path, "w", encoding="UTF-8") as v1_fd, \
-                 open(v2_path, "w", encoding="UTF-8") as v2_fd:
+            with (
+                open(v1_path, "w", encoding="UTF-8") as v1_fd,
+                open(v2_path, "w", encoding="UTF-8") as v2_fd,
+            ):
 
                 v1_fd.write("operator,dtype,nrow,nnz,density,s,time_us,bw_GBs\n")
                 v2_fd.write("operator,dtype,nrow,nnz,density,s,time_us,bw_GBs\n")
@@ -248,9 +257,7 @@ def run_comparison(
                             time_v1 = spmv_benchmark(device, vals, idx, cols, vec, s)
                             time_v2 = spmv_v2_benchmark(device, vals, idx, cols, vec, s)
                         except Exception as e:
-                            logger.warning(
-                                f"Skipping s={s}: {e}"
-                            )
+                            logger.warning(f"Skipping s={s}: {e}")
                             continue
 
                         speedup = time_v1 / time_v2 if time_v2 > 0 else float("inf")
@@ -258,8 +265,12 @@ def run_comparison(
                         bw_v1 = nbytes / (time_v1 * 1e-6) / 1e9
                         bw_v2 = nbytes / (time_v2 * 1e-6) / 1e9
 
-                        v1_fd.write(f"spmv,{dtype_str},{nrow},{nnz},{density},{s},{time_v1:.2f},{bw_v1:.2f}\n")
-                        v2_fd.write(f"spmv_v2,{dtype_str},{nrow},{nnz},{density},{s},{time_v2:.2f},{bw_v2:.2f}\n")
+                        v1_fd.write(
+                            f"spmv,{dtype_str},{nrow},{nnz},{density},{s},{time_v1:.2f},{bw_v1:.2f}\n"
+                        )
+                        v2_fd.write(
+                            f"spmv_v2,{dtype_str},{nrow},{nnz},{density},{s},{time_v2:.2f},{bw_v2:.2f}\n"
+                        )
                         cmp_fd.write(
                             f"{nrow},{nnz},{density},{s},{dtype_str},"
                             f"{time_v1:.2f},{time_v2:.2f},{speedup:.4f},{bw_v1:.2f},{bw_v2:.2f}\n"

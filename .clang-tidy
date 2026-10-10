@@ -63,4 +63,9 @@ CheckOptions:
     value:           1
 
 WarningsAsErrors:    'clang-*,readability-identifier-naming'
-HeaderFilterRegex : '.*pytorch-tcuscan.*'
+# Only diagnose our own headers (everything under src/). Note that a plain
+# '.*pytorch-tcuscan.*' also matches third-party headers installed inside the
+# repo (e.g. venv/lib/python3.10/site-packages/torch_npu/include/...), which
+# then fail readability-identifier-naming on their own conventions.
+# clang-tidy uses POSIX ERE here (no negative lookahead), so filter positively.
+HeaderFilterRegex : '.*pytorch-tcuscan/src/.*'

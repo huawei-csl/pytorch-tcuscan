@@ -158,8 +158,10 @@ def _run_benchmark(
     return avg_time_us
 
 
-def masked_select_benchmark(device: Device, size: int, dtype: torch.dtype) -> float:
-    mask = (torch.randn(size, device=device.str) > 0).to(torch.bool)
+def masked_select_benchmark(
+    device: Device, size: int, dtype: torch.dtype, segm_density: float
+) -> float:
+    mask = (torch.rand(size=(size,)) < segm_density).to(torch.uint8).npu()
     if dtype == torch.int16:
         x = torch.randint(0, 2**7 - 1, (size,), device=device.str).to(torch.int16)
     elif dtype == torch.float16:
@@ -850,6 +852,24 @@ def scan_multi_cube_benchmark(
     return _run_benchmark(device, run_scan), size
 
 
+def scan_single_cube_benchmark(
+    device: Device, size: int, dtype: torch.dtype, s: int
+) -> Tuple[float, int]:
+    if dtype == torch.float16:
+        x = torch.rand(size, device=device.str, dtype=dtype)
+    else:
+        raise RuntimeError(f"dtype {dtype} is not supported in scan_single_cube.")
+
+    ones = torch.ones((s, s), dtype=dtype, device=device.str)
+    upper = torch.triu(ones)
+    lower_strict = torch.tril(ones, -1)
+
+    def run_scan() -> None:
+        _ = tcuscan_ops.run_scan_single_cube(x, upper, lower_strict)
+
+    return _run_benchmark(device, run_scan), size
+
+
 def complete_blocks_benchmark(
     device: Device,
     size: int,
@@ -1013,23 +1033,48 @@ def tcuscan_hist_benchmark(
     return _run_benchmark(device, run_hist), num_bins
 
 
-def searchsorted_benchmark(
+def _make_searchsorted_inputs(
     device: Device, size: int, dtype: torch.dtype
-) -> Tuple[float, int]:
-    if dtype in {torch.int32}:
-        x = torch.randint(1, 100, (size,), device=device.str).to(torch.int32)
-        x = torch.cumsum(x, dim=-1)
-    else:
+) -> Tuple[torch.Tensor, torch.Tensor, int]:
+    """Build a monotonic int32 haystack and sorted int32 needles.
+
+    Shared by the ``searchsorted`` (torch baseline) and ``tcuscan_searchsorted``
+    (custom kernel) benchmarks so both are timed on identical inputs.
+    """
+    if dtype not in {torch.int32}:
         raise ValueError("searchsorted benchmark only supports int32 for now")
+
+    x = torch.randint(1, 100, (size,), device=device.str).to(torch.int32)
+    # cumsum promotes int32 -> int64; cast back since run_searchsorted requires int32.
+    x = torch.cumsum(x, dim=-1).to(torch.int32)
 
     num_partitions = 20
     search_vals = torch.randint(10, 1000, (num_partitions,), device=device.str).to(
         torch.int32
     )
-    search_vals = torch.cumsum(search_vals, dim=-1)
+    search_vals = torch.cumsum(search_vals, dim=-1).to(torch.int32)
+
+    return x, search_vals, num_partitions
+
+
+def searchsorted_benchmark(
+    device: Device, size: int, dtype: torch.dtype
+) -> Tuple[float, int]:
+    x, search_vals, num_partitions = _make_searchsorted_inputs(device, size, dtype)
 
     def run_searchsorted() -> None:
         _ = torch.searchsorted(x, search_vals)
+
+    return _run_benchmark(device, run_searchsorted), num_partitions
+
+
+def tcuscan_searchsorted_benchmark(
+    device: Device, size: int, dtype: torch.dtype
+) -> Tuple[float, int]:
+    x, search_vals, num_partitions = _make_searchsorted_inputs(device, size, dtype)
+
+    def run_searchsorted() -> None:
+        _ = tcuscan_ops.run_searchsorted(x, search_vals)
 
     return _run_benchmark(device, run_searchsorted), num_partitions
 
@@ -1224,9 +1269,11 @@ if __name__ == "__main__":  # noqa
             "complete_blocks",
             "complete_rows",
             "scan_multi_cube",
+            "scan_single_cube",
             "hist",
             "tcuscan_hist",
             "searchsorted",
+            "tcuscan_searchsorted",
             "scan_batch",
             "scan_batch_tcuscan",
             "tri_inv_col_sweep",
@@ -1347,6 +1394,16 @@ if __name__ == "__main__":  # noqa
             sizes,
             density,
         )
+    elif bench == "tcuscan_searchsorted" and dtype in ["int32"]:
+        tdtype = STR_TO_DTYPE[dtype]
+        benchmark(
+            device,
+            "tcuscan_searchsorted",
+            dtype,
+            partial(tcuscan_searchsorted_benchmark, dtype=tdtype),
+            sizes,
+            density,
+        )
     elif bench == "seg_scan_mc_revert" and dtype in ["fp32"]:
         benchmark(
             device,
@@ -1405,6 +1462,16 @@ if __name__ == "__main__":  # noqa
             f"compress_{s}_{density}",
             dtype,
             partial(compress_benchmark, dtype=tdtype, s=s, segm_density=density),
+            sizes,
+            density,
+        )
+    elif bench == "masked_select" and dtype in ["fp16", "fp32"]:
+        tdtype = STR_TO_DTYPE[dtype]
+        benchmark(
+            device,
+            f"masked_select_{s}_{density}",
+            dtype,
+            partial(masked_select_benchmark, dtype=tdtype, segm_density=density),
             sizes,
             density,
         )
@@ -1682,6 +1749,20 @@ if __name__ == "__main__":  # noqa
             dtype,
             partial(
                 scan_multi_cube_benchmark,
+                dtype=tdtype,
+                s=s,
+            ),
+            sizes,
+            density,
+        )
+    elif bench == "scan_single_cube" and dtype in ["fp16"]:
+        tdtype = STR_TO_DTYPE[dtype]
+        benchmark(
+            device,
+            f"scan_single_cube_{s}",
+            dtype,
+            partial(
+                scan_single_cube_benchmark,
                 dtype=tdtype,
                 s=s,
             ),

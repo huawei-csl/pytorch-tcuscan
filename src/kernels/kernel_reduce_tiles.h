@@ -156,6 +156,10 @@ class KernelReduceTiles {
                                      ? RoundMode::CAST_NONE
                                      : RoundMode::CAST_RINT;
       Cast(dst_lt, intermediate_lt, cast_mode, dst_size);
+    } else if constexpr (std::is_same_v<InputT, AccT>) {
+      // `Cast` is a no-op when the source and destination types are identical,
+      // so the accumulator tensor would be left uninitialized. Copy instead.
+      DataCopy(dst_lt, input_lt, dst_size);
     } else {
       Cast(dst_lt, input_lt, RoundMode::CAST_NONE, dst_size);
     }

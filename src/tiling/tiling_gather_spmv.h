@@ -23,6 +23,8 @@ struct GatherSpmvTiling {
   uint32_t idx_len;
   /// @brief Tiling length.
   uint32_t tile_len;
+  /// @brief Scaling factor applied to the gathered values.
+  float alpha;
 };
 #pragma pack(pop)
 }  // namespace tcuscan
