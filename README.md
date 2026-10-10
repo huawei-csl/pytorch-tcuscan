@@ -180,6 +180,28 @@ Unit tests can be executed with
 ```bash
 make test
 ```
+### Debug builds
+
+`build.sh` configures `-DCMAKE_BUILD_TYPE=Release` (`-O3 -DNDEBUG`). For an unoptimised
+host build with `-g` and active `assert()`s, pass `Debug` instead:
+
+```bash
+source "${ASCEND_HOME_PATH}"/bin/setenv.bash
+export TORCH_DEVICE_BACKEND_AUTOLOAD=0
+export CMAKE_PREFIX_PATH="${CMAKE_PREFIX_PATH}:$(python -c 'import torch, pybind11; print(torch.utils.cmake_prefix_path + ":" + pybind11.get_cmake_dir())')"
+
+rm -rf build
+cmake -B build \
+    -DCMAKE_BUILD_TYPE=Debug \
+    -DSOC_VERSION=Ascend910B4 \
+    -DASCEND_CANN_PACKAGE_PATH="${ASCEND_HOME_PATH}"
+cmake --build build -j
+```
+
+`CMAKE_BUILD_TYPE` is cached, so always reconfigure from a clean `build/` when switching.
+This affects host-side C++ only; for kernel debugging use the standalone `Makefile`
+targets and on-device printing.
+
 The artifacts can currently be installed inside a local python environment (e.g. conda) by manually moving them to the appropriate folders.
 This can be done with:
 ```bash

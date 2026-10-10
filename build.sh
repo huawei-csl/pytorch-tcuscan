@@ -57,6 +57,7 @@ set -e
 rm -rf build
 mkdir -p build
 cmake -B build \
+    -DCMAKE_BUILD_TYPE=Release \
     -DSOC_VERSION="${SOC_VERSION}" \
     -DASCEND_CANN_PACKAGE_PATH="${_ASCEND_INSTALL_PATH}"
 
