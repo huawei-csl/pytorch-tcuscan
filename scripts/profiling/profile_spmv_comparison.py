@@ -179,6 +179,7 @@ def spmv_v2_benchmark(
 
 def run_comparison(
     device: Device,
+    *,
     nrows: typing.List[int],
     densities: typing.List[float],
     s_values: typing.List[int],
