@@ -74,8 +74,15 @@ falling through to the `int8` kernel.
 | `run_mc_gather` | `fp16`, `fp32` | General multi-core gather of a 1D vector |
 
 For `run_spmv_v2`, `vals` and `x` must have the *same* dtype, and `indptr` must be
-`int32`/`uint32`. `run_gather_spmv` is hard-instantiated as `KernelGatherSpmv<float>`, so it
-consumes the 32-bit output of the preceding scan.
+`int32`/`uint32`.
+
+All four SpMV entry points (`run_spmv`, `run_spmv_v2`, `run_spmv_multi_cube`,
+`run_spmv_v2_multi_cube`) take the BLAS-style scalars `alpha`, `beta` and an optional
+output vector `y`, computing
+
+```python
+y = tcuscan_ops.run_spmv_v2(vals, indptr, cols, x, s, alpha=2.0, beta=1.0, y=y)  # y = 2*A@x + y
+```
 
 ### Sort, top-k, and split
 
@@ -173,6 +180,28 @@ Unit tests can be executed with
 ```bash
 make test
 ```
+### Debug builds
+
+`build.sh` configures `-DCMAKE_BUILD_TYPE=Release` (`-O3 -DNDEBUG`). For an unoptimised
+host build with `-g` and active `assert()`s, pass `Debug` instead:
+
+```bash
+source "${ASCEND_HOME_PATH}"/bin/setenv.bash
+export TORCH_DEVICE_BACKEND_AUTOLOAD=0
+export CMAKE_PREFIX_PATH="${CMAKE_PREFIX_PATH}:$(python -c 'import torch, pybind11; print(torch.utils.cmake_prefix_path + ":" + pybind11.get_cmake_dir())')"
+
+rm -rf build
+cmake -B build \
+    -DCMAKE_BUILD_TYPE=Debug \
+    -DSOC_VERSION=Ascend910B4 \
+    -DASCEND_CANN_PACKAGE_PATH="${ASCEND_HOME_PATH}"
+cmake --build build -j
+```
+
+`CMAKE_BUILD_TYPE` is cached, so always reconfigure from a clean `build/` when switching.
+This affects host-side C++ only; for kernel debugging use the standalone `Makefile`
+targets and on-device printing.
+
 The artifacts can currently be installed inside a local python environment (e.g. conda) by manually moving them to the appropriate folders.
 This can be done with:
 ```bash

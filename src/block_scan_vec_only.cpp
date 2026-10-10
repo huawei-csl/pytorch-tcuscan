@@ -55,3 +55,22 @@ extern "C" __global__ __aicore__ void block_scan_vec_only_fp16(
   (void)workspace;
   tcuscan::run_block_scan_vec_only<half>(input_vec, output_vec, tilingGm);
 }
+
+/**
+ * @brief Launch the block scan vec only kernel with dtype fp16
+ *
+ * @param [in] blockDim The number of blocks to launch.
+ * @param [in] stream The stream to launch the kernel on.
+ * @param [in] input_vec Pointer to an input vector.
+ * @param [in] output_vec Pointer to an output vector.
+ * @param [in] workspace Pointer to the kernel workspace.
+ * @param [in] tiling Pointer to the tiling buffer.
+ */
+extern "C" void launch_block_scan_vec_only_fp16(uint32_t blockDim, void* stream,
+                                                GM_ADDR input_vec,
+                                                GM_ADDR output_vec,
+                                                GM_ADDR workspace,
+                                                GM_ADDR tiling) {
+  block_scan_vec_only_fp16<<<blockDim, nullptr, stream>>>(input_vec, output_vec,
+                                                          workspace, tiling);
+}

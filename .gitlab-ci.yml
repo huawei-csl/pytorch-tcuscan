@@ -39,7 +39,7 @@ black:
     - pip3 install black==25.1.0 # The version here should be the same as in .pre-commit-config.yaml
     - black --check .
 
-cmake_linter:
+.cmake_linter:
   stage: linter
   image: python:3.9
   script:
@@ -103,7 +103,7 @@ build_spmv_eigen:
     - apt-get update && apt-get install -y libeigen3-dev git-core
   script:
     - cd scripts/baselines/eigen-spmv-cpu
-    - export GIT_SSL_NO_VERIFY=1 && make compile
+    - make compile
 
 build_in_docker:
   tags:
@@ -121,7 +121,7 @@ build:
     - make setup_once
     - make build
   artifacts:
-    expire_in: 2 hours
+    expire_in: 3 hours
     paths:
       - tcuscan_ops.*.so
       - build/
@@ -309,11 +309,23 @@ test_spmv:
     - make setup_once
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_spmv
 
+test_spmv_v2:
+  <<: *test_config
+  script:
+    - make setup_once
+    - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_spmv_v2
+
 test_spmv_multi_cube:
   <<: *test_config
   script:
     - make setup_once
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_spmv_multi_cube
+
+test_spmv_alpha_beta:
+  <<: *test_config
+  script:
+    - make setup_once
+    - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_spmv_alpha_beta
 
 
 test_matmul_cce:

@@ -55,8 +55,15 @@ def random_csr(rows: int, cols: int, nnz: int, dtype: np.dtype) -> csr_matrix:
     return csr_matrix((data, (row, col)), shape=(rows, cols))
 
 
-def tiling_function(nnz: int, s: int, max_aic_cores: int = 20):
+def num_aic_cores() -> int:
+    "Number of AI cube cores of the current device, as used by the kernel launcher."
+    return torch.npu.get_device_properties(torch.npu.current_device()).cube_core_num
+
+
+def tiling_function(nnz: int, s: int, max_aic_cores: int = None):
     "Return the tiling parameters 'block_len' and 'num_blocks' of seg_sum_multi_core."
+    if max_aic_cores is None:
+        max_aic_cores = num_aic_cores()
     matmul_tile_len = s * s
     num_tiles = ceil(nnz / matmul_tile_len)
     num_blocks = max_aic_cores
