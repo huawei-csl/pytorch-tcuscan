@@ -24,9 +24,18 @@ struct HistogramTiling {
   uint32_t tile_len;
   /// @brief Number of histogram bins.
   uint32_t num_bins;
-  /// @brief Minimum value of the input vector.
+  /// @brief Non-zero if the kernel must read the histogram range from global
+  /// memory instead of from `x_min` / `x_max`.
+  ///
+  /// The range is a property of the data, so computing it on the host would
+  /// require reading a device-side reduction back, which drains the stream.
+  /// When this flag is set, the host leaves the reduction on the device and
+  /// the kernel loads the two values itself; `x_min` and `x_max` are then
+  /// unused.
+  uint32_t bounds_in_gm;
+  /// @brief Minimum value of the input vector. Unused if `bounds_in_gm`.
   float x_min;
-  /// @brief Maximum value of the input vector.
+  /// @brief Maximum value of the input vector. Unused if `bounds_in_gm`.
   float x_max;
 };
 #pragma pack(pop)

@@ -155,6 +155,9 @@ PYBIND11_MODULE(tcuscan_ops, m) {
   m.def("run_triu_inv_rec_unroll", &tcuscan::run_triu_inv_rec_unroll,
         "Upper triangular inverse");
   m.def("run_count_if", &tcuscan::run_count_if, "Count if");
-  m.def("run_histogram", &tcuscan::run_histogram,
-        "Histogram with number of bins.");
+  m.def("run_histogram", &tcuscan::run_histogram, pybind11::arg("x"),
+        pybind11::arg("num_bins"), pybind11::arg("hist_min") = pybind11::none(),
+        pybind11::arg("hist_max") = pybind11::none(),
+        "Histogram with number of bins. The range defaults to [min(x), max(x)],"
+        " computed on the device.");
 }

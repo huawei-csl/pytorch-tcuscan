@@ -21,6 +21,8 @@ namespace tcuscan {
 template <typename T>
 class KernelHistogram {
   constexpr static uint32_t BUFFER_NUM = 2;
+  /// @brief Number of range values read from global memory: `{min, max}`.
+  constexpr static uint32_t NUM_BOUNDS = 2;
 
   using PackedMaskT = uint8_t;
   using GatherMaskT =
@@ -34,15 +36,20 @@ class KernelHistogram {
    * @param [in] tile_len Tile length.
    * @param [in] num_bins Number of histogram bins.
    * @param [in] hist_min Smallest value where the histogram will be built on.
+   * Ignored if `bounds_in_gm`.
    * @param [in] hist_max Largest value on which the histogram will be built on.
+   * Ignored if `bounds_in_gm`.
+   * @param [in] bounds_in_gm Whether `hist_min` and `hist_max` must be read
+   * from global memory instead; see `LoadBounds`.
    */
   __aicore__ inline KernelHistogram(uint32_t vec_len, uint32_t tile_len,
                                     uint32_t num_bins, float hist_min,
-                                    float hist_max)
+                                    float hist_max, bool bounds_in_gm)
       : vec_core_num_(GetBlockNum() * GetTaskRation()),
         vec_len_(vec_len),
         tile_len_(tile_len),
         num_bins_(num_bins),
+        bounds_in_gm_(bounds_in_gm),
         hist_min_(hist_min),
         hist_max_(hist_max),
         num_tiles_(scalar::CeilDiv(vec_len_, tile_len_)),
@@ -52,9 +59,12 @@ class KernelHistogram {
    * @brief Initialize global and local memory structures.
    *
    * @param [in] vec_in Pointer to the input vector in global memory.
+   * @param [in] bounds Pointer to the `{min, max}` pair in global memory. Only
+   * read when the kernel was constructed with `bounds_in_gm`; may be null
+   * otherwise.
    * @param [in] vec_out Pointer to the output vector in global memory.
    */
-  __aicore__ inline void Init(GM_ADDR vec_in, GM_ADDR vec_out) {
+  __aicore__ inline void Init(GM_ADDR vec_in, GM_ADDR bounds, GM_ADDR vec_out) {
     global_in_.SetGlobalBuffer((__gm__ T*)vec_in, vec_len_);
     global_out_.SetGlobalBuffer((__gm__ int32_t*)vec_out, num_bins_);
 
@@ -64,12 +74,21 @@ class KernelHistogram {
     pipe_.InitBuffer(out_buf_, num_bins_ * sizeof(int32_t));
     pipe_.InitBuffer(work_buf_, tile_len_ * sizeof(T));
     pipe_.InitBuffer(packed_mask_buf_, tile_len_ * sizeof(PackedMaskT) / 8);
+
+    if (bounds_in_gm_) {
+      global_bounds_.SetGlobalBuffer((__gm__ T*)bounds, NUM_BOUNDS);
+      pipe_.InitBuffer(bounds_q_, 1, UB_ALIGNMENT);
+    }
   }
 
   /**
    * @brief Run the kernel.
    */
   __aicore__ inline void Process() {
+    if (bounds_in_gm_) {
+      LoadBounds();
+    }
+
     uint32_t global_offset =
         GetBlockIdx() * tile_len_ * max_num_tiles_per_block_;
     const uint32_t num_tiles_to_process =
@@ -92,6 +111,26 @@ class KernelHistogram {
   }
 
  private:
+  /**
+   * @brief Read the histogram range from global memory.
+   *
+   * The range spans the input, so it is the result of a reduction over `x`.
+   * Having the host read that reduction back costs a blocking device-to-host
+   * synchronization, which is far more expensive than this kernel; instead the
+   * caller leaves the two values in global memory and every core loads them
+   * here. The load is two elements wide and lands in L2 after the first core
+   * touches it.
+   */
+  __aicore__ inline void LoadBounds() {
+    copy::CopyGmToVec(bounds_q_, global_bounds_, NUM_BOUNDS);
+
+    // `DeQue` orders the copy against the scalar reads below.
+    LocalTensor<T> bounds_lt = bounds_q_.template DeQue<T>();
+    hist_min_ = static_cast<float>(bounds_lt.GetValue(0));
+    hist_max_ = static_cast<float>(bounds_lt.GetValue(1));
+    bounds_q_.template FreeTensor<T>(bounds_lt);
+  }
+
   __aicore__ inline void ProcessTile(const LocalTensor<int32_t>& vec_out_lt,
                                      uint32_t size) {
     LocalTensor<T> vec_in_lt = in_q_.DeQue<T>();
@@ -180,6 +219,7 @@ class KernelHistogram {
   TPipe pipe_;
 
   TQue<QuePosition::VECIN, BUFFER_NUM> in_q_;
+  TQue<QuePosition::VECIN, 1> bounds_q_;
   TQue<QuePosition::VECOUT, 1> out_q_;
 
   TBuf<QuePosition::VECCALC> work_buf_;
@@ -187,14 +227,16 @@ class KernelHistogram {
   TBuf<QuePosition::VECCALC> packed_mask_buf_;
 
   GlobalTensor<T> global_in_;
+  GlobalTensor<T> global_bounds_;
   GlobalTensor<int32_t> global_out_;
 
   const uint32_t vec_core_num_;
   const uint32_t vec_len_;
   const uint32_t tile_len_;
   const uint32_t num_bins_;
-  const float hist_min_;
-  const float hist_max_;
+  const bool bounds_in_gm_;
+  float hist_min_;
+  float hist_max_;
   const uint32_t num_tiles_;
   const uint32_t max_num_tiles_per_block_;
 };
@@ -205,21 +247,29 @@ class KernelHistogram {
  * @tparam T Input data type.
  *
  * @param [in] vec_in Pointer to the input vector.
+ * @param [in] bounds Pointer to the `{min, max}` histogram range in global
+ * memory. Only read if `bounds_in_gm`; may be null otherwise.
  * @param [in] vec_out Pointer ot the output vector.
  * @param [in] vec_len Dimension of the input vector.
  * @param [in] tile_len Tile length.
  * @param [in] num_bins Number of histogram bins.
  * @param [in] hist_min Smallest value where the histogram will be built on.
+ * Ignored if `bounds_in_gm`.
  * @param [in] hist_max Largest value on which the histogram will be built on.
+ * Ignored if `bounds_in_gm`.
+ * @param [in] bounds_in_gm Whether to take the range from `bounds` rather than
+ * from `hist_min` / `hist_max`.
  */
 template <typename T>
-__aicore__ inline void run_histogram(GM_ADDR vec_in, GM_ADDR vec_out,
-                                     uint32_t vec_len, uint32_t tile_len,
-                                     uint32_t num_bins, float hist_min,
-                                     float hist_max) {
+__aicore__ inline void run_histogram(GM_ADDR vec_in, GM_ADDR bounds,
+                                     GM_ADDR vec_out, uint32_t vec_len,
+                                     uint32_t tile_len, uint32_t num_bins,
+                                     float hist_min, float hist_max,
+                                     bool bounds_in_gm) {
   if ASCEND_IS_AIV {
-    KernelHistogram<T> op(vec_len, tile_len, num_bins, hist_min, hist_max);
-    op.Init(vec_in, vec_out);
+    KernelHistogram<T> op(vec_len, tile_len, num_bins, hist_min, hist_max,
+                          bounds_in_gm);
+    op.Init(vec_in, bounds, vec_out);
     op.Process();
   }
 }

@@ -200,3 +200,96 @@ def test_tcuscan_histogram_is_deterministic(hist_bins: int):
         again = tcuscan_ops.run_histogram(x, hist_bins).cpu()
         torch.npu.synchronize()
         assert torch.equal(first, again), f"Diff {first - again}"
+
+
+# --------------------------------------------------------------------------------
+# Histogram range
+#
+# The range spans the input, so by default it is a reduction over `x`.  The
+# wrapper leaves that reduction on the device and the kernel loads the two
+# values itself; reading them back to the host would cost a blocking
+# synchronisation far larger than the kernel.  A caller who already knows the
+# range can pass it instead and skip the reduction entirely.
+#
+# Both paths must agree: the device-side path reads the same float16 min and
+# max the host would have read, so the counts are identical, not merely close.
+# --------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("hist_bins", _REF_BINS, ids=lambda x: f"hist_bins:{x}")
+@pytest.mark.parametrize("distribution", ["integers", "uniform"], ids=str)
+def test_tcuscan_histogram_explicit_range_matches_default(
+    hist_bins: int, distribution: str
+):
+    """Passing the input's own range must reproduce the default exactly."""
+    x = _make_input(1024 * 1024 + 13, distribution)
+    torch.npu.synchronize()
+    x_min, x_max = torch.aminmax(x)
+    torch.npu.synchronize()
+
+    default = tcuscan_ops.run_histogram(x, hist_bins)
+    torch.npu.synchronize()
+    explicit = tcuscan_ops.run_histogram(
+        x, hist_bins, x_min.item(), x_max.item()
+    )
+    torch.npu.synchronize()
+
+    assert torch.equal(
+        default.cpu(), explicit.cpu()
+    ), f"Diff {default.cpu() - explicit.cpu()}"
+
+
+@pytest.mark.parametrize("hist_bins", [8, 32], ids=lambda x: f"hist_bins:{x}")
+def test_tcuscan_histogram_explicit_range_matches_reference(hist_bins: int):
+    """An explicit range equal to the input's range must match the oracle."""
+    x = _make_input(100003, "integers")
+    torch.npu.synchronize()
+    x_min, x_max = torch.aminmax(x)
+    torch.npu.synchronize()
+
+    actual = tcuscan_ops.run_histogram(x, hist_bins, x_min.item(), x_max.item())
+    torch.npu.synchronize()
+
+    expected = reference_histogram(x, hist_bins)
+    assert torch.equal(expected, actual.cpu()), f"Diff {expected - actual.cpu()}"
+
+
+def test_tcuscan_histogram_narrow_range_clamps_into_end_bins():
+    """Values outside an explicit range are counted in the nearest end bin.
+
+    The kernel credits everything below the lowest edge to bin 0 and everything
+    above the highest edge to the last bin, so the counts still sum to the input
+    length.  This differs from `torch.histc`, which drops out-of-range values.
+    """
+    x = 10 * torch.rand(1024 * 1024, dtype=torch.float16, device=NPU_DEVICE) - 5
+    torch.npu.synchronize()
+
+    actual = tcuscan_ops.run_histogram(x, 4, -1.0, 1.0).cpu()
+    torch.npu.synchronize()
+
+    assert actual.sum().item() == x.numel()
+
+    values = x.to(torch.float64).cpu()
+    assert actual[0].item() >= (values < -1.0).sum().item()
+    assert actual[-1].item() >= (values > 1.0).sum().item()
+
+
+def test_tcuscan_histogram_rejects_half_specified_range():
+    """`hist_min` and `hist_max` are meaningless on their own."""
+    x = _make_input(1024, "uniform")
+    torch.npu.synchronize()
+
+    with pytest.raises(RuntimeError, match="must be given together"):
+        tcuscan_ops.run_histogram(x, 8, 0.0)
+
+    with pytest.raises(RuntimeError, match="must be given together"):
+        tcuscan_ops.run_histogram(x, 8, hist_max=1.0)
+
+
+def test_tcuscan_histogram_rejects_inverted_range():
+    """An explicit range must not be empty in the wrong direction."""
+    x = _make_input(1024, "uniform")
+    torch.npu.synchronize()
+
+    with pytest.raises(RuntimeError, match="must not exceed"):
+        tcuscan_ops.run_histogram(x, 8, 1.0, -1.0)

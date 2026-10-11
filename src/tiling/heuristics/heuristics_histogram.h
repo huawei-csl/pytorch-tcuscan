@@ -18,13 +18,17 @@ namespace tcuscan::tiling::heuristics::histogram {
  * @param [in] vec_len Number of elements in the input vector.
  * @param [in] num_aiv_cores Number of AIV cores.
  * @param [in] num_bins Number of histogram bins.
- * @param [in] x_min Minimum value over input.
- * @param [in] x_max Maximum value over input.
+ * @param [in] x_min Minimum value over input. Ignored if `bounds_in_gm`.
+ * @param [in] x_max Maximum value over input. Ignored if `bounds_in_gm`.
+ * @param [in] bounds_in_gm Whether the kernel reads the histogram range from
+ * global memory rather than from `x_min` / `x_max`.
  * @return Tiling parameter structure.
  */
 HistogramTiling CalculateTiling(uint32_t vec_len, uint32_t num_aiv_cores,
-                                uint32_t num_bins, float x_min, float x_max) {
-  HistogramTiling tiling{num_aiv_cores, vec_len, 0, num_bins, x_min, x_max};
+                                uint32_t num_bins, float x_min, float x_max,
+                                bool bounds_in_gm) {
+  HistogramTiling tiling{num_aiv_cores, vec_len, 0, num_bins,
+                         static_cast<uint32_t>(bounds_in_gm), x_min, x_max};
 
   // Experimentally selected thresholds
   if (vec_len >= 128 * 128 * num_aiv_cores) {
