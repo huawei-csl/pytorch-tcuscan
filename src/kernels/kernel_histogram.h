@@ -97,23 +97,35 @@ class KernelHistogram {
     LocalTensor<T> vec_in_lt = in_q_.DeQue<T>();
     LocalTensor<int32_t> partial_out_lt = out_buf_.Get<int32_t>();
 
-    AscendC::Duplicate<int32_t>(partial_out_lt, 0, num_bins_);
-    AscendC::PipeBarrier<PIPE_ALL>();
-
     const float step = (hist_max_ - hist_min_) / num_bins_;
 
+    // The loop below writes indices `num_bins_ - 1 .. 1` and the statement
+    // after it writes index 0, so every entry of `partial_out_lt` is assigned
+    // and no zero-fill is needed. `CountLessThan` ends with a V->S wait, which
+    // also orders the gather against the scalar store here.
     int32_t current_size = static_cast<int32_t>(size);
     for (uint32_t i = 1; i < num_bins_; i++) {
-      const T bin_edge = static_cast<T>(hist_max_ - i * step);
-      const uint32_t less_than_elems = CountLessThan(vec_in_lt, bin_edge, size);
-      AscendC::PipeBarrier<PIPE_ALL>();
+      const float bin_edge_f32 = hist_max_ - i * step;
+      const T bin_edge = static_cast<T>(bin_edge_f32);
+      // `bin_edge` is `bin_edge_f32` rounded to nearest, so it is not always a
+      // faithful pivot. When it rounds *down*, an input exactly equal to it
+      // still belongs below the true edge, but `< bin_edge` excludes it and
+      // pushes it one bin up; comparing with `<=` restores it. When it rounds
+      // up (or is exact), `< bin_edge` already matches the true edge, because
+      // no value of type `T` lies between the two. Either way the comparison
+      // below agrees with an exact one for every representable input.
+      const CMPMODE cmp_mode = static_cast<float>(bin_edge) < bin_edge_f32
+                                   ? CMPMODE::LE
+                                   : CMPMODE::LT;
+      const uint32_t less_than_elems =
+          CountLessThan(vec_in_lt, bin_edge, cmp_mode, size);
       partial_out_lt.SetValue(num_bins_ - i, current_size - less_than_elems);
-      AscendC::PipeBarrier<PIPE_ALL>();
       current_size = less_than_elems;
     }
     partial_out_lt.SetValue(0, current_size);
 
-    AscendC::PipeBarrier<PIPE_ALL>();
+    // S->V: the scalar stores above feed the vector `Add` below.
+    sync::VecWaitForScalar();
 
     Add(vec_out_lt, vec_out_lt, partial_out_lt, num_bins_);
 
@@ -124,21 +136,25 @@ class KernelHistogram {
    * @brief Run the kernel.
    *
    * @param [in] vec_lt Input vector tile.
-   * @param [in] pivot Pivot on which to count the cardinality of the set {x_i <
-   * pivot} where \f$ x_i \f$ are the input elements.
+   * @param [in] pivot Pivot on which to count the cardinality of the set {x_i
+   * `cmp_mode` pivot} where \f$ x_i \f$ are the input elements.
+   * @param [in] cmp_mode Comparison against `pivot`; `CMPMODE::LT` or
+   * `CMPMODE::LE`, chosen by the caller so that the comparison in type `T`
+   * matches the exact one against the unrounded bin edge.
    * @param [in] size Input tile size to consider; first `size` elements.
    */
   __aicore__ inline int32_t CountLessThan(LocalTensor<T>& vec_lt, T pivot,
-                                          uint32_t size) {
+                                          CMPMODE cmp_mode, uint32_t size) {
     LocalTensor<T> work_lt = work_buf_.Get<T>();
 
     const LocalTensor<uint8_t> packed_mask_8b = packed_mask_buf_.Get<uint8_t>();
     AscendC::Duplicate(packed_mask_8b.template ReinterpretCast<int32_t>(), 0,
                        packed_mask_8b.GetSize() / 4);
-    AscendC::Duplicate(work_lt, static_cast<T>(0), work_lt.GetSize());
-    AscendC::PipeBarrier<PIPE_ALL>();
-    CompareScalar(packed_mask_8b, vec_lt, pivot, CMPMODE::LT, tile_len_);
-    AscendC::PipeBarrier<PIPE_ALL>();
+    // V->V on `packed_mask_8b`: the vector pipe alone needs ordering here.
+    AscendC::PipeBarrier<PIPE_V>();
+    CompareScalar(packed_mask_8b, vec_lt, pivot, cmp_mode, tile_len_);
+    // V->V: `CompareScalar` writes the mask that `GatherMask` reads below.
+    AscendC::PipeBarrier<PIPE_V>();
 
     const LocalTensor<GatherMaskT> mask_lt =
         packed_mask_buf_.Get<GatherMaskT>();
@@ -146,6 +162,9 @@ class KernelHistogram {
     uint64_t num_gathered_elems = 0;
     GatherMask(work_lt, vec_lt, mask_lt, true, size, {1, 1, 8, 8},
                num_gathered_elems);
+    // V->S: `GatherMask` reports the selected count from the vector pipe; the
+    // scalar unit reads it on the next line.
+    sync::ScalarWaitForVec();
 
     return static_cast<int32_t>(num_gathered_elems);
   }
