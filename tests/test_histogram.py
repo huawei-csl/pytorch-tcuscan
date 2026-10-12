@@ -14,7 +14,6 @@ import pytest
 import torch  # isort: skip
 import tcuscan_ops  # isort: skip
 
-
 random.seed(42)
 torch.manual_seed(42)
 np.random.seed(42)
@@ -229,9 +228,7 @@ def test_tcuscan_histogram_explicit_range_matches_default(
 
     default = tcuscan_ops.run_histogram(x, hist_bins)
     torch.npu.synchronize()
-    explicit = tcuscan_ops.run_histogram(
-        x, hist_bins, x_min.item(), x_max.item()
-    )
+    explicit = tcuscan_ops.run_histogram(x, hist_bins, x_min.item(), x_max.item())
     torch.npu.synchronize()
 
     assert torch.equal(
