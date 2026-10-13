@@ -27,8 +27,9 @@ namespace tcuscan::tiling::heuristics::histogram {
 HistogramTiling CalculateTiling(uint32_t vec_len, uint32_t num_aiv_cores,
                                 uint32_t num_bins, float x_min, float x_max,
                                 bool bounds_in_gm) {
-  HistogramTiling tiling{num_aiv_cores, vec_len, 0, num_bins,
-                         static_cast<uint32_t>(bounds_in_gm), x_min, x_max};
+  HistogramTiling tiling{
+      num_aiv_cores, vec_len, 0, num_bins, static_cast<uint32_t>(bounds_in_gm),
+      x_min,         x_max};
 
   // Experimentally selected thresholds
   if (vec_len >= 128 * 128 * num_aiv_cores) {

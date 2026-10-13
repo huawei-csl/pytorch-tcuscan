@@ -18,9 +18,8 @@
 // Kernel launchers; documented at their definitions in src/*.cpp
 /// @cond
 extern "C" void launch_histogram_fp16(uint32_t blockDim, void* stream,
-                                      void* vec_in, void* bounds,
-                                      void* vec_out, void* workspace,
-                                      void* tiling_gm);
+                                      void* vec_in, void* bounds, void* vec_out,
+                                      void* workspace, void* tiling_gm);
 /// @endcond
 
 namespace tcuscan {
@@ -67,8 +66,8 @@ at::Tensor run_histogram(const at::Tensor& x, uint32_t num_bins,
     x_min = static_cast<float>(hist_min.value());
     x_max = static_cast<float>(hist_max.value());
     TORCH_CHECK(x_min <= x_max,
-                "run_histogram: hist_min must not exceed hist_max, got ",
-                x_min, " > ", x_max, ".");
+                "run_histogram: hist_min must not exceed hist_max, got ", x_min,
+                " > ", x_max, ".");
   }
 
   const uint32_t vec_len = x.numel();
