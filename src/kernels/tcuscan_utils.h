@@ -1223,6 +1223,18 @@ __aicore__ inline void ScalarWaitForVec() {
   WaitFlag<HardEvent::V_S>(event_id);
 }
 
+/**
+ * @brief Makes vector unit wait for scalar unit.
+ *
+ * Vector unit continues execution only after all previous scalar operations
+ * are finished. Counterpart of `ScalarWaitForVec`.
+ */
+__aicore__ inline void VecWaitForScalar() {
+  const TEventID event_id = GetTPipePtr()->FetchEventID(HardEvent::S_V);
+  SetFlag<HardEvent::S_V>(event_id);
+  WaitFlag<HardEvent::S_V>(event_id);
+}
+
 }  // namespace sync
 
 namespace cast {
