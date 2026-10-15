@@ -191,18 +191,17 @@ at::Tensor run_scan_batch(const at::Tensor& x, int S, int64_t dim = -1) {
 
   const int64_t last_dim = x.dim() - 1;
   const int64_t scan_dim = dim < 0 ? dim + x.dim() : dim;
-  TORCH_CHECK(scan_dim >= 0 && scan_dim <= last_dim,
-              "run_scan_batch: dim ", dim, " is out of range for a ", x.dim(),
-              "-dimensional tensor");
+  TORCH_CHECK(scan_dim >= 0 && scan_dim <= last_dim, "run_scan_batch: dim ",
+              dim, " is out of range for a ", x.dim(), "-dimensional tensor");
   const bool needs_transpose = scan_dim != last_dim;
 
   // Move the scanned dimension last and materialize it as the fastest running
   // one. `transpose()` only rewrites the strides and `contiguous()` is a no-op
   // on a tensor that already has this layout, so scanning the last dimension
   // of a row-major input stays copy-free.
-  const at::Tensor x_work =
-      needs_transpose ? x.transpose(scan_dim, last_dim).contiguous()
-                      : x.contiguous();
+  const at::Tensor x_work = needs_transpose
+                                ? x.transpose(scan_dim, last_dim).contiguous()
+                                : x.contiguous();
 
   const uint32_t matmul_size = static_cast<uint32_t>(S);
 
@@ -246,17 +245,17 @@ at::Tensor run_scan_batch(const at::Tensor& x, int S, int64_t dim = -1) {
         tcuscan::get_workspace_size<int16_t>(tiling);
     const at::Tensor workspace_tensor =
         alloc_workspace(user_workspace_size, device);
-    launch_scan_batch_fp16(
-        block_dim, acl_stream, x_in.data_ptr(), z.data_ptr(),
-        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+    launch_scan_batch_fp16(block_dim, acl_stream, x_in.data_ptr(), z.data_ptr(),
+                           const_cast<void*>(workspace_tensor.storage().data()),
+                           tiling_device);
   } else if (dtype == torch::kFloat32) {
     const uint32_t user_workspace_size =
         tcuscan::get_workspace_size<float>(tiling);
     const at::Tensor workspace_tensor =
         alloc_zeros_workspace(user_workspace_size, device);
-    launch_scan_batch_fp32(
-        block_dim, acl_stream, x_in.data_ptr(), z.data_ptr(),
-        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+    launch_scan_batch_fp32(block_dim, acl_stream, x_in.data_ptr(), z.data_ptr(),
+                           const_cast<void*>(workspace_tensor.storage().data()),
+                           tiling_device);
   } else {
     /* Unsupported */
   }
@@ -476,10 +475,10 @@ at::Tensor run_row_scan(const at::Tensor& x, int S) {
 
   if (dtype == torch::kHalf) {
     const at::Tensor workspace_tensor = alloc_workspace(0, device);
-    launch_row_scan_fp16(
-        block_dim, acl_stream, x_contig.data_ptr(),
-        const_cast<void*>(z.storage().data()),
-        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+    launch_row_scan_fp16(block_dim, acl_stream, x_contig.data_ptr(),
+                         const_cast<void*>(z.storage().data()),
+                         const_cast<void*>(workspace_tensor.storage().data()),
+                         tiling_device);
   } else {
     /* Unsupported*/
   }
@@ -536,10 +535,8 @@ at::Tensor run_block_scan(const at::Tensor& x, const at::Tensor& upper,
   if (dtype == torch::kHalf) {
     const at::Tensor workspace_tensor = tcuscan::alloc_workspace(0, device);
     launch_block_scan_fp16(
-        block_dim, acl_stream, x_contig.data_ptr(),
-        upper_contig.data_ptr(),
-        lower_contig.data_ptr(),
-        const_cast<void*>(z.storage().data()),
+        block_dim, acl_stream, x_contig.data_ptr(), upper_contig.data_ptr(),
+        lower_contig.data_ptr(), const_cast<void*>(z.storage().data()),
         const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else {
     /* Unsupported*/
@@ -604,10 +601,8 @@ at::Tensor run_scan_multi_cube(const at::Tensor& x, const at::Tensor& upper,
     const at::Tensor workspace_tensor =
         alloc_workspace(user_workspace_size, device);
     launch_scan_multi_cube_fp16(
-        block_dim, acl_stream, x_contig.data_ptr(),
-        upper_contig.data_ptr(),
-        lower_contig.data_ptr(),
-        const_cast<void*>(z.storage().data()),
+        block_dim, acl_stream, x_contig.data_ptr(), upper_contig.data_ptr(),
+        lower_contig.data_ptr(), const_cast<void*>(z.storage().data()),
         const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else {
     /* Unsupported*/
@@ -659,8 +654,7 @@ at::Tensor run_scan_single_cube(const at::Tensor& x, const at::Tensor& upper,
   if (dtype == torch::kHalf) {
     launch_scan_single_cube_fp16(
         1 /* single core*/, acl_stream, x_contig.data_ptr(),
-        upper_contig.data_ptr(),
-        lower_contig.data_ptr(),
+        upper_contig.data_ptr(), lower_contig.data_ptr(),
         const_cast<void*>(z.storage().data()),
         const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   } else {
