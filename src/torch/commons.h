@@ -11,7 +11,10 @@
 #include <pybind11/pybind11.h>
 #include <torch/extension.h>
 
+#include <cstring>
+
 #include "tiling/platform/platform_ascendc.h"
+#include "torch_npu/csrc/core/npu/CachingHostAllocator.h"
 #include "torch_npu/csrc/core/npu/NPUStream.h"
 
 namespace tcuscan {
@@ -84,6 +87,12 @@ size_t byte_size(const at::Tensor& x) {
  * allocator has no record of the dependency and would otherwise be free to
  * hand the block to the next allocation while the kernel is still reading it.
  *
+ * The copy is issued on the current stream rather than with a synchronous
+ * `aclrtMemcpy`. A synchronous copy is not stream-ordered, so it would write
+ * the block as soon as the host reached it -- both before ops still sitting in
+ * torch_npu's task queue had been placed on the stream, and potentially into a
+ * block the caching allocator had just recycled from a kernel still running.
+ *
  * @tparam T Struct of tiling.
  * @param tiling_struct Input tiling.
  * @param device Device on which the tensor is allocated.
@@ -95,9 +104,32 @@ at::Tensor alloc_copy_tiling_tensor(const T& tiling_struct, at::Device device) {
   const at::Tensor tiling_device =
       at::empty({static_cast<int64_t>(TILING_SIZE)},
                 at::TensorOptions().dtype(at::kByte).device(device));
-  aclrtMemcpy(tiling_device.data_ptr(), TILING_SIZE,
-              reinterpret_cast<const uint8_t*>(&tiling_struct), TILING_SIZE,
-              ACL_MEMCPY_HOST_TO_DEVICE);
+
+  // Taking the stream with `need_empty` drains torch_npu's host-side task
+  // queue, so everything already issued against these tensors is on the stream
+  // before the copy below is enqueued behind it.
+  const c10_npu::NPUStream npu_stream =
+      c10_npu::getCurrentNPUStream(device.index());
+  aclrtStream stream = npu_stream.stream(true);
+
+  // `tiling_struct` is the caller's stack temporary, so it cannot be the
+  // source of an asynchronous copy. Stage it through pinned memory from
+  // torch_npu's caching host allocator instead.
+  at::DataPtr staging = at_npu::native::HostAlloc(TILING_SIZE);
+  std::memcpy(staging.get(), &tiling_struct, TILING_SIZE);
+
+  const aclError copy_status = aclrtMemcpyAsync(
+      tiling_device.data_ptr(), TILING_SIZE, staging.get(), TILING_SIZE,
+      ACL_MEMCPY_HOST_TO_DEVICE, stream);
+  TORCH_CHECK(copy_status == ACL_SUCCESS,
+              "alloc_copy_tiling_tensor: aclrtMemcpyAsync failed with ",
+              copy_status, ".");
+
+  // `staging` is freed as it goes out of scope below. Recording the stream
+  // stops the host allocator reissuing that block before the copy reading it
+  // has run.
+  at_npu::native::CachingHostAllocator_recordEvent(
+      staging.get(), staging.get_context(), npu_stream);
 
   return tiling_device;
 }
