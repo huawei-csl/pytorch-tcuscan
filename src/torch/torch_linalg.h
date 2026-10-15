@@ -68,22 +68,24 @@ at::Tensor run_tri_inv_col_sweep(const at::Tensor& x) {
 
   const TriInvColumnSweepTiling tiling{block_dim, num_elems, matrix_size,
                                        num_out_tiles};
-  uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
+  const at::Tensor tiling_device =
+      tcuscan::alloc_copy_tiling_tensor(tiling, device);
 
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
   if (dtype == torch::kHalf) {
     launch_tri_inv_col_sweep_fp16(
         block_dim, acl_stream, const_cast<void*>(x.storage().data()),
         const_cast<void*>(z.storage().data()),
-        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+        const_cast<void*>(workspace_tensor.storage().data()),
+        tiling_device.data_ptr());
   } else {
     launch_tri_inv_col_sweep_fp32(
         block_dim, acl_stream, const_cast<void*>(x.storage().data()),
         const_cast<void*>(z.storage().data()),
-        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+        const_cast<void*>(workspace_tensor.storage().data()),
+        tiling_device.data_ptr());
   }
 
-  aclrtFree(tiling_device);
   aclrtSynchronizeStream(acl_stream);
 
   return z;
@@ -117,7 +119,8 @@ at::Tensor run_tri_inv_cube_col_sweep(const at::Tensor& x) {
   constexpr uint32_t WS_CIRCULAR_BUFFER_LEN = 4;
   const TriInvCubeColSweepTiling tiling{block_dim, matrix_size,
                                         WS_CIRCULAR_BUFFER_LEN};
-  uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
+  const at::Tensor tiling_device =
+      tcuscan::alloc_copy_tiling_tensor(tiling, device);
 
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
@@ -130,12 +133,13 @@ at::Tensor run_tri_inv_cube_col_sweep(const at::Tensor& x) {
     launch_tri_inv_cube_col_sweep_fp16(
         block_dim, acl_stream, const_cast<void*>(x.storage().data()),
         const_cast<void*>(z.storage().data()),
-        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+        const_cast<void*>(workspace_tensor.storage().data()),
+        tiling_device.data_ptr());
   } else {
     throw std::runtime_error("Currently only half precision is supported.\n");
   }
 
-  aclrtFree(tiling_device);
+  aclrtSynchronizeStream(acl_stream);
 
   return z;
 }
@@ -172,7 +176,8 @@ at::Tensor run_triu_inv_rec_unroll(const at::Tensor& x) {
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
   const TriuInvRecUnrollTiling tiling{block_dim, matrix_size};
-  uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
+  const at::Tensor tiling_device =
+      tcuscan::alloc_copy_tiling_tensor(tiling, device);
 
   if (dtype == torch::kHalf) {
     uint32_t workspace_size = 3 * num_elems * sizeof(uint16_t);
@@ -181,12 +186,13 @@ at::Tensor run_triu_inv_rec_unroll(const at::Tensor& x) {
     launch_triu_inv_rec_unroll_fp16(
         block_dim, acl_stream, const_cast<void*>(x.storage().data()),
         const_cast<void*>(z.storage().data()),
-        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+        const_cast<void*>(workspace_tensor.storage().data()),
+        tiling_device.data_ptr());
   } else {
     throw std::runtime_error("Currently only half precision is supported.\n");
   }
 
-  aclrtFree(tiling_device);
+  aclrtSynchronizeStream(acl_stream);
 
   return z;
 }

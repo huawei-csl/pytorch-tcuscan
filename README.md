@@ -2,6 +2,98 @@
 
 AscendC TCUSCAN operators (scan, sort, split, top-k, compress, etc) using the Cube unit.
 
+## Performance highlights
+
+TCUSCAN expresses prefix-sum-style work as matrix multiplications so that it runs on the
+Cube (matrix) units. That unlocks a compute resource these operators normally leave idle
+and keeps the Vector units free for the surrounding element-wise work, which turns
+several latency-bound PyTorch operators into bandwidth-bound ones.
+
+The numbers below come from this repository's own profiling harness
+(`scripts/profiling/profile_tcuscan_ops.py`: 10 warm-up and 100 timed device-side
+iterations per point), measured on:
+
+| | |
+| --- | --- |
+| Accelerator | Ascend 910B2, 24 Cube / 48 Vector cores, 192 MB L2 |
+| CANN | 9.1.0 |
+| `torch-npu` | 2.10.0 |
+| Build | Release, `SOC_VERSION=Ascend910B4` |
+
+Inputs are `fp16` vectors swept up to ~10^8 elements. *Speedup* is the baseline time
+divided by the TCUSCAN time at the largest size measured, with the median over the whole
+sweep in parentheses. For scale, a device-to-device `copy` of the same tensors peaks at
+**916 GB/s** here, which is the practical roofline for the bandwidth column.
+
+| Operator | Baseline | Speedup | Peak bandwidth | Reproduce with |
+| --- | --- | --- | --- | --- |
+| `run_scan_multi_core` | `torch.cumsum` | **189×** (median 123×) | 415 GB/s | `make profile_mcscan` |
+| `run_compress` | `torch.masked_select` | **39–44×** (median 28×) | 404 GB/s | `make profile_compress_paper` |
+| `run_histogram`, 32 bins | `torch.histc` | **49×** (median 47×) | 112 GB/s | `make profile_histogram` |
+| `run_radix_sort` | `torch.sort` | **8.6×** (median 8.1×) | 26 GB/s | `make profile_fp16_radix_sort` |
+| `run_scan_batch` | `torch.cumsum(dim=1)` | **3.3×** (median 2.9×) | 458 GB/s | `make profile_scan_batch` |
+| `run_topk_int16`, k=256 | `torch.topk` | **1.6×** | — | `make profile_int16_topk` |
+
+How to read that table:
+
+- **Scan.** `torch.cumsum` does not parallelise a *single* long 1-D scan: it takes 273 ms
+  for 10^8 `fp16` elements (2 GB/s) where `run_scan_multi_core` takes 1.4 ms (415 GB/s).
+  The 189× therefore says as much about the baseline as about the kernel. The batch-scan
+  row is the fairer throughput comparison: with 65 536-wide rows `torch.cumsum(dim=1)`
+  *can* parallelise across the batch and reaches 89 GB/s, and TCUSCAN is still 3.3×
+  faster at 458 GB/s, i.e. half the copy roofline.
+- **Compress** and **histogram** are timed on exactly the same inputs as their baselines
+  (the same device-resident mask, the same tensor); only the compaction / binning call is
+  measured. Both PyTorch baselines are slow for this access pattern (7–10 GB/s and
+  2.3 GB/s). The histogram comparison is conservative: `run_histogram` derives its bin
+  edges from the data, while `torch.histc` is handed explicit bounds and skips that pass.
+- **Radix sort** is multi-pass, so its *effective* bandwidth is low by construction and
+  the speedup is the meaningful number. It leads `torch.sort` across the entire sweep,
+  from 1.1× at 3·10^5 elements to 8–10× from 10^6 upwards.
+- **Top-k** is where the Cube-based approach does not pay off for `fp16`:
+  `run_topk_fp16` is **0.54×** of `torch.topk` at k=2048, matching the negative result
+  reported in the paper for k ≤ 4096. The `int16` path is ahead at 1.6× (71.7 ms versus
+  115.9 ms at 10^8), but note that `torch.topk` is itself ~35× slower on `int16` than on
+  `fp16`, so part of that margin is a weak baseline rather than a fast kernel.
+
+Small inputs are not the target: every kernel above carries a fixed launch and
+synchronisation cost, so `run_scan_batch` only overtakes its baseline above ~10^7
+elements, and the other operators reach their quoted ratios from ~10^6 elements upwards.
+
+### Sparse matrix–vector multiplication
+
+`run_spmv` and `run_spmv_v2` build SpMV on the segmented sum, and `run_spmv_multi_cube`
+on the multi-cube scan. Measured over the 28 SuiteSparse matrices of the ALENEX
+evaluation set (`make profile_fp16_spmv_alenex`, `fp16`, `S=128`), effective bandwidth
+tracks the number of non-zeros:
+
+| Matrix | rows | nnz | `run_spmv` | `run_spmv_v2` | `run_spmv_multi_cube` |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `enron` | 69 244 | 0.28 M | 3.6 GB/s | 2.7 GB/s | 4.0 GB/s |
+| `water_tank` | 60 740 | 2.0 M | 19.6 GB/s | 22.9 GB/s | 19.8 GB/s |
+| `cant` | 62 451 | 4.0 M | 35.4 GB/s | 46.3 GB/s | 35.6 GB/s |
+| `pdb1HYS` | 36 417 | 4.3 M | 38.5 GB/s | 52.5 GB/s | 38.9 GB/s |
+| `crankseg_1` | 52 804 | 10.6 M | 77.4 GB/s | 88.2 GB/s | 80.5 GB/s |
+| `crankseg_2` | 63 838 | 14.1 M | 96.8 GB/s | 92.0 GB/s | **98.5 GB/s** |
+
+Across the full set the median is ~32 GB/s and the peak 98.5 GB/s. Matrices below roughly
+10^6 non-zeros are dominated by launch and gather overhead rather than by bandwidth, so
+the three variants are within noise of each other there. Above that, the segmented-sum
+variant (`run_spmv_v2`) is fastest on 13 of the 21 larger matrices, while
+`run_spmv_multi_cube` takes the largest one in the set.
+
+### Reference
+
+The algorithms behind the scan, sort, compaction and sampling kernels are described in:
+
+> Bartłomiej Wróblewski, Gioele Gottardo, Anastasios Zouzias.
+> *Parallel Scan on Ascend AI Accelerators*. arXiv:2505.15112, 2025.
+> <https://arxiv.org/abs/2505.15112>
+
+The notebooks under `nbs/paper-plots/` regenerate the figures of that paper from the CSV
+files these `make profile_*` targets produce. Absolute numbers there were measured on an
+Ascend 910B4 and differ from the table above.
+
 ## Support matrix
 
 | Component | Supported |

@@ -40,17 +40,18 @@ at::Tensor run_simple_pad(const at::Tensor& x, const uint32_t align_len) {
   const uint32_t block_dim = 1;
 
   const SimplePadTiling tiling{block_dim, vec_len, align_len};
-  uint8_t* tiling_device = alloc_copy_tiling(tiling);
+  const at::Tensor tiling_device = alloc_copy_tiling_tensor(tiling, device);
   const at::Tensor workspace_tensor = alloc_workspace(0, device);
 
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
-  launch_simple_pad_fp16(
-      block_dim, acl_stream, const_cast<void*>(x.storage().data()),
-      const_cast<void*>(z.storage().data()),
-      const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+  launch_simple_pad_fp16(block_dim, acl_stream,
+                         const_cast<void*>(x.storage().data()),
+                         const_cast<void*>(z.storage().data()),
+                         const_cast<void*>(workspace_tensor.storage().data()),
+                         tiling_device.data_ptr());
 
-  aclrtFree(tiling_device);
+  aclrtSynchronizeStream(acl_stream);
 
   return z;
 }

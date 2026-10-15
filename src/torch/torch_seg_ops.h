@@ -91,7 +91,8 @@ at::Tensor run_seg_scan_vec(const at::Tensor& x, const at::Tensor& f, int S) {
       {total_length}, at::TensorOptions().dtype(at::kFloat).device(device));
 
   const tcuscan::SegScanVecSingleCoreTiling tiling{total_length, tile_len};
-  uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
+  const at::Tensor tiling_device =
+      tcuscan::alloc_copy_tiling_tensor(tiling, device);
 
   const uint32_t user_workspace_size = 0;
   const at::Tensor workspace_tensor =
@@ -103,9 +104,10 @@ at::Tensor run_seg_scan_vec(const at::Tensor& x, const at::Tensor& f, int S) {
       1 /* single core*/, acl_stream, const_cast<void*>(x.storage().data()),
       const_cast<void*>(f.storage().data()),
       const_cast<void*>(z.storage().data()),
-      const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+      const_cast<void*>(workspace_tensor.storage().data()),
+      tiling_device.data_ptr());
 
-  aclrtFree(tiling_device);
+  aclrtSynchronizeStream(acl_stream);
 
   return z;
 }
@@ -169,7 +171,8 @@ at::Tensor run_seg_scan_mc_revert(const at::Tensor& x, const at::Tensor& f,
 
   const tcuscan::SegScanMcRevertTiling tiling{block_dim, total_length, diff_len,
                                               tile_len};
-  uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
+  const at::Tensor tiling_device =
+      tcuscan::alloc_copy_tiling_tensor(tiling, device);
 
   const at::Tensor workspace_tensor = tcuscan::alloc_workspace(0, device);
 
@@ -180,9 +183,10 @@ at::Tensor run_seg_scan_mc_revert(const at::Tensor& x, const at::Tensor& f,
       const_cast<void*>(f.storage().data()),
       const_cast<void*>(diff.storage().data()),
       const_cast<void*>(z.storage().data()),
-      const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+      const_cast<void*>(workspace_tensor.storage().data()),
+      tiling_device.data_ptr());
 
-  aclrtFree(tiling_device);
+  aclrtSynchronizeStream(acl_stream);
 
   return z;
 }
@@ -207,7 +211,8 @@ at::Tensor run_seg_scan(const at::Tensor& x, const at::Tensor& f, int S) {
       {total_length}, at::TensorOptions().dtype(at::kFloat).device(device));
 
   const tcuscan::SegScanSingleCoreTiling tiling{total_length, matmul_size};
-  uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
+  const at::Tensor tiling_device =
+      tcuscan::alloc_copy_tiling_tensor(tiling, device);
 
   const uint32_t user_workspace_size =
       tcuscan::get_workspace_size<int16_t /* half */, int8_t>(tiling);
@@ -220,9 +225,10 @@ at::Tensor run_seg_scan(const at::Tensor& x, const at::Tensor& f, int S) {
       1 /* single core*/, acl_stream, const_cast<void*>(x.storage().data()),
       const_cast<void*>(f.storage().data()),
       const_cast<void*>(z.storage().data()),
-      const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+      const_cast<void*>(workspace_tensor.storage().data()),
+      tiling_device.data_ptr());
 
-  aclrtFree(tiling_device);
+  aclrtSynchronizeStream(acl_stream);
 
   return z;
 }
@@ -262,7 +268,8 @@ at::Tensor run_seg_sum_single_core(const at::Tensor& x,
 
   const tcuscan::SegSumSingleCoreTiling tiling{total_length, num_segments,
                                                matmul_size};
-  uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
+  const at::Tensor tiling_device =
+      tcuscan::alloc_copy_tiling_tensor(tiling, device);
 
   // Offset indptr by one element, since first element is always zero.
   void* indptr_data = static_cast<void*>(
@@ -280,7 +287,10 @@ at::Tensor run_seg_sum_single_core(const at::Tensor& x,
     launch_seg_sum_single_core_fp16(
         BLOCK_DIM, acl_stream, const_cast<void*>(x.storage().data()),
         indptr_data, const_cast<void*>(z.storage().data()),
-        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+        const_cast<void*>(workspace_tensor.storage().data()),
+        tiling_device.data_ptr());
+
+    aclrtSynchronizeStream(acl_stream);
   } else if (dtype == torch::kInt8) {
     const uint32_t user_workspace_size =
         tcuscan::get_workspace_size<int8_t>(tiling);
@@ -292,10 +302,11 @@ at::Tensor run_seg_sum_single_core(const at::Tensor& x,
     launch_seg_sum_single_core_int8(
         BLOCK_DIM, acl_stream, const_cast<void*>(x.storage().data()),
         indptr_data, const_cast<void*>(z.storage().data()),
-        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
-  }
+        const_cast<void*>(workspace_tensor.storage().data()),
+        tiling_device.data_ptr());
 
-  aclrtFree(tiling_device);
+    aclrtSynchronizeStream(acl_stream);
+  }
 
   return z;
 }
@@ -333,7 +344,8 @@ at::Tensor run_seg_sum_single_cube(const at::Tensor& x, const at::Tensor& upper,
 
   const tcuscan::SegSumSingleCubeTiling tiling{total_length, num_segments,
                                                matmul_size};
-  uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
+  const at::Tensor tiling_device =
+      tcuscan::alloc_copy_tiling_tensor(tiling, device);
 
   // Offset indptr by one element, since first element is always zero.
   void* indptr_data = static_cast<void*>(
@@ -353,12 +365,13 @@ at::Tensor run_seg_sum_single_cube(const at::Tensor& x, const at::Tensor& upper,
         const_cast<void*>(upper.storage().data()),
         const_cast<void*>(lower_strict.storage().data()),
         const_cast<void*>(indptr_data), const_cast<void*>(z.storage().data()),
-        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+        const_cast<void*>(workspace_tensor.storage().data()),
+        tiling_device.data_ptr());
+
+    aclrtSynchronizeStream(acl_stream);
   } else {
     /* Unsupported*/
   }
-
-  aclrtFree(tiling_device);
 
   return z;
 }
@@ -426,7 +439,8 @@ at::Tensor run_seg_sum_multi_core(
 
   const tcuscan::SegSumMultiCoreTiling tiling{total_length, num_segments,
                                               matmul_size, block_len};
-  uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
+  const at::Tensor tiling_device =
+      tcuscan::alloc_copy_tiling_tensor(tiling, device);
 
   // Offset indptr by one element, since first element is always zero.
   void* indptr_data = static_cast<void*>(
@@ -447,7 +461,10 @@ at::Tensor run_seg_sum_multi_core(
         const_cast<void*>(indptr_data),
         const_cast<void*>(segm_offsets_.storage().data()),
         const_cast<void*>(z.storage().data()),
-        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+        const_cast<void*>(workspace_tensor.storage().data()),
+        tiling_device.data_ptr());
+
+    aclrtSynchronizeStream(acl_stream);
 
   } else if (dtype == torch::kInt8) {
     const uint32_t workspace_size = tcuscan::get_workspace_size<int8_t>(tiling);
@@ -461,9 +478,11 @@ at::Tensor run_seg_sum_multi_core(
         const_cast<void*>(indptr_data),
         const_cast<void*>(segm_offsets_.storage().data()),
         const_cast<void*>(z.storage().data()),
-        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+        const_cast<void*>(workspace_tensor.storage().data()),
+        tiling_device.data_ptr());
+
+    aclrtSynchronizeStream(acl_stream);
   }
-  aclrtFree(tiling_device);
 
   return z;
 }
@@ -540,7 +559,8 @@ at::Tensor run_seg_sum_multi_cube(
 
   const tcuscan::SegSumMultiCubeTiling tiling{total_length, num_segments,
                                               matmul_size, block_len};
-  uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
+  const at::Tensor tiling_device =
+      tcuscan::alloc_copy_tiling_tensor(tiling, device);
 
   // Offset indptr by one element, since first element is always zero.
   void* indptr_data = static_cast<void*>(
@@ -562,9 +582,10 @@ at::Tensor run_seg_sum_multi_cube(
       const_cast<void*>(indptr_data),
       const_cast<void*>(segm_offsets_.storage().data()),
       const_cast<void*>(z.storage().data()),
-      const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+      const_cast<void*>(workspace_tensor.storage().data()),
+      tiling_device.data_ptr());
 
-  aclrtFree(tiling_device);
+  aclrtSynchronizeStream(acl_stream);
 
   return z;
 }
