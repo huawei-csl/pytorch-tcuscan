@@ -99,7 +99,9 @@ PYBIND11_MODULE(tcuscan_ops, m) {
         pybind11::arg("values"),
         "Binary search (lower_bound) into a sorted int32 array");
   m.def("run_copy", &tcuscan::run_copy, "Copy single core");
-  m.def("run_scan_batch", &tcuscan::run_scan_batch, "Scan Batch");
+  m.def("run_scan_batch", &tcuscan::run_scan_batch, pybind11::arg("x"),
+        pybind11::arg("S"), pybind11::arg("dim") = -1,
+        "Scan Batch: inclusive scan along `dim` of a tensor of any layout");
   m.def("run_scan_single_core", &tcuscan::run_scan_single_core,
         pybind11::arg("x"), pybind11::arg("S"),
         pybind11::arg("starting_sum") = 0, "Scan Single Core");
