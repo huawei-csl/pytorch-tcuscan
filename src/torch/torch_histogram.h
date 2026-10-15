@@ -82,7 +82,8 @@ at::Tensor run_histogram(const at::Tensor& x, uint32_t num_bins,
           vec_len, num_aiv_cores, num_bins, x_min, x_max, bounds_in_gm);
   uint32_t block_dim = tiling.num_blocks;
 
-  uint8_t* tiling_device = alloc_copy_tiling(tiling);
+  const at::Tensor tiling_device =
+      alloc_copy_tiling_tensor(tiling, device);
 
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
@@ -91,12 +92,12 @@ at::Tensor run_histogram(const at::Tensor& x, uint32_t num_bins,
         block_dim, acl_stream, const_cast<void*>(x.storage().data()),
         bounds_in_gm ? const_cast<void*>(bounds.storage().data()) : nullptr,
         const_cast<void*>(z.storage().data()),
-        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+        const_cast<void*>(workspace_tensor.storage().data()), tiling_device.data_ptr());
   } else {
     /* Unsupported */
   }
 
-  aclrtFree(tiling_device);
+  aclrtSynchronizeStream(acl_stream);
 
   return z;
 }

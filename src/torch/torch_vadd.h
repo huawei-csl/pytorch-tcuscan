@@ -39,7 +39,8 @@ at::Tensor run_add(const at::Tensor& x, const at::Tensor& y) {
   const at::Tensor workspace_tensor = tcuscan::alloc_workspace(0, device);
 
   const VaddTiling tiling{total_len, tile_len};
-  uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
+  const at::Tensor tiling_device =
+      tcuscan::alloc_copy_tiling_tensor(tiling, device);
 
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
@@ -47,9 +48,9 @@ at::Tensor run_add(const at::Tensor& x, const at::Tensor& y) {
                    const_cast<void*>(y.storage().data()),
                    const_cast<void*>(z.storage().data()),
                    const_cast<void*>(workspace_tensor.storage().data()),
-                   tiling_device);
+                   tiling_device.data_ptr());
 
-  aclrtFree(tiling_device);
+  aclrtSynchronizeStream(acl_stream);
 
   return z;
 }

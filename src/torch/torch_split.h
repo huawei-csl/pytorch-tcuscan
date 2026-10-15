@@ -67,7 +67,8 @@ at::Tensor run_split(const at::Tensor& x, const at::Tensor& mask, int S) {
       {total_length}, at::TensorOptions().dtype(dtype).device(device));
 
   const SplitTiling tiling{block_dim, total_length, matmul_size, vec_tile_size};
-  uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
+  const at::Tensor tiling_device =
+      tcuscan::alloc_copy_tiling_tensor(tiling, device);
 
   const uint32_t user_workspace_size = tcuscan::get_workspace_size(tiling);
   const at::Tensor workspace_tensor =
@@ -79,10 +80,10 @@ at::Tensor run_split(const at::Tensor& x, const at::Tensor& mask, int S) {
         block_dim, acl_stream, const_cast<void*>(x.storage().data()),
         const_cast<void*>(mask.storage().data()),
         const_cast<void*>(z.storage().data()),
-        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+        const_cast<void*>(workspace_tensor.storage().data()), tiling_device.data_ptr());
   }
 
-  aclrtFree(tiling_device);
+  aclrtSynchronizeStream(acl_stream);
 
   return z;
 }
@@ -128,7 +129,8 @@ std::tuple<at::Tensor, at::Tensor> run_split_ind(const at::Tensor& x,
       {total_length}, at::TensorOptions().dtype(torch::kInt32).device(device));
 
   const SplitTiling tiling{block_dim, total_length, matmul_size, vec_tile_size};
-  uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
+  const at::Tensor tiling_device =
+      tcuscan::alloc_copy_tiling_tensor(tiling, device);
 
   const uint32_t user_workspace_size = tcuscan::get_workspace_size(tiling);
   const at::Tensor workspace_tensor =
@@ -143,10 +145,10 @@ std::tuple<at::Tensor, at::Tensor> run_split_ind(const at::Tensor& x,
         const_cast<void*>(indices_in.storage().data()),
         const_cast<void*>(vec_out.storage().data()),
         const_cast<void*>(indices_out.storage().data()),
-        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+        const_cast<void*>(workspace_tensor.storage().data()), tiling_device.data_ptr());
   }
 
-  aclrtFree(tiling_device);
+  aclrtSynchronizeStream(acl_stream);
 
   return std::make_tuple(vec_out, indices_out);
 }

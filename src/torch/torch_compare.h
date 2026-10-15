@@ -57,7 +57,8 @@ at::Tensor run_count_if(const at::Tensor& x, float pivot, uint32_t tile_len,
       at::zeros({1}, at::TensorOptions().dtype(torch::kInt32).device(device));
 
   const CountIfTiling tiling{block_dim, vec_len, tile_len, pivot, compare_mode};
-  uint8_t* tiling_device = alloc_copy_tiling(tiling);
+  const at::Tensor tiling_device =
+      alloc_copy_tiling_tensor(tiling, device);
 
   const at::Tensor workspace_tensor = alloc_workspace(0, device);
 
@@ -67,12 +68,12 @@ at::Tensor run_count_if(const at::Tensor& x, float pivot, uint32_t tile_len,
     launch_count_if_fp16(
         block_dim, acl_stream, const_cast<void*>(x.storage().data()),
         const_cast<void*>(z.storage().data()),
-        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+        const_cast<void*>(workspace_tensor.storage().data()), tiling_device.data_ptr());
   } else {
     /* Unsupported */
   }
 
-  aclrtFree(tiling_device);
+  aclrtSynchronizeStream(acl_stream);
 
   return z;
 }
@@ -97,7 +98,8 @@ at::Tensor run_greater_equal(const at::Tensor& x, float pivot,
       {num_elems}, at::TensorOptions().dtype(torch::kInt8).device(device));
 
   const GreaterEqualTiling tiling{block_dim, num_elems, tile_len, pivot};
-  uint8_t* tiling_device = alloc_copy_tiling(tiling);
+  const at::Tensor tiling_device =
+      alloc_copy_tiling_tensor(tiling, device);
 
   const at::Tensor workspace_tensor = alloc_workspace(0, device);
 
@@ -107,12 +109,12 @@ at::Tensor run_greater_equal(const at::Tensor& x, float pivot,
     launch_greater_equal_fp16(
         block_dim, acl_stream, const_cast<void*>(x.storage().data()),
         const_cast<void*>(z.storage().data()),
-        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+        const_cast<void*>(workspace_tensor.storage().data()), tiling_device.data_ptr());
   } else {
     /* Not supported */
   }
 
-  aclrtFree(tiling_device);
+  aclrtSynchronizeStream(acl_stream);
 
   return z;
 }
@@ -136,7 +138,8 @@ at::Tensor run_less_equal(const at::Tensor& x, float pivot, uint32_t tile_len) {
       {num_elems}, at::TensorOptions().dtype(torch::kInt8).device(device));
 
   const GreaterEqualTiling tiling{block_dim, num_elems, tile_len, pivot};
-  uint8_t* tiling_device = alloc_copy_tiling(tiling);
+  const at::Tensor tiling_device =
+      alloc_copy_tiling_tensor(tiling, device);
 
   const at::Tensor workspace_tensor = alloc_workspace(0, device);
 
@@ -146,12 +149,12 @@ at::Tensor run_less_equal(const at::Tensor& x, float pivot, uint32_t tile_len) {
     launch_less_equal_fp16(
         block_dim, acl_stream, const_cast<void*>(x.storage().data()),
         const_cast<void*>(z.storage().data()),
-        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+        const_cast<void*>(workspace_tensor.storage().data()), tiling_device.data_ptr());
   } else {
     /* Not supported */
   }
 
-  aclrtFree(tiling_device);
+  aclrtSynchronizeStream(acl_stream);
 
   return z;
 }

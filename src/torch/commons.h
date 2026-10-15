@@ -73,22 +73,30 @@ size_t byte_size(const at::Tensor& x) {
 }
 
 /**
- * @brief Returns a device pointer on which the host tiling struct is copied at.
+ * @brief Copies the host tiling struct into a device tensor.
  *
- * Note: the user of this method must aclrtFree the returned pointer.
+ * The allocation comes from the caching allocator rather than from a per-call
+ * `aclrtMalloc`/`aclrtFree` pair, and it is released when the returned tensor
+ * goes out of scope.
  *
- * @tparam T Struct of tiling
- * @param tiling_struct Input tiling
- * @return Device pointer where tiling struct is copied.
+ * The caller must still keep the tensor alive until the kernel has finished
+ * with it: the kernels are launched directly on the ACL stream, so the caching
+ * allocator has no record of the dependency and would otherwise be free to
+ * hand the block to the next allocation while the kernel is still reading it.
+ *
+ * @tparam T Struct of tiling.
+ * @param tiling_struct Input tiling.
+ * @param device Device on which the tensor is allocated.
+ * @return Byte tensor holding a device copy of the tiling struct.
  */
 template <typename T>
-uint8_t* alloc_copy_tiling(const T& tiling_struct) {
-  constexpr size_t TILIING_SIZE = sizeof(T);
-  const uint8_t* tiling_host = reinterpret_cast<const uint8_t*>(&tiling_struct);
-
-  uint8_t* tiling_device = nullptr;
-  aclrtMalloc((void**)&tiling_device, TILIING_SIZE, ACL_MEM_MALLOC_HUGE_FIRST);
-  aclrtMemcpy(tiling_device, TILIING_SIZE, tiling_host, TILIING_SIZE,
+at::Tensor alloc_copy_tiling_tensor(const T& tiling_struct, at::Device device) {
+  constexpr size_t TILING_SIZE = sizeof(T);
+  const at::Tensor tiling_device =
+      at::empty({static_cast<int64_t>(TILING_SIZE)},
+                at::TensorOptions().dtype(at::kByte).device(device));
+  aclrtMemcpy(tiling_device.data_ptr(), TILING_SIZE,
+              reinterpret_cast<const uint8_t*>(&tiling_struct), TILING_SIZE,
               ACL_MEMCPY_HOST_TO_DEVICE);
 
   return tiling_device;
