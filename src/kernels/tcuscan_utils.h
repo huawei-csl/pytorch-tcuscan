@@ -1264,6 +1264,18 @@ __aicore__ inline void ScalarWaitForVec() {
   WaitFlag<HardEvent::V_S>(event_id);
 }
 
+/**
+ * @brief Makes vector unit wait for scalar unit.
+ *
+ * Vector unit continues execution only after all previous scalar operations
+ * are finished. Counterpart of `ScalarWaitForVec`.
+ */
+__aicore__ inline void VecWaitForScalar() {
+  const TEventID event_id = GetTPipePtr()->FetchEventID(HardEvent::S_V);
+  SetFlag<HardEvent::S_V>(event_id);
+  WaitFlag<HardEvent::S_V>(event_id);
+}
+
 }  // namespace sync
 
 namespace cast {
@@ -2174,15 +2186,28 @@ constexpr float FP16_ZERO = 0.0f;
 constexpr float FP16_ONE_P_ULP = FP16_ONE + FP16_EPSILON;
 /// @brief Increment ratio
 constexpr float FP16_INC = FP16_ONE_P_ULP * FP16_EPSILON * FP16_HALF;
+/// @brief Smallest positive (subnormal) fp16 value, i.e. 2^-24.
+constexpr float FP16_MIN_SUBNORMAL = 0x1.0p-24;
 
 /**
  * @brief Computes the next representable value
+ *
+ * The increment is relative to the magnitude of @p val, so it has to be applied
+ * with the sign of @p val; otherwise the result of a negative input would move
+ * towards minus infinity instead. Zero is special-cased because a relative
+ * increment of zero makes no progress at all.
  *
  * @param [in] val Current value.
  *
  * @return Next representable value after the current value.
  */
-__aicore__ inline float next_after(float val) { return val * FP16_INC + val; }
+__aicore__ inline float next_after(float val) {
+  if (val == FP16_ZERO) {
+    return FP16_MIN_SUBNORMAL;
+  }
+  const float abs_val = (val > FP16_ZERO) ? val : -val;
+  return val + abs_val * FP16_INC;
+}
 }  // namespace fp16
 
 }  // namespace tcuscan

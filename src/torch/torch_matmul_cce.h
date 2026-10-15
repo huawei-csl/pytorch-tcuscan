@@ -48,7 +48,8 @@ at::Tensor matmul_cce(at::Tensor a, at::Tensor b) {
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(false);
 
   MatMulCCETiling tiling{M, N, K};
-  uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
+  const at::Tensor tiling_device =
+      tcuscan::alloc_copy_tiling_tensor(tiling, device);
 
   const at::Tensor workspace_tensor = tcuscan::alloc_workspace(0, device);
 
@@ -56,9 +57,8 @@ at::Tensor matmul_cce(at::Tensor a, at::Tensor b) {
   // hide the kernel of the same name.
   ::launch_matmul_cce(block_dim, acl_stream, a_ptr, b_ptr, c_ptr,
                       const_cast<void*>(workspace_tensor.storage().data()),
-                      tiling_device);
+                      tiling_device.data_ptr());
   aclrtSynchronizeStream(acl_stream);
-  aclrtFree(tiling_device);
 
   return c.index({torch::indexing::Slice({torch::indexing::None, M}), "..."});
 }

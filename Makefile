@@ -144,6 +144,7 @@ profile_mcscan_int8:
 
 profile_mcscan: profile_all_s_fp16_mcscan
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench copy --dtype fp16
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench scan --dtype fp16 --s 128 --num_cores 20
 
 profile_mcscan_no_l2: profile_mcscan
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench mcscan_no_l2 --s 32 --dtype fp16
@@ -194,7 +195,7 @@ profile_compress_paper:
 	jupyter-nbconvert --to notebook --execute --inplace nbs/paper-plots/snapshot/compress_vs_masked_select.ipynb
 
 profile_scan_batch:
-	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench scan_batch --dtype fp16 --min-iter-index 16
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench scan_batch --dtype fp16 --s 128 --num_cores 20
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench scan_batch_tcuscan --s 16 --dtype fp16 --iter-step-multiplier 8
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench scan_batch_tcuscan --s 32 --dtype fp16 --iter-step-multiplier 4
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench scan_batch_tcuscan --s 64 --dtype fp16 --iter-step-multiplier 2
@@ -313,6 +314,10 @@ profile_count_if:
 
 
 profile_histogram:
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench hist --dtype fp16 --k 8 --num_cores 20
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench hist --dtype fp16 --k 16 --num_cores 20
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench hist --dtype fp16 --k 32 --num_cores 20
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench hist --dtype fp16 --k 64 --num_cores 20
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench tcuscan_hist --dtype fp16 --k 8 --num_cores 20
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench tcuscan_hist --dtype fp16 --k 16 --num_cores 20
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench tcuscan_hist --dtype fp16 --k 32 --num_cores 20

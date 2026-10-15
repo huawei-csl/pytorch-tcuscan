@@ -70,15 +70,17 @@ at::Tensor run_topk_pivot_fp16(const at::Tensor& x, uint32_t k,
   const uint32_t k_outer = 4;
   const TopKPivotTiling tiling{total_length, num_samples, k_inner, k_outer};
 
-  uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
+  const at::Tensor tiling_device =
+      tcuscan::alloc_copy_tiling_tensor(tiling, device);
 
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
-  launch_topk_pivot_fp16(
-      block_dim, acl_stream, const_cast<void*>(x.storage().data()),
-      const_cast<void*>(vec_out.storage().data()),
-      const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+  launch_topk_pivot_fp16(block_dim, acl_stream,
+                         const_cast<void*>(x.storage().data()),
+                         const_cast<void*>(vec_out.storage().data()),
+                         const_cast<void*>(workspace_tensor.storage().data()),
+                         tiling_device.data_ptr());
 
-  aclrtFree(tiling_device);
+  aclrtSynchronizeStream(acl_stream);
 
   return vec_out;
 }
@@ -110,9 +112,13 @@ std::tuple<at::Tensor, at::Tensor> run_topk_int16(const at::Tensor& x,
 
   const uint32_t num_tiles = total_length / tile_elems;
 
-  uint32_t block_dim = ascendc_platform->GetCoreNum() / 2;
-  while (num_tiles % block_dim != 0) {
-    block_dim--;
+  // The kernels composing `topk` distribute tiles with
+  // `scalar::GetWorkDistribution()`, so `num_tiles` does not have to be
+  // divisible by the number of blocks. Requiring divisibility would drop the
+  // block count down to 1 whenever `num_tiles` is a prime number.
+  uint32_t block_dim = ascendc_platform->GetCoreNumAic();
+  if (num_tiles < block_dim) {
+    block_dim = num_tiles;
   }
   if (block_dim <= 1) {
     block_dim = 1;
@@ -136,16 +142,18 @@ std::tuple<at::Tensor, at::Tensor> run_topk_int16(const at::Tensor& x,
   tiling.x_max.value_i32 = static_cast<int32_t>(x_max);
   tiling.k = k;
 
-  uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
+  const at::Tensor tiling_device =
+      tcuscan::alloc_copy_tiling_tensor(tiling, device);
 
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
-  launch_topk_int16(
-      block_dim, acl_stream, const_cast<void*>(x.storage().data()),
-      const_cast<void*>(vec_out.storage().data()),
-      const_cast<void*>(indices_out.storage().data()),
-      const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+  launch_topk_int16(block_dim, acl_stream,
+                    const_cast<void*>(x.storage().data()),
+                    const_cast<void*>(vec_out.storage().data()),
+                    const_cast<void*>(indices_out.storage().data()),
+                    const_cast<void*>(workspace_tensor.storage().data()),
+                    tiling_device.data_ptr());
 
-  aclrtFree(tiling_device);
+  aclrtSynchronizeStream(acl_stream);
 
   return std::make_tuple(vec_out, indices_out);
 }
@@ -176,9 +184,11 @@ std::tuple<at::Tensor, at::Tensor> run_topk_fp16(const at::Tensor& x,
 
   const uint32_t num_tiles = total_length / tile_elems;
 
+  // See the comment in `run_topk_int16()`: divisibility of `num_tiles` by the
+  // block count is not required by the kernels.
   uint32_t block_dim = ascendc_platform->GetCoreNumAic();
-  while (num_tiles % block_dim != 0) {
-    block_dim--;
+  if (num_tiles < block_dim) {
+    block_dim = num_tiles;
   }
   if (block_dim <= 1) {
     block_dim = 1;
@@ -202,7 +212,8 @@ std::tuple<at::Tensor, at::Tensor> run_topk_fp16(const at::Tensor& x,
   tiling.x_max.value_fp32 = x_max;
   tiling.k = k;
 
-  uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
+  const at::Tensor tiling_device =
+      tcuscan::alloc_copy_tiling_tensor(tiling, device);
 
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
@@ -210,9 +221,9 @@ std::tuple<at::Tensor, at::Tensor> run_topk_fp16(const at::Tensor& x,
                    const_cast<void*>(vec_out.storage().data()),
                    const_cast<void*>(indices_out.storage().data()),
                    const_cast<void*>(workspace_tensor.storage().data()),
-                   tiling_device);
+                   tiling_device.data_ptr());
 
-  aclrtFree(tiling_device);
+  aclrtSynchronizeStream(acl_stream);
 
   return std::make_tuple(vec_out, indices_out);
 }

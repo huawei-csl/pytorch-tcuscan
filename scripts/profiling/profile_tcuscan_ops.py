@@ -1004,10 +1004,25 @@ def gen_lower_benchmark(
 def hist_benchmark(
     device: Device, size: int, dtype: torch.dtype, num_bins: int
 ) -> Tuple[float, int]:
-    if dtype in {torch.float32}:
-        x = torch.rand(size, device=device.str, dtype=dtype)
-    else:
-        raise ValueError("histogram benchmark only supports float32 for now")
+    """Torch baseline for the histogram kernel.
+
+    ``torch.histogram`` only accepts float32 and wants its bin edges as a tensor,
+    so float16 - the dtype ``run_histogram`` supports - is served by
+    ``torch.histc`` instead. Both are handed the bin bounds up front and so skip
+    the min/max pass that ``run_histogram`` performs itself, which makes the
+    comparison against the kernel a conservative one.
+    """
+    if dtype not in {torch.float32, torch.float16}:
+        raise ValueError("histogram benchmark only supports float32 and float16")
+
+    x = torch.rand(size, device=device.str, dtype=dtype)
+
+    if dtype == torch.float16:
+
+        def run_histc() -> None:
+            _ = torch.histc(x, bins=num_bins, min=0.0, max=1.0)
+
+        return _run_benchmark(device, run_histc), num_bins
 
     x_min, x_max = torch.aminmax(x)
     step = (x_max - x_min) / num_bins

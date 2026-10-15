@@ -99,7 +99,9 @@ PYBIND11_MODULE(tcuscan_ops, m) {
         pybind11::arg("values"),
         "Binary search (lower_bound) into a sorted int32 array");
   m.def("run_copy", &tcuscan::run_copy, "Copy single core");
-  m.def("run_scan_batch", &tcuscan::run_scan_batch, "Scan Batch");
+  m.def("run_scan_batch", &tcuscan::run_scan_batch, pybind11::arg("x"),
+        pybind11::arg("S"), pybind11::arg("dim") = -1,
+        "Scan Batch: inclusive scan along `dim` of a tensor of any layout");
   m.def("run_scan_single_core", &tcuscan::run_scan_single_core,
         pybind11::arg("x"), pybind11::arg("S"),
         pybind11::arg("starting_sum") = 0, "Scan Single Core");
@@ -155,6 +157,9 @@ PYBIND11_MODULE(tcuscan_ops, m) {
   m.def("run_triu_inv_rec_unroll", &tcuscan::run_triu_inv_rec_unroll,
         "Upper triangular inverse");
   m.def("run_count_if", &tcuscan::run_count_if, "Count if");
-  m.def("run_histogram", &tcuscan::run_histogram,
-        "Histogram with number of bins.");
+  m.def("run_histogram", &tcuscan::run_histogram, pybind11::arg("x"),
+        pybind11::arg("num_bins"), pybind11::arg("hist_min") = pybind11::none(),
+        pybind11::arg("hist_max") = pybind11::none(),
+        "Histogram with number of bins. The range defaults to [min(x), max(x)],"
+        " computed on the device.");
 }
