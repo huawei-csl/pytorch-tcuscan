@@ -110,9 +110,13 @@ std::tuple<at::Tensor, at::Tensor> run_topk_int16(const at::Tensor& x,
 
   const uint32_t num_tiles = total_length / tile_elems;
 
-  uint32_t block_dim = ascendc_platform->GetCoreNum() / 2;
-  while (num_tiles % block_dim != 0) {
-    block_dim--;
+  // The kernels composing `topk` distribute tiles with
+  // `scalar::GetWorkDistribution()`, so `num_tiles` does not have to be
+  // divisible by the number of blocks. Requiring divisibility would drop the
+  // block count down to 1 whenever `num_tiles` is a prime number.
+  uint32_t block_dim = ascendc_platform->GetCoreNumAic();
+  if (num_tiles < block_dim) {
+    block_dim = num_tiles;
   }
   if (block_dim <= 1) {
     block_dim = 1;
@@ -176,9 +180,11 @@ std::tuple<at::Tensor, at::Tensor> run_topk_fp16(const at::Tensor& x,
 
   const uint32_t num_tiles = total_length / tile_elems;
 
+  // See the comment in `run_topk_int16()`: divisibility of `num_tiles` by the
+  // block count is not required by the kernels.
   uint32_t block_dim = ascendc_platform->GetCoreNumAic();
-  while (num_tiles % block_dim != 0) {
-    block_dim--;
+  if (num_tiles < block_dim) {
+    block_dim = num_tiles;
   }
   if (block_dim <= 1) {
     block_dim = 1;
