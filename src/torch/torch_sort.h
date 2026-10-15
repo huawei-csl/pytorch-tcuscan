@@ -62,7 +62,8 @@ std::tuple<at::Tensor, at::Tensor> run_radix_sort(const at::Tensor& x, int S) {
       {total_length}, at::TensorOptions().dtype(torch::kInt32).device(device));
 
   RadixSortTiling tiling{block_dim, total_length, matmul_size, tile_elems / 2};
-  uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
+  const at::Tensor tiling_device =
+      tcuscan::alloc_copy_tiling_tensor(tiling, device);
 
   const uint32_t user_workspace_size =
       tcuscan::get_workspace_size<int16_t>(tiling);
@@ -72,21 +73,22 @@ std::tuple<at::Tensor, at::Tensor> run_radix_sort(const at::Tensor& x, int S) {
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
   if (dtype == torch::kHalf) {
-    launch_radix_sort_fp16(
-        block_dim, acl_stream, const_cast<void*>(x.storage().data()),
-        const_cast<void*>(vec_out.storage().data()),
-        const_cast<void*>(indices_out.storage().data()),
-        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+    launch_radix_sort_fp16(block_dim, acl_stream,
+                           const_cast<void*>(x.storage().data()),
+                           const_cast<void*>(vec_out.storage().data()),
+                           const_cast<void*>(indices_out.storage().data()),
+                           const_cast<void*>(workspace_tensor.storage().data()),
+                           tiling_device.data_ptr());
   } else if (dtype == torch::kInt16) {
     launch_radix_sort_int16(
         block_dim, acl_stream, const_cast<void*>(x.storage().data()),
         const_cast<void*>(vec_out.storage().data()),
         const_cast<void*>(indices_out.storage().data()),
-        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+        const_cast<void*>(workspace_tensor.storage().data()),
+        tiling_device.data_ptr());
   }
 
   aclrtSynchronizeStream(acl_stream);
-  aclrtFree(tiling_device);
 
   return std::make_tuple(vec_out, indices_out);
 }

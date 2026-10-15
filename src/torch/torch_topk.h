@@ -70,15 +70,17 @@ at::Tensor run_topk_pivot_fp16(const at::Tensor& x, uint32_t k,
   const uint32_t k_outer = 4;
   const TopKPivotTiling tiling{total_length, num_samples, k_inner, k_outer};
 
-  uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
+  const at::Tensor tiling_device =
+      tcuscan::alloc_copy_tiling_tensor(tiling, device);
 
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
-  launch_topk_pivot_fp16(
-      block_dim, acl_stream, const_cast<void*>(x.storage().data()),
-      const_cast<void*>(vec_out.storage().data()),
-      const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+  launch_topk_pivot_fp16(block_dim, acl_stream,
+                         const_cast<void*>(x.storage().data()),
+                         const_cast<void*>(vec_out.storage().data()),
+                         const_cast<void*>(workspace_tensor.storage().data()),
+                         tiling_device.data_ptr());
 
-  aclrtFree(tiling_device);
+  aclrtSynchronizeStream(acl_stream);
 
   return vec_out;
 }
@@ -140,16 +142,18 @@ std::tuple<at::Tensor, at::Tensor> run_topk_int16(const at::Tensor& x,
   tiling.x_max.value_i32 = static_cast<int32_t>(x_max);
   tiling.k = k;
 
-  uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
+  const at::Tensor tiling_device =
+      tcuscan::alloc_copy_tiling_tensor(tiling, device);
 
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
-  launch_topk_int16(
-      block_dim, acl_stream, const_cast<void*>(x.storage().data()),
-      const_cast<void*>(vec_out.storage().data()),
-      const_cast<void*>(indices_out.storage().data()),
-      const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+  launch_topk_int16(block_dim, acl_stream,
+                    const_cast<void*>(x.storage().data()),
+                    const_cast<void*>(vec_out.storage().data()),
+                    const_cast<void*>(indices_out.storage().data()),
+                    const_cast<void*>(workspace_tensor.storage().data()),
+                    tiling_device.data_ptr());
 
-  aclrtFree(tiling_device);
+  aclrtSynchronizeStream(acl_stream);
 
   return std::make_tuple(vec_out, indices_out);
 }
@@ -208,7 +212,8 @@ std::tuple<at::Tensor, at::Tensor> run_topk_fp16(const at::Tensor& x,
   tiling.x_max.value_fp32 = x_max;
   tiling.k = k;
 
-  uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
+  const at::Tensor tiling_device =
+      tcuscan::alloc_copy_tiling_tensor(tiling, device);
 
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
@@ -216,9 +221,9 @@ std::tuple<at::Tensor, at::Tensor> run_topk_fp16(const at::Tensor& x,
                    const_cast<void*>(vec_out.storage().data()),
                    const_cast<void*>(indices_out.storage().data()),
                    const_cast<void*>(workspace_tensor.storage().data()),
-                   tiling_device);
+                   tiling_device.data_ptr());
 
-  aclrtFree(tiling_device);
+  aclrtSynchronizeStream(acl_stream);
 
   return std::make_tuple(vec_out, indices_out);
 }

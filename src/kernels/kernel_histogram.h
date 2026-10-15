@@ -77,7 +77,6 @@ class KernelHistogram {
 
     if (bounds_in_gm_) {
       global_bounds_.SetGlobalBuffer((__gm__ T*)bounds, NUM_BOUNDS);
-      pipe_.InitBuffer(bounds_q_, 1, UB_ALIGNMENT);
     }
   }
 
@@ -122,13 +121,13 @@ class KernelHistogram {
    * touches it.
    */
   __aicore__ inline void LoadBounds() {
-    copy::CopyGmToVec(bounds_q_, global_bounds_, NUM_BOUNDS);
-
-    // `DeQue` orders the copy against the scalar reads below.
-    LocalTensor<T> bounds_lt = bounds_q_.template DeQue<T>();
-    hist_min_ = static_cast<float>(bounds_lt.GetValue(0));
-    hist_max_ = static_cast<float>(bounds_lt.GetValue(1));
-    bounds_q_.template FreeTensor<T>(bounds_lt);
+    // Read the two values with scalar loads straight from global memory,
+    // exactly as the tiling struct is read. Staging them through UB would mean
+    // a DMA whose completion the scalar unit cannot observe by dequeuing
+    // alone: `DeQue` on a VECIN queue waits on MTE2_V, which gates the vector
+    // pipe, while `GetValue` is a scalar read free to run ahead of the copy.
+    hist_min_ = static_cast<float>(global_bounds_.GetValue(0));
+    hist_max_ = static_cast<float>(global_bounds_.GetValue(1));
   }
 
   __aicore__ inline void ProcessTile(const LocalTensor<int32_t>& vec_out_lt,
@@ -213,13 +212,17 @@ class KernelHistogram {
     AscendC::PipeBarrier<PIPE_ALL>();
     AscendC::SetAtomicAdd<int32_t>();
     copy::CopyVecToGm(global_out_, out_q_, num_bins_);
+    // `SetAtomicNone` is a scalar config write that takes effect as soon as it
+    // retires, while the store above is still queued on MTE3. Without this
+    // barrier the mode can be cleared before the store executes, turning this
+    // core's accumulate into an overwrite and dropping the other cores' counts.
+    AscendC::PipeBarrier<PIPE_MTE3>();
     AscendC::SetAtomicNone();
   }
 
   TPipe pipe_;
 
   TQue<QuePosition::VECIN, BUFFER_NUM> in_q_;
-  TQue<QuePosition::VECIN, 1> bounds_q_;
   TQue<QuePosition::VECOUT, 1> out_q_;
 
   TBuf<QuePosition::VECCALC> work_buf_;

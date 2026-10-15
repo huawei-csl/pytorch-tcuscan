@@ -275,7 +275,8 @@ at::Tensor run_spmv_v2(const at::Tensor& vals, const at::Tensor& indptr,
                                    x_len,      tile_len,
                                    block_len,  static_cast<float>(alpha),
                                    beta_kernel};
-  uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
+  const at::Tensor tiling_device =
+      tcuscan::alloc_copy_tiling_tensor(tiling, device);
 
   const uint32_t padded_nnz = host_utils::AlignUp(nnz, align_size);
   const bool is_fp32 = (vals_dtype == torch::kFloat);
@@ -291,24 +292,25 @@ at::Tensor run_spmv_v2(const at::Tensor& vals, const at::Tensor& indptr,
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
   if (is_fp32) {
-    launch_spmv_v2_fp32(
-        block_dim, acl_stream, const_cast<void*>(vals.storage().data()),
-        const_cast<void*>(cols.storage().data()),
-        const_cast<void*>(indptr.storage().data()),
-        const_cast<void*>(x.storage().data()),
-        const_cast<void*>(z.storage().data()),
-        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+    launch_spmv_v2_fp32(block_dim, acl_stream,
+                        const_cast<void*>(vals.storage().data()),
+                        const_cast<void*>(cols.storage().data()),
+                        const_cast<void*>(indptr.storage().data()),
+                        const_cast<void*>(x.storage().data()),
+                        const_cast<void*>(z.storage().data()),
+                        const_cast<void*>(workspace_tensor.storage().data()),
+                        tiling_device.data_ptr());
   } else {
-    launch_spmv_v2_fp16(
-        block_dim, acl_stream, const_cast<void*>(vals.storage().data()),
-        const_cast<void*>(cols.storage().data()),
-        const_cast<void*>(indptr.storage().data()),
-        const_cast<void*>(x.storage().data()),
-        const_cast<void*>(z.storage().data()),
-        const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+    launch_spmv_v2_fp16(block_dim, acl_stream,
+                        const_cast<void*>(vals.storage().data()),
+                        const_cast<void*>(cols.storage().data()),
+                        const_cast<void*>(indptr.storage().data()),
+                        const_cast<void*>(x.storage().data()),
+                        const_cast<void*>(z.storage().data()),
+                        const_cast<void*>(workspace_tensor.storage().data()),
+                        tiling_device.data_ptr());
   }
 
-  aclrtFree(tiling_device);
   aclrtSynchronizeStream(acl_stream);
 
   return z;
@@ -401,7 +403,8 @@ at::Tensor run_spmv_v2_multi_cube(const at::Tensor& vals,
                                    x_len,      tile_len,
                                    block_len,  static_cast<float>(alpha),
                                    beta_kernel};
-  uint8_t* tiling_device = tcuscan::alloc_copy_tiling(tiling);
+  const at::Tensor tiling_device =
+      tcuscan::alloc_copy_tiling_tensor(tiling, device);
 
   const uint32_t padded_nnz = host_utils::AlignUp(nnz, align_size);
 
@@ -424,9 +427,9 @@ at::Tensor run_spmv_v2_multi_cube(const at::Tensor& vals,
       const_cast<void*>(indptr.storage().data()),
       const_cast<void*>(x.storage().data()),
       const_cast<void*>(z.storage().data()),
-      const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
+      const_cast<void*>(workspace_tensor.storage().data()),
+      tiling_device.data_ptr());
 
-  aclrtFree(tiling_device);
   aclrtSynchronizeStream(acl_stream);
 
   return z;
