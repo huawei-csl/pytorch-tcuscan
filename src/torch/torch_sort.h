@@ -85,6 +85,7 @@ std::tuple<at::Tensor, at::Tensor> run_radix_sort(const at::Tensor& x, int S) {
         const_cast<void*>(workspace_tensor.storage().data()), tiling_device);
   }
 
+  aclrtSynchronizeStream(acl_stream);
   aclrtFree(tiling_device);
 
   return std::make_tuple(vec_out, indices_out);
