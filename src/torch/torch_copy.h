@@ -45,21 +45,22 @@ at::Tensor run_copy(const at::Tensor& x, int s) {
   const uint32_t num_block = 1;  // required for 1 core
   const uint32_t tile_size = static_cast<uint32_t>(s);
   const CopyTiling tiling{num_block, total_length, tile_size};
-  const at::Tensor tiling_device =
-      alloc_copy_tiling_tensor(tiling, device);
+  const at::Tensor tiling_device = alloc_copy_tiling_tensor(tiling, device);
 
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
   if (dtype == at::kFloat) {
-    launch_copy_fp32(
-        1 /* single core*/, acl_stream, const_cast<void*>(x.storage().data()),
-        const_cast<void*>(z.storage().data()),
-        const_cast<void*>(workspace_tensor.storage().data()), tiling_device.data_ptr());
+    launch_copy_fp32(1 /* single core*/, acl_stream,
+                     const_cast<void*>(x.storage().data()),
+                     const_cast<void*>(z.storage().data()),
+                     const_cast<void*>(workspace_tensor.storage().data()),
+                     tiling_device.data_ptr());
   } else {
-    launch_copy_fp16(
-        1 /* single core*/, acl_stream, const_cast<void*>(x.storage().data()),
-        const_cast<void*>(z.storage().data()),
-        const_cast<void*>(workspace_tensor.storage().data()), tiling_device.data_ptr());
+    launch_copy_fp16(1 /* single core*/, acl_stream,
+                     const_cast<void*>(x.storage().data()),
+                     const_cast<void*>(z.storage().data()),
+                     const_cast<void*>(workspace_tensor.storage().data()),
+                     tiling_device.data_ptr());
   }
 
   aclrtSynchronizeStream(acl_stream);

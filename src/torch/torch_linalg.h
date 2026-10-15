@@ -76,12 +76,14 @@ at::Tensor run_tri_inv_col_sweep(const at::Tensor& x) {
     launch_tri_inv_col_sweep_fp16(
         block_dim, acl_stream, const_cast<void*>(x.storage().data()),
         const_cast<void*>(z.storage().data()),
-        const_cast<void*>(workspace_tensor.storage().data()), tiling_device.data_ptr());
+        const_cast<void*>(workspace_tensor.storage().data()),
+        tiling_device.data_ptr());
   } else {
     launch_tri_inv_col_sweep_fp32(
         block_dim, acl_stream, const_cast<void*>(x.storage().data()),
         const_cast<void*>(z.storage().data()),
-        const_cast<void*>(workspace_tensor.storage().data()), tiling_device.data_ptr());
+        const_cast<void*>(workspace_tensor.storage().data()),
+        tiling_device.data_ptr());
   }
 
   aclrtSynchronizeStream(acl_stream);
@@ -131,7 +133,8 @@ at::Tensor run_tri_inv_cube_col_sweep(const at::Tensor& x) {
     launch_tri_inv_cube_col_sweep_fp16(
         block_dim, acl_stream, const_cast<void*>(x.storage().data()),
         const_cast<void*>(z.storage().data()),
-        const_cast<void*>(workspace_tensor.storage().data()), tiling_device.data_ptr());
+        const_cast<void*>(workspace_tensor.storage().data()),
+        tiling_device.data_ptr());
   } else {
     throw std::runtime_error("Currently only half precision is supported.\n");
   }
@@ -183,7 +186,8 @@ at::Tensor run_triu_inv_rec_unroll(const at::Tensor& x) {
     launch_triu_inv_rec_unroll_fp16(
         block_dim, acl_stream, const_cast<void*>(x.storage().data()),
         const_cast<void*>(z.storage().data()),
-        const_cast<void*>(workspace_tensor.storage().data()), tiling_device.data_ptr());
+        const_cast<void*>(workspace_tensor.storage().data()),
+        tiling_device.data_ptr());
   } else {
     throw std::runtime_error("Currently only half precision is supported.\n");
   }

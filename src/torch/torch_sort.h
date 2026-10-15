@@ -73,17 +73,19 @@ std::tuple<at::Tensor, at::Tensor> run_radix_sort(const at::Tensor& x, int S) {
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
   if (dtype == torch::kHalf) {
-    launch_radix_sort_fp16(
-        block_dim, acl_stream, const_cast<void*>(x.storage().data()),
-        const_cast<void*>(vec_out.storage().data()),
-        const_cast<void*>(indices_out.storage().data()),
-        const_cast<void*>(workspace_tensor.storage().data()), tiling_device.data_ptr());
+    launch_radix_sort_fp16(block_dim, acl_stream,
+                           const_cast<void*>(x.storage().data()),
+                           const_cast<void*>(vec_out.storage().data()),
+                           const_cast<void*>(indices_out.storage().data()),
+                           const_cast<void*>(workspace_tensor.storage().data()),
+                           tiling_device.data_ptr());
   } else if (dtype == torch::kInt16) {
     launch_radix_sort_int16(
         block_dim, acl_stream, const_cast<void*>(x.storage().data()),
         const_cast<void*>(vec_out.storage().data()),
         const_cast<void*>(indices_out.storage().data()),
-        const_cast<void*>(workspace_tensor.storage().data()), tiling_device.data_ptr());
+        const_cast<void*>(workspace_tensor.storage().data()),
+        tiling_device.data_ptr());
   }
 
   aclrtSynchronizeStream(acl_stream);

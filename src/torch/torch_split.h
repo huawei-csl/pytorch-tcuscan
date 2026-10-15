@@ -76,11 +76,12 @@ at::Tensor run_split(const at::Tensor& x, const at::Tensor& mask, int S) {
 
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
   if (dtype == torch::kHalf or dtype == torch::kInt16) {
-    launch_split_uint16(
-        block_dim, acl_stream, const_cast<void*>(x.storage().data()),
-        const_cast<void*>(mask.storage().data()),
-        const_cast<void*>(z.storage().data()),
-        const_cast<void*>(workspace_tensor.storage().data()), tiling_device.data_ptr());
+    launch_split_uint16(block_dim, acl_stream,
+                        const_cast<void*>(x.storage().data()),
+                        const_cast<void*>(mask.storage().data()),
+                        const_cast<void*>(z.storage().data()),
+                        const_cast<void*>(workspace_tensor.storage().data()),
+                        tiling_device.data_ptr());
   }
 
   aclrtSynchronizeStream(acl_stream);
@@ -145,7 +146,8 @@ std::tuple<at::Tensor, at::Tensor> run_split_ind(const at::Tensor& x,
         const_cast<void*>(indices_in.storage().data()),
         const_cast<void*>(vec_out.storage().data()),
         const_cast<void*>(indices_out.storage().data()),
-        const_cast<void*>(workspace_tensor.storage().data()), tiling_device.data_ptr());
+        const_cast<void*>(workspace_tensor.storage().data()),
+        tiling_device.data_ptr());
   }
 
   aclrtSynchronizeStream(acl_stream);

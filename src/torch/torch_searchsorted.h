@@ -57,8 +57,7 @@ at::Tensor run_searchsorted(const at::Tensor& sorted,
   const at::Tensor workspace_tensor = alloc_workspace(0, device);
 
   const SearchsortedTiling tiling{data_len, num_values};
-  const at::Tensor tiling_device =
-      alloc_copy_tiling_tensor(tiling, device);
+  const at::Tensor tiling_device = alloc_copy_tiling_tensor(tiling, device);
 
   // The kernel distributes needles over cores in 32-byte-aligned output blocks
   // (8 int32 each); launch one core per block, capped at the cube-core count.
@@ -76,7 +75,8 @@ at::Tensor run_searchsorted(const at::Tensor& sorted,
       block_dim, acl_stream, const_cast<void*>(sorted.storage().data()),
       const_cast<void*>(values.storage().data()),
       const_cast<void*>(out.storage().data()),
-      const_cast<void*>(workspace_tensor.storage().data()), tiling_device.data_ptr());
+      const_cast<void*>(workspace_tensor.storage().data()),
+      tiling_device.data_ptr());
 
   aclrtSynchronizeStream(acl_stream);
 

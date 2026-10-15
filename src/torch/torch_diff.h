@@ -57,21 +57,22 @@ at::Tensor run_diff(const at::Tensor& x, int64_t max_size) {
   }
 
   const DiffTiling tiling{total_length, tile_len};
-  const at::Tensor tiling_device =
-      alloc_copy_tiling_tensor(tiling, device);
+  const at::Tensor tiling_device = alloc_copy_tiling_tensor(tiling, device);
 
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
   if (dtype == torch::kHalf) {
-    launch_diff_fp16(
-        block_dim, acl_stream, const_cast<void*>(x.storage().data()),
-        const_cast<void*>(z.storage().data()),
-        const_cast<void*>(workspace_tensor.storage().data()), tiling_device.data_ptr());
+    launch_diff_fp16(block_dim, acl_stream,
+                     const_cast<void*>(x.storage().data()),
+                     const_cast<void*>(z.storage().data()),
+                     const_cast<void*>(workspace_tensor.storage().data()),
+                     tiling_device.data_ptr());
   } else {
-    launch_diff_fp32(
-        block_dim, acl_stream, const_cast<void*>(x.storage().data()),
-        const_cast<void*>(z.storage().data()),
-        const_cast<void*>(workspace_tensor.storage().data()), tiling_device.data_ptr());
+    launch_diff_fp32(block_dim, acl_stream,
+                     const_cast<void*>(x.storage().data()),
+                     const_cast<void*>(z.storage().data()),
+                     const_cast<void*>(workspace_tensor.storage().data()),
+                     tiling_device.data_ptr());
   }
 
   aclrtSynchronizeStream(acl_stream);

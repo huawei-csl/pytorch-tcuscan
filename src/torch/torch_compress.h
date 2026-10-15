@@ -100,8 +100,7 @@ at::Tensor run_compress(const at::Tensor& x, const at::Tensor& mask, int S) {
       at::empty({num_ones}, at::TensorOptions().dtype(dtype).device(device));
 
   const CompressTiling tiling{block_dim, total_length, matmul_size};
-  const at::Tensor tiling_device =
-      alloc_copy_tiling_tensor(tiling, device);
+  const at::Tensor tiling_device = alloc_copy_tiling_tensor(tiling, device);
 
   const uint32_t user_workspace_size = tcuscan::get_workspace_size(tiling);
   const at::Tensor workspace_tensor =
@@ -115,14 +114,16 @@ at::Tensor run_compress(const at::Tensor& x, const at::Tensor& mask, int S) {
         const_cast<void*>(mask.storage().data()),
         const_cast<void*>(num_ones_per_block.storage().data()),
         const_cast<void*>(z.storage().data()),
-        const_cast<void*>(workspace_tensor.storage().data()), tiling_device.data_ptr());
+        const_cast<void*>(workspace_tensor.storage().data()),
+        tiling_device.data_ptr());
   } else {
     launch_compress_with_sums_fp32(
         block_dim, acl_stream, const_cast<void*>(x.storage().data()),
         const_cast<void*>(mask.storage().data()),
         const_cast<void*>(num_ones_per_block.storage().data()),
         const_cast<void*>(z.storage().data()),
-        const_cast<void*>(workspace_tensor.storage().data()), tiling_device.data_ptr());
+        const_cast<void*>(workspace_tensor.storage().data()),
+        tiling_device.data_ptr());
   }
 
   aclrtSynchronizeStream(acl_stream);
@@ -165,8 +166,7 @@ at::Tensor run_compress_pos(const at::Tensor& x, const at::Tensor& mask,
       at::empty({output_len}, at::TensorOptions().dtype(dtype).device(device));
 
   const CompressTiling tiling{block_dim, total_length, matmul_size};
-  const at::Tensor tiling_device =
-      alloc_copy_tiling_tensor(tiling, device);
+  const at::Tensor tiling_device = alloc_copy_tiling_tensor(tiling, device);
 
   const uint32_t user_workspace_size = tcuscan::get_workspace_size(tiling);
   const at::Tensor workspace_tensor =
@@ -175,17 +175,19 @@ at::Tensor run_compress_pos(const at::Tensor& x, const at::Tensor& mask,
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
   if (dtype == torch::kHalf or dtype == torch::kInt16) {
-    launch_compress_fp16(
-        block_dim, acl_stream, const_cast<void*>(x.storage().data()),
-        const_cast<void*>(mask.storage().data()),
-        const_cast<void*>(z.storage().data()),
-        const_cast<void*>(workspace_tensor.storage().data()), tiling_device.data_ptr());
+    launch_compress_fp16(block_dim, acl_stream,
+                         const_cast<void*>(x.storage().data()),
+                         const_cast<void*>(mask.storage().data()),
+                         const_cast<void*>(z.storage().data()),
+                         const_cast<void*>(workspace_tensor.storage().data()),
+                         tiling_device.data_ptr());
   } else {
-    launch_compress_fp32(
-        block_dim, acl_stream, const_cast<void*>(x.storage().data()),
-        const_cast<void*>(mask.storage().data()),
-        const_cast<void*>(z.storage().data()),
-        const_cast<void*>(workspace_tensor.storage().data()), tiling_device.data_ptr());
+    launch_compress_fp32(block_dim, acl_stream,
+                         const_cast<void*>(x.storage().data()),
+                         const_cast<void*>(mask.storage().data()),
+                         const_cast<void*>(z.storage().data()),
+                         const_cast<void*>(workspace_tensor.storage().data()),
+                         tiling_device.data_ptr());
   }
 
   aclrtSynchronizeStream(acl_stream);
@@ -237,8 +239,7 @@ std::tuple<at::Tensor, at::Tensor> run_compress_ind(
       {num_ones}, at::TensorOptions().dtype(indices_dtype).device(device));
 
   const CompressTiling tiling{block_dim, total_length, matmul_size};
-  const at::Tensor tiling_device =
-      alloc_copy_tiling_tensor(tiling, device);
+  const at::Tensor tiling_device = alloc_copy_tiling_tensor(tiling, device);
 
   const uint32_t user_workspace_size = tcuscan::get_workspace_size(tiling);
   const at::Tensor workspace_tensor =
@@ -254,7 +255,8 @@ std::tuple<at::Tensor, at::Tensor> run_compress_ind(
         const_cast<void*>(num_ones_per_block.storage().data()),
         const_cast<void*>(z.storage().data()),
         const_cast<void*>(indices_out.storage().data()),
-        const_cast<void*>(workspace_tensor.storage().data()), tiling_device.data_ptr());
+        const_cast<void*>(workspace_tensor.storage().data()),
+        tiling_device.data_ptr());
   } else {
     launch_compress_ind_fp32(
         block_dim, acl_stream, const_cast<void*>(x.storage().data()),
@@ -263,7 +265,8 @@ std::tuple<at::Tensor, at::Tensor> run_compress_ind(
         const_cast<void*>(num_ones_per_block.storage().data()),
         const_cast<void*>(z.storage().data()),
         const_cast<void*>(indices_out.storage().data()),
-        const_cast<void*>(workspace_tensor.storage().data()), tiling_device.data_ptr());
+        const_cast<void*>(workspace_tensor.storage().data()),
+        tiling_device.data_ptr());
   }
 
   aclrtSynchronizeStream(acl_stream);
@@ -312,8 +315,7 @@ std::tuple<at::Tensor, at::Tensor> run_compress_ind_no_arange(
       {num_ones}, at::TensorOptions().dtype(torch::kInt32).device(device));
 
   const CompressTiling tiling{block_dim, total_length, matmul_size};
-  const at::Tensor tiling_device =
-      alloc_copy_tiling_tensor(tiling, device);
+  const at::Tensor tiling_device = alloc_copy_tiling_tensor(tiling, device);
 
   const at::Tensor workspace_tensor = alloc_workspace(0, device);
 
@@ -326,7 +328,8 @@ std::tuple<at::Tensor, at::Tensor> run_compress_ind_no_arange(
         const_cast<void*>(num_ones_per_block.storage().data()),
         const_cast<void*>(z.storage().data()),
         const_cast<void*>(indices_out.storage().data()),
-        const_cast<void*>(workspace_tensor.storage().data()), tiling_device.data_ptr());
+        const_cast<void*>(workspace_tensor.storage().data()),
+        tiling_device.data_ptr());
   } else {
     launch_compress_ind_no_arange_fp32(
         block_dim, acl_stream, const_cast<void*>(x.storage().data()),
@@ -334,7 +337,8 @@ std::tuple<at::Tensor, at::Tensor> run_compress_ind_no_arange(
         const_cast<void*>(num_ones_per_block.storage().data()),
         const_cast<void*>(z.storage().data()),
         const_cast<void*>(indices_out.storage().data()),
-        const_cast<void*>(workspace_tensor.storage().data()), tiling_device.data_ptr());
+        const_cast<void*>(workspace_tensor.storage().data()),
+        tiling_device.data_ptr());
   }
 
   aclrtSynchronizeStream(acl_stream);
@@ -425,17 +429,17 @@ at::Tensor run_where(const at::Tensor& x, float pivot, int S) {
   const at::Tensor workspace_tensor = alloc_workspace(0, device);
 
   const WhereTiling tiling{block_dim, total_len, vec_tile_len, pivot};
-  const at::Tensor tiling_device =
-      alloc_copy_tiling_tensor(tiling, device);
+  const at::Tensor tiling_device = alloc_copy_tiling_tensor(tiling, device);
 
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
   if (dtype == at::kHalf) {
-    launch_where_fp16(
-        block_dim, acl_stream, const_cast<void*>(mask.storage().data()),
-        const_cast<void*>(num_ones_per_block.storage().data()),
-        const_cast<void*>(z.storage().data()),
-        const_cast<void*>(workspace_tensor.storage().data()), tiling_device.data_ptr());
+    launch_where_fp16(block_dim, acl_stream,
+                      const_cast<void*>(mask.storage().data()),
+                      const_cast<void*>(num_ones_per_block.storage().data()),
+                      const_cast<void*>(z.storage().data()),
+                      const_cast<void*>(workspace_tensor.storage().data()),
+                      tiling_device.data_ptr());
   } else {
     /* Unsupported */
   }

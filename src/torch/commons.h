@@ -118,9 +118,9 @@ at::Tensor alloc_copy_tiling_tensor(const T& tiling_struct, at::Device device) {
   at::DataPtr staging = at_npu::native::HostAlloc(TILING_SIZE);
   std::memcpy(staging.get(), &tiling_struct, TILING_SIZE);
 
-  const aclError copy_status = aclrtMemcpyAsync(
-      tiling_device.data_ptr(), TILING_SIZE, staging.get(), TILING_SIZE,
-      ACL_MEMCPY_HOST_TO_DEVICE, stream);
+  const aclError copy_status =
+      aclrtMemcpyAsync(tiling_device.data_ptr(), TILING_SIZE, staging.get(),
+                       TILING_SIZE, ACL_MEMCPY_HOST_TO_DEVICE, stream);
   TORCH_CHECK(copy_status == ACL_SUCCESS,
               "alloc_copy_tiling_tensor: aclrtMemcpyAsync failed with ",
               copy_status, ".");

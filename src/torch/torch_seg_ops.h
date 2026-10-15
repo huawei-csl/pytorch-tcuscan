@@ -104,7 +104,8 @@ at::Tensor run_seg_scan_vec(const at::Tensor& x, const at::Tensor& f, int S) {
       1 /* single core*/, acl_stream, const_cast<void*>(x.storage().data()),
       const_cast<void*>(f.storage().data()),
       const_cast<void*>(z.storage().data()),
-      const_cast<void*>(workspace_tensor.storage().data()), tiling_device.data_ptr());
+      const_cast<void*>(workspace_tensor.storage().data()),
+      tiling_device.data_ptr());
 
   aclrtSynchronizeStream(acl_stream);
 
@@ -182,7 +183,8 @@ at::Tensor run_seg_scan_mc_revert(const at::Tensor& x, const at::Tensor& f,
       const_cast<void*>(f.storage().data()),
       const_cast<void*>(diff.storage().data()),
       const_cast<void*>(z.storage().data()),
-      const_cast<void*>(workspace_tensor.storage().data()), tiling_device.data_ptr());
+      const_cast<void*>(workspace_tensor.storage().data()),
+      tiling_device.data_ptr());
 
   aclrtSynchronizeStream(acl_stream);
 
@@ -223,7 +225,8 @@ at::Tensor run_seg_scan(const at::Tensor& x, const at::Tensor& f, int S) {
       1 /* single core*/, acl_stream, const_cast<void*>(x.storage().data()),
       const_cast<void*>(f.storage().data()),
       const_cast<void*>(z.storage().data()),
-      const_cast<void*>(workspace_tensor.storage().data()), tiling_device.data_ptr());
+      const_cast<void*>(workspace_tensor.storage().data()),
+      tiling_device.data_ptr());
 
   aclrtSynchronizeStream(acl_stream);
 
@@ -284,7 +287,8 @@ at::Tensor run_seg_sum_single_core(const at::Tensor& x,
     launch_seg_sum_single_core_fp16(
         BLOCK_DIM, acl_stream, const_cast<void*>(x.storage().data()),
         indptr_data, const_cast<void*>(z.storage().data()),
-        const_cast<void*>(workspace_tensor.storage().data()), tiling_device.data_ptr());
+        const_cast<void*>(workspace_tensor.storage().data()),
+        tiling_device.data_ptr());
 
     aclrtSynchronizeStream(acl_stream);
   } else if (dtype == torch::kInt8) {
@@ -298,7 +302,8 @@ at::Tensor run_seg_sum_single_core(const at::Tensor& x,
     launch_seg_sum_single_core_int8(
         BLOCK_DIM, acl_stream, const_cast<void*>(x.storage().data()),
         indptr_data, const_cast<void*>(z.storage().data()),
-        const_cast<void*>(workspace_tensor.storage().data()), tiling_device.data_ptr());
+        const_cast<void*>(workspace_tensor.storage().data()),
+        tiling_device.data_ptr());
 
     aclrtSynchronizeStream(acl_stream);
   }
@@ -360,7 +365,8 @@ at::Tensor run_seg_sum_single_cube(const at::Tensor& x, const at::Tensor& upper,
         const_cast<void*>(upper.storage().data()),
         const_cast<void*>(lower_strict.storage().data()),
         const_cast<void*>(indptr_data), const_cast<void*>(z.storage().data()),
-        const_cast<void*>(workspace_tensor.storage().data()), tiling_device.data_ptr());
+        const_cast<void*>(workspace_tensor.storage().data()),
+        tiling_device.data_ptr());
 
     aclrtSynchronizeStream(acl_stream);
   } else {
@@ -455,7 +461,8 @@ at::Tensor run_seg_sum_multi_core(
         const_cast<void*>(indptr_data),
         const_cast<void*>(segm_offsets_.storage().data()),
         const_cast<void*>(z.storage().data()),
-        const_cast<void*>(workspace_tensor.storage().data()), tiling_device.data_ptr());
+        const_cast<void*>(workspace_tensor.storage().data()),
+        tiling_device.data_ptr());
 
     aclrtSynchronizeStream(acl_stream);
 
@@ -471,7 +478,8 @@ at::Tensor run_seg_sum_multi_core(
         const_cast<void*>(indptr_data),
         const_cast<void*>(segm_offsets_.storage().data()),
         const_cast<void*>(z.storage().data()),
-        const_cast<void*>(workspace_tensor.storage().data()), tiling_device.data_ptr());
+        const_cast<void*>(workspace_tensor.storage().data()),
+        tiling_device.data_ptr());
 
     aclrtSynchronizeStream(acl_stream);
   }
@@ -574,7 +582,8 @@ at::Tensor run_seg_sum_multi_cube(
       const_cast<void*>(indptr_data),
       const_cast<void*>(segm_offsets_.storage().data()),
       const_cast<void*>(z.storage().data()),
-      const_cast<void*>(workspace_tensor.storage().data()), tiling_device.data_ptr());
+      const_cast<void*>(workspace_tensor.storage().data()),
+      tiling_device.data_ptr());
 
   aclrtSynchronizeStream(acl_stream);
 

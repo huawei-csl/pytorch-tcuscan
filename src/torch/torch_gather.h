@@ -79,23 +79,24 @@ at::Tensor run_mc_gather(const at::Tensor& values, const at::Tensor& idxs,
   const at::Tensor workspace_tensor = alloc_workspace(0, device);
 
   const McGatherTiling tiling{block_dim, values_len, idx_len, tile_len};
-  const at::Tensor tiling_device =
-      alloc_copy_tiling_tensor(tiling, device);
+  const at::Tensor tiling_device = alloc_copy_tiling_tensor(tiling, device);
 
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
   if (dtype == torch::kHalf) {
-    launch_mc_gather_fp16(
-        block_dim, acl_stream, const_cast<void*>(values.storage().data()),
-        const_cast<void*>(idxs.storage().data()),
-        const_cast<void*>(z.storage().data()),
-        const_cast<void*>(workspace_tensor.storage().data()), tiling_device.data_ptr());
+    launch_mc_gather_fp16(block_dim, acl_stream,
+                          const_cast<void*>(values.storage().data()),
+                          const_cast<void*>(idxs.storage().data()),
+                          const_cast<void*>(z.storage().data()),
+                          const_cast<void*>(workspace_tensor.storage().data()),
+                          tiling_device.data_ptr());
   } else {
-    launch_mc_gather_fp32(
-        block_dim, acl_stream, const_cast<void*>(values.storage().data()),
-        const_cast<void*>(idxs.storage().data()),
-        const_cast<void*>(z.storage().data()),
-        const_cast<void*>(workspace_tensor.storage().data()), tiling_device.data_ptr());
+    launch_mc_gather_fp32(block_dim, acl_stream,
+                          const_cast<void*>(values.storage().data()),
+                          const_cast<void*>(idxs.storage().data()),
+                          const_cast<void*>(z.storage().data()),
+                          const_cast<void*>(workspace_tensor.storage().data()),
+                          tiling_device.data_ptr());
   }
 
   aclrtSynchronizeStream(acl_stream);
@@ -175,8 +176,7 @@ at::Tensor run_csr_gather(const at::Tensor& values, const at::Tensor& cols,
       host_utils::FloorDiv(x_bytes_max, elem_size);
 
   const CSRGatherTiling tiling{values_len, x_len, TILE_LEN, X_TILE_ELEMS_MAX};
-  const at::Tensor tiling_device =
-      alloc_copy_tiling_tensor(tiling, device);
+  const at::Tensor tiling_device = alloc_copy_tiling_tensor(tiling, device);
 
   uint32_t block_dim = host_utils::CeilDiv(values_len, TILE_LEN);
   block_dim = block_dim > max_aiv_cores ? max_aiv_cores : block_dim;
@@ -188,26 +188,29 @@ at::Tensor run_csr_gather(const at::Tensor& values, const at::Tensor& cols,
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
   if (dtype == torch::kHalf) {
-    launch_csr_gather_fp16(
-        block_dim, acl_stream, const_cast<void*>(values.storage().data()),
-        const_cast<void*>(cols.storage().data()),
-        const_cast<void*>(x.storage().data()),
-        const_cast<void*>(z.storage().data()),
-        const_cast<void*>(workspace_tensor.storage().data()), tiling_device.data_ptr());
+    launch_csr_gather_fp16(block_dim, acl_stream,
+                           const_cast<void*>(values.storage().data()),
+                           const_cast<void*>(cols.storage().data()),
+                           const_cast<void*>(x.storage().data()),
+                           const_cast<void*>(z.storage().data()),
+                           const_cast<void*>(workspace_tensor.storage().data()),
+                           tiling_device.data_ptr());
   } else if (dtype == torch::kInt16) {
     launch_csr_gather_int16(
         block_dim, acl_stream, const_cast<void*>(values.storage().data()),
         const_cast<void*>(cols.storage().data()),
         const_cast<void*>(x.storage().data()),
         const_cast<void*>(z.storage().data()),
-        const_cast<void*>(workspace_tensor.storage().data()), tiling_device.data_ptr());
+        const_cast<void*>(workspace_tensor.storage().data()),
+        tiling_device.data_ptr());
   } else if (dtype == torch::kFloat) {
-    launch_csr_gather_fp32(
-        block_dim, acl_stream, const_cast<void*>(values.storage().data()),
-        const_cast<void*>(cols.storage().data()),
-        const_cast<void*>(x.storage().data()),
-        const_cast<void*>(z.storage().data()),
-        const_cast<void*>(workspace_tensor.storage().data()), tiling_device.data_ptr());
+    launch_csr_gather_fp32(block_dim, acl_stream,
+                           const_cast<void*>(values.storage().data()),
+                           const_cast<void*>(cols.storage().data()),
+                           const_cast<void*>(x.storage().data()),
+                           const_cast<void*>(z.storage().data()),
+                           const_cast<void*>(workspace_tensor.storage().data()),
+                           tiling_device.data_ptr());
   }
 
   aclrtSynchronizeStream(acl_stream);
@@ -246,16 +249,16 @@ at::Tensor run_gather_spmv(const at::Tensor& values, const at::Tensor& idxs,
 
   const GatherSpmvTiling tiling{block_dim, values_len, idx_len, tile_len,
                                 static_cast<float>(alpha)};
-  const at::Tensor tiling_device =
-      alloc_copy_tiling_tensor(tiling, device);
+  const at::Tensor tiling_device = alloc_copy_tiling_tensor(tiling, device);
 
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
-  launch_gather_spmv(
-      block_dim, acl_stream, const_cast<void*>(values.storage().data()),
-      const_cast<void*>(idxs.storage().data()),
-      const_cast<void*>(z.storage().data()),
-      const_cast<void*>(workspace_tensor.storage().data()), tiling_device.data_ptr());
+  launch_gather_spmv(block_dim, acl_stream,
+                     const_cast<void*>(values.storage().data()),
+                     const_cast<void*>(idxs.storage().data()),
+                     const_cast<void*>(z.storage().data()),
+                     const_cast<void*>(workspace_tensor.storage().data()),
+                     tiling_device.data_ptr());
   aclrtSynchronizeStream(acl_stream);
 
   return z;
