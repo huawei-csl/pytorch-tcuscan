@@ -18,12 +18,13 @@ __aicore__ inline void _radix_sort_iter(GM_ADDR in, GM_ADDR radices_ws,
                                         GM_ADDR indices_out, GM_ADDR split_ws,
                                         uint32_t in_len, uint32_t vec_tile_len,
                                         uint16_t bit_idx, bool zeros_first) {
-  tcuscan::run_single_radix<false>(in, radices_ws, in_len, vec_tile_len,
-                                   bit_idx);
-  SyncAll<false /*isAIVOnly*/>();
-  tcuscan::run_split_ind_uint16<false /* ComputeNumOnes */>(
+  // The split derives the mask from `bit_idx` itself, so there is no separate
+  // pass materialising it in global memory and no barrier to order it.
+  (void)radices_ws;
+  tcuscan::run_split_ind_uint16<false /* ComputeNumOnes */,
+                                true /* MaskFromBit */>(
       in, radices_ws, indices_in, out, indices_out, split_ws, in_len,
-      vec_tile_len, zeros_first);
+      vec_tile_len, zeros_first, bit_idx);
 }
 
 /**
