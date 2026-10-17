@@ -484,6 +484,7 @@ __aicore__ inline void run_split_uint16(GM_ADDR in, GM_ADDR mask, GM_ADDR out,
  * vector are the ones with corresponding mask value set to zero or one.
  * @return Number of ones in the mask.
  */
+template <bool ComputeNumOnes = true>
 __aicore__ inline uint32_t run_split_ind_uint16(
     GM_ADDR in, GM_ADDR mask, GM_ADDR indices_in, GM_ADDR out,
     GM_ADDR indices_out, GM_ADDR workspace, uint32_t vec_len, uint32_t tile_len,
@@ -509,15 +510,22 @@ __aicore__ inline uint32_t run_split_ind_uint16(
 
   SyncAll<false /*isAIVOnly*/>();
 
-  if ASCEND_IS_AIV {
-    KernelReduce<uint32_t> op_reduce(GetBlockNum());
-    op_reduce.Init(sums, sums);
-    op_reduce.Process();
+  // Callers that only need the partitioned output - radix sort, for one - can
+  // skip the reduction and the barrier it needs, since the split above has
+  // already been separated from whatever comes next.
+  if constexpr (!ComputeNumOnes) {
+    return 0;
+  } else {
+    if ASCEND_IS_AIV {
+      KernelReduce<uint32_t> op_reduce(GetBlockNum());
+      op_reduce.Init(sums, sums);
+      op_reduce.Process();
+    }
+
+    SyncAll<false /*isAIVOnly*/>();
+
+    return scalar::GetGMValue<int32_t>(sums, 0, GetBlockNum());
   }
-
-  SyncAll<false /*isAIVOnly*/>();
-
-  return scalar::GetGMValue<int32_t>(sums, 0, GetBlockNum());
 }
 
 }  // namespace tcuscan

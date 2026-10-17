@@ -68,3 +68,21 @@ def _test_split(vec_len: int, s: int, dtype: torch.dtype = torch.int16):
 @pytest.mark.parametrize("vec_len", VEC_LENS)
 def test_tcuscan_split(dtype: torch.dtype, s, vec_len):
     _test_split(vec_len, s, dtype)
+
+
+# See `test_tcuscan_sort_fp16_awkward_tile_counts`: a prime number of tiles
+# used to collapse the launch down to a single block.
+@pytest.mark.parametrize("num_tiles", [23, 25, 641, 643])
+def test_split_awkward_tile_counts(num_tiles: int):
+    s = 128
+    vec_len = num_tiles * s * s
+    x = torch.randint(0, 2**7 - 1, (vec_len,), dtype=torch.int16, device=NPU_DEVICE)
+    mask = (torch.randn(vec_len) > 0).to(torch.int8).npu()
+
+    torch.npu.synchronize()
+    z = tcuscan_ops.run_split(x, mask, s)
+    torch.npu.synchronize()
+
+    ones = torch.masked_select(x, mask == 1)
+    assert torch.equal(z[: len(ones)], ones)
+    assert torch.equal(z[len(ones) :], torch.masked_select(x, mask == 0))
