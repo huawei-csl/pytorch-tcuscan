@@ -194,3 +194,72 @@ def test_tri_inv_col_sweep_diagonal_robustness(
     torch.npu.synchronize()
 
     assert torch.equal(actual_zero_cpu, actual_unit_cpu)
+
+
+# `num_out_tiles` controls how many column tiles each output matrix is split
+# into, one per vector core. It changes only the work distribution, so every
+# valid value has to produce the same inverse.
+@pytest.mark.parametrize(
+    "matrix_size, num_out_tiles",
+    [
+        (16, 1),
+        (16, 2),
+        (16, 4),
+        (16, 8),
+        (16, 16),
+        (32, 1),
+        (32, 2),
+        (32, 4),
+        (32, 8),
+        (32, 16),
+        (32, 32),
+        (64, 1),
+        (64, 4),
+        (64, 16),
+        (64, 64),
+        (128, 1),
+        (128, 8),
+        (128, 32),
+        (128, 128),
+    ],
+)
+@pytest.mark.parametrize("data_type", [np.float16, np.float32], ids=str)
+def test_tri_inv_col_sweep_num_out_tiles(
+    matrix_size: int, num_out_tiles: int, data_type: np.dtype
+):
+    batch_size = 4
+    input_x_cpu = rand_np_tril(batch_size, matrix_size, data_type).transpose(0, 2, 1)
+    input_x = torch.from_numpy(input_x_cpu).npu()
+
+    torch.npu.synchronize()
+    expected = tcuscan_ops.run_tri_inv_col_sweep(input_x)
+    actual = tcuscan_ops.run_tri_inv_col_sweep(input_x, num_out_tiles)
+    torch.npu.synchronize()
+
+    assert actual.shape == expected.shape
+    assert torch.equal(actual, expected), (
+        f"num_out_tiles={num_out_tiles} disagrees with the default for "
+        f"matrix_size={matrix_size}, dtype={data_type}"
+    )
+
+
+def test_tri_inv_col_sweep_default_matches_explicit():
+    # The default is 16 columns per tile, i.e. `matrix_size / 16`.
+    matrix_size = 64
+    x = torch.from_numpy(
+        rand_np_tril(2, matrix_size, np.float32).transpose(0, 2, 1)
+    ).npu()
+
+    torch.npu.synchronize()
+    assert torch.equal(
+        tcuscan_ops.run_tri_inv_col_sweep(x),
+        tcuscan_ops.run_tri_inv_col_sweep(x, matrix_size // 16),
+    )
+
+
+@pytest.mark.parametrize("num_out_tiles", [-1, 3, 5, 7, 24, 129])
+def test_tri_inv_col_sweep_rejects_invalid_num_out_tiles(num_out_tiles: int):
+    # 128 is not divisible by any of these, and negatives are rejected outright.
+    x = torch.from_numpy(rand_np_tril(2, 128, np.float32).transpose(0, 2, 1)).npu()
+    with pytest.raises(RuntimeError):
+        tcuscan_ops.run_tri_inv_col_sweep(x, num_out_tiles)

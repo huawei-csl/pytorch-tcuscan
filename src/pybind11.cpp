@@ -151,7 +151,8 @@ PYBIND11_MODULE(tcuscan_ops, m) {
         "Single-cube scan");
   m.def("run_scan_cpu", &tcuscan::run_scan_cpu, "Scan on CPUs");
   m.def("run_tri_inv_col_sweep", &tcuscan::run_tri_inv_col_sweep,
-        "Unit upper triangular matrix inverses (fp16)");
+        pybind11::arg("x"), pybind11::arg("num_out_tiles") = 0,
+        "Unit upper triangular matrix inverse (column sweep)");
   m.def("run_tri_inv_cube_col_sweep", &tcuscan::run_tri_inv_cube_col_sweep,
         "Triangular matrix inverse using AIV/AICs(fp16)");
   m.def("run_triu_inv_rec_unroll", &tcuscan::run_triu_inv_rec_unroll,

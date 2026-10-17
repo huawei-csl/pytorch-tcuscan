@@ -41,11 +41,22 @@ namespace tcuscan {
 
 /**
  * @brief Torch wrapper for vector `tri_inv_col_sweep` kernel.
+ *
+ * Each output matrix is produced in `num_out_tiles` column tiles, one per
+ * vector core. The parameter therefore trades parallelism against redundant
+ * work: every core sweeps the whole matrix but writes back only its own
+ * `n / num_out_tiles` columns, and the kernel is launched with
+ * `batch_dim * num_out_tiles` blocks.
+ *
  * @param [in] x Input Tensor of (batch_dim, n, n ). Matrices are assumed to be
  * unit upper triangular matrices.
+ * @param [in] num_out_tiles Number of column tiles each output matrix is split
+ * into. Must divide `n`. Pass `0` to keep the default of 16 columns per tile,
+ * i.e. `n / 16`.
  * @return Returns Matrix inverse for each matrix over the `batch_dim`.
  */
-at::Tensor run_tri_inv_col_sweep(const at::Tensor& x) {
+at::Tensor run_tri_inv_col_sweep(const at::Tensor& x,
+                                 int64_t num_out_tiles = 0) {
   const at::Device device = x.options().device();
   const auto dtype = x.options().dtype();
   if (x.dim() < 2) {
@@ -60,14 +71,25 @@ at::Tensor run_tri_inv_col_sweep(const at::Tensor& x) {
   const uint32_t num_elems = static_cast<uint32_t>(x.numel());
   const uint32_t num_matrices = num_elems / (matrix_size * matrix_size);
 
-  const uint32_t num_out_tiles = matrix_size / 16;
-  const uint32_t block_dim = num_matrices * num_out_tiles;
+  if (num_out_tiles < 0) {
+    throw std::runtime_error("num_out_tiles must not be negative.\n");
+  }
+  // `0` keeps the default tiling of 16 columns per output tile.
+  const uint32_t out_tiles = num_out_tiles == 0
+                                 ? matrix_size / 16
+                                 : static_cast<uint32_t>(num_out_tiles);
+  if (out_tiles == 0 || matrix_size % out_tiles != 0) {
+    throw std::runtime_error(
+        "num_out_tiles must be a positive divisor of the matrix size.\n");
+  }
+
+  const uint32_t block_dim = num_matrices * out_tiles;
 
   const at::Tensor z = at::empty_like(x);
   const at::Tensor workspace_tensor = tcuscan::alloc_workspace(0, device);
 
   const TriInvColumnSweepTiling tiling{block_dim, num_elems, matrix_size,
-                                       num_out_tiles};
+                                       out_tiles};
   const at::Tensor tiling_device =
       tcuscan::alloc_copy_tiling_tensor(tiling, device);
 
