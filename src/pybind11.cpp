@@ -49,6 +49,8 @@ PYBIND11_MODULE(tcuscan_ops, m) {
         "Filter by great-equal pivot.");
   m.def("run_filter_less_eq", &tcuscan::run_filter_less_equal,
         "Filter by less-equal pivot.");
+  m.def("run_greater_equal_ind", &tcuscan::run_greater_equal_ind,
+        "Filter by greater-equal pivot, returning values and indices.");
   m.def("run_where", &tcuscan::run_where, "torch.where operator.");
   m.def("run_compress_ind", &tcuscan::run_compress_ind,
         "Compaction that returns indices");
