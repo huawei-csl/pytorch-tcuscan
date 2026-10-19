@@ -1224,6 +1224,20 @@ __aicore__ inline void ScalarWaitForVec() {
 }
 
 /**
+ * @brief Makes scalar unit wait for the MTE2 (GM -> UB) pipe.
+ *
+ * Scalar unit continues execution only after all previous MTE2 copies are
+ * finished. Required before reading a freshly copied-in tensor with
+ * `LocalTensor::GetValue`: dequeuing a `VECIN` queue only inserts an MTE2 ->
+ * V dependency, which does not order the scalar unit against the copy.
+ */
+__aicore__ inline void ScalarWaitForMte2() {
+  const TEventID event_id = GetTPipePtr()->FetchEventID(HardEvent::MTE2_S);
+  SetFlag<HardEvent::MTE2_S>(event_id);
+  WaitFlag<HardEvent::MTE2_S>(event_id);
+}
+
+/**
  * @brief Makes vector unit wait for scalar unit.
  *
  * Vector unit continues execution only after all previous scalar operations
