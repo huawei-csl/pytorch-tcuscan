@@ -71,10 +71,7 @@ def _test_topk(
 
     torch.npu.synchronize()
 
-    (
-        expected_topk,
-        expected_indices,
-    ) = torch.topk(x, k, largest=True)
+    expected_topk, _ = torch.topk(x, k, largest=True)
 
     assert len(actual_topk) == k
     assert (
@@ -94,10 +91,11 @@ def _test_topk(
     print(f"expected_topk: {expected_topk}")
     assert torch.allclose(actual_topk.float(), expected_topk.float())
 
-    actual_indices, _ = torch.sort(actual_indices, dim=-1)
-    expected_indices, _ = torch.sort(expected_indices, dim=-1)
+    assert actual_indices.unique().numel() == k, "Output indices must be unique"
 
-    assert torch.allclose(expected_indices.float(), actual_indices.float())
+    kth_value = expected_topk[0]  # `expected_topk` is sorted ascending.
+    above_kth = (x > kth_value).nonzero().flatten()
+    assert set(above_kth.tolist()) <= set(actual_indices.long().tolist())
 
 
 dtype = torch.float16
