@@ -8,7 +8,6 @@
 #include "kernels/constants.h"
 #include "kernels/kernel_arithmetic_progression.h"
 #include "kernels/kernel_radix_enc.h"
-#include "kernels/kernel_single_radix.h"
 #include "kernels/kernel_split.h"
 #include "kernels/tcuscan_utils.h"
 #include "tiling/tiling_radix_sort.h"

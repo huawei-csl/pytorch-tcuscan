@@ -8,8 +8,8 @@
 
 #include "ascendc_kernel_operator.h"
 #include "kernel_arithmetic_progression.h"
+#include "kernel_count_bit_tiles.h"
 #include "kernel_scan_multi_core.h"
-#include "kernel_single_radix.h"
 #include "tcuscan_utils.h"
 
 using namespace AscendC;
