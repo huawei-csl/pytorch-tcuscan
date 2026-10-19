@@ -2132,7 +2132,9 @@ constexpr float FP16_MIN_NORMAL = std::numeric_limits<half>::min();
 /// @brief Float number with the largest value.
 constexpr float FP16_MAX_NORMAL = std::numeric_limits<half>::max();
 /// @brief Float number with the most negative value.
-constexpr float FP16_LOWEST_NORMAL = 0xfc00;
+/// `0xfc00` is the fp16 bit pattern for -inf, but written as an integer
+/// literal it is the positive value 64512, so spell the number out.
+constexpr float FP16_LOWEST_NORMAL = -65504.0f;
 /// @brief Difference between float 1 and the next representable value.
 constexpr float FP16_EPSILON = 0x1.0p-10;
 /// @brief Float 1.

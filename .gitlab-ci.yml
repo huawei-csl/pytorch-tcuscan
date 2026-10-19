@@ -412,6 +412,12 @@ test_filter_greater_equal:
     - make setup_once
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_filter_greater_equal
 
+test_greater_equal_ind:
+  <<: *test_config
+  script:
+    - make setup_once
+    - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_greater_equal_ind
+
 test_where:
   <<: *test_config
   script:
