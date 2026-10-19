@@ -61,6 +61,7 @@ class KernelSplit {
    * @param [in] zeros_first Indicates whether the first elements in the
    * output vector are the ones with corresponding mask value set to zero or
    * one.
+   * @param [in] bit_idx Index of the bit to retrieve.
    */
   __aicore__ inline KernelSplit(uint32_t vec_len, uint32_t tile_len,
                                 bool zeros_first, uint16_t bit_idx = 0)
@@ -530,6 +531,7 @@ __aicore__ inline void run_split_uint16(GM_ADDR in, GM_ADDR mask, GM_ADDR out,
  * iteration.
  * @param [in] zeros_first Indicates whether the first elements in the output
  * vector are the ones with corresponding mask value set to zero or one.
+ * @param [in] bit_idx Index of the bit to retrieve.
  * @return Number of ones in the mask.
  */
 template <bool ComputeNumOnes = true, bool MaskFromBit = false>
