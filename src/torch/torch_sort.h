@@ -48,9 +48,13 @@ std::tuple<at::Tensor, at::Tensor> run_radix_sort(const at::Tensor& x, int S) {
   const uint32_t tile_elems = matmul_size * matmul_size;
   const size_t num_tiles = total_length / tile_elems;
 
+  // The kernels distribute tiles with `scalar::GetWorkDistribution()`, so
+  // `num_tiles` does not have to be divisible by the number of blocks.
+  // Requiring divisibility would drop the block count down to 1 whenever
+  // `num_tiles` is a prime number.
   uint32_t block_dim = ascendc_platform->GetCoreNumAic();
-  while (num_tiles % block_dim != 0) {
-    block_dim--;
+  if (num_tiles < block_dim) {
+    block_dim = num_tiles;
   }
   if (block_dim <= 1) {
     block_dim = 1;
