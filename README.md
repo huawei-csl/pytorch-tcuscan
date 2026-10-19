@@ -30,7 +30,7 @@ sweep in parentheses. For scale, a device-to-device `copy` of the same tensors p
 | `run_scan_multi_core` | `torch.cumsum` | **189×** (median 123×) | 415 GB/s | `make profile_mcscan` |
 | `run_compress` | `torch.masked_select` | **39–44×** (median 28×) | 404 GB/s | `make profile_compress_paper` |
 | `run_histogram`, 32 bins | `torch.histc` | **49×** (median 47×) | 112 GB/s | `make profile_histogram` |
-| `run_radix_sort` | `torch.sort` | **8.6×** (median 8.1×) | 26 GB/s | `make profile_fp16_radix_sort` |
+| `run_radix_sort` | `torch.sort` | **10.6×** (median 9.9×) | 30 GB/s | `make profile_fp16_radix_sort` |
 | `run_scan_batch` | `torch.cumsum(dim=1)` | **3.3×** (median 2.9×) | 458 GB/s | `make profile_scan_batch` |
 | `run_topk_int16`, k=256 | `torch.topk` | **1.6×** | — | `make profile_int16_topk` |
 
@@ -49,7 +49,9 @@ How to read that table:
   edges from the data, while `torch.histc` is handed explicit bounds and skips that pass.
 - **Radix sort** is multi-pass, so its *effective* bandwidth is low by construction and
   the speedup is the meaningful number. It leads `torch.sort` across the entire sweep,
-  from 1.1× at 3·10^5 elements to 8–10× from 10^6 upwards.
+  from 1.2× at 3·10^5 elements to 9.9× (median) from 10^6 upwards, peaking at 12.4× at
+  2·10^7. The small end is dominated by the fixed per-call cost rather than by the
+  sort itself.
 - **Top-k** is where the Cube-based approach does not pay off for `fp16`:
   `run_topk_fp16` is **0.54×** of `torch.topk` at k=2048, matching the negative result
   reported in the paper for k ≤ 4096. The `int16` path is ahead at 1.6× (71.7 ms versus
