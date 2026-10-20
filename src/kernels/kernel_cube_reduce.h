@@ -288,6 +288,10 @@ class KernelCompleteCubeReduce {
     // ReduceSum input matrix tile into a scalar.
     copy::CopyGmToVec(vecin_q_, global_input_[gm_offset], tile_len_);
     LocalTensor<T> input_lt = vecin_q_.DeQue<T>();
+    // `DeQue` only orders the vector unit against the copy above. The column
+    // is summed below with scalar `GetValue` reads, so the scalar unit has to
+    // be ordered against MTE2 explicitly or it may read stale UB contents.
+    sync::ScalarWaitForMte2();
 
     const uint32_t aiv_core_offset = aiv_id * (tile_len_ / ratio);
     // AIV 0 sums the first half of the first column of `input_lt`
@@ -301,6 +305,12 @@ class KernelCompleteCubeReduce {
     PipeBarrier<PIPE_ALL>();
     AscendC::SetAtomicAdd<T>();
     copy::CopyScalarToGm(global_output_[output_idx], res_out_q_, sum);
+    // `SetAtomicNone` is a scalar config write that takes effect as soon as it
+    // retires, while the store above is still queued on MTE3. Without this
+    // barrier the mode can be cleared before the store executes, turning this
+    // AIV's accumulate into an overwrite and dropping the partner AIV's half
+    // of the column sum.
+    AscendC::PipeBarrier<PIPE_MTE3>();
     AscendC::SetAtomicNone();
     vecin_q_.FreeTensor(input_lt);
   }
