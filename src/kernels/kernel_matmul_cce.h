@@ -1,6 +1,6 @@
 #pragma once
 
-#include "kernel_operator.h"
+#include "ascendc_kernel_operator.h"
 
 #ifdef __DAV_C220_CUBE__
 // Cube-specific CCE intrinsics need to be inside this MACRO
