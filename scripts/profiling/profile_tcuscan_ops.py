@@ -1254,6 +1254,7 @@ def greater_equal_ind_cann_benchmark(
     values and their positions. The `arange` of positions is hoisted out of the
     timed region, since the TCUSCAN kernel derives the indices on the fly.
     """
+    del s  # unused: kept for a signature consistent with the TCUSCAN benchmark
     if dtype not in {torch.float16, torch.float32}:
         raise RuntimeError(f"dtype {dtype} is not supported in torch.masked_select")
 
