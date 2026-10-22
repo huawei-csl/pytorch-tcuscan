@@ -32,6 +32,10 @@ DEVICE_TYPE=cuda GPU_NAME=A100 python profile_tcuscan_ops_gpu.py --bench sort --
 # CPU: benchmark scan in fp32
 python profile_tcuscan_ops_cpu.py --bench scan --dtype fp32
 
+# NPU: greater_equal_ind (values + indices of the entries >= pivot) vs. the CANN baseline
+python profile_tcuscan_ops.py --bench greater_equal_ind --dtype fp16 --s 64 --density 0.1
+python profile_tcuscan_ops.py --bench greater_equal_ind_cann --dtype fp16 --s 64 --density 0.1
+
 # NPU: SpMV on a SuiteSparse matrix
 python profile_sparse_matrices.py --bench spmv --dtype fp16 --matrixpath /path/to/matrix.mtx
 
@@ -52,7 +56,8 @@ differ per backend.
 | `--k` | `256` (`4096` for CPU) | `k` parameter for top-k / block ops. |
 | `--max_size` | `1e8` | Max input size to sweep up to. |
 | `--num_cores` | `20` | Number of cores/cubes to use. |
-| `--density` | varies | Sparsity density (sparse/random-matrix scripts). |
+| `--density` | varies | Sparsity density (sparse/random-matrix scripts); for `greater_equal_ind` it is the fraction of entries expected to pass the pivot. |
+| `--pivot` | — | Explicit comparison pivot for `greater_equal_ind` / `greater_equal_ind_cann`; overrides the pivot derived from `--density`. |
 | `--matrixpath` | — | Path to a `.mtx` matrix (`profile_sparse_matrices.py`). |
 | `--alpha`, `--prob` | `2`, `Uniform` | Random-matrix distribution controls (`profile_random_matrices.py`). |
 
