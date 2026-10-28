@@ -160,8 +160,8 @@ PYBIND11_MODULE(tcuscan_ops, m) {
         "Upper triangular inverse");
   m.def("run_count_if", &tcuscan::run_count_if, "Count if");
   m.def("run_histogram", &tcuscan::run_histogram, pybind11::arg("x"),
-        pybind11::arg("num_bins"), pybind11::arg("hist_min") = pybind11::none(),
-        pybind11::arg("hist_max") = pybind11::none(),
-        "Histogram with number of bins. The range defaults to [min(x), max(x)],"
-        " computed on the device.");
+        pybind11::arg("bins"), pybind11::arg("range") = pybind11::none(),
+        "Histogram of a tensor of any shape over `bins` equal-width bins, "
+        "following `torch.histogram`. Returns the counts and the bin edges. "
+        "The range defaults to [min(x), max(x)], computed on the device.");
 }

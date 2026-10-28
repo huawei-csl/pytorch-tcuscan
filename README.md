@@ -217,7 +217,7 @@ everything else falls through to the 32-bit (`*_fp32`) kernel. `run_filter_great
 | `run_cube_reduce` | `fp16`, `int8` | Block reduction using both AIC and AIV cores |
 | `run_complete_rows` | `fp32`, `int64` | Down-sweep (second) phase of MCSCAN |
 | `run_complete_blocks` | `fp32`, `int32` | Block-wise down-sweep (second) phase of the block scan |
-| `run_histogram` | `fp16` | Histogram over a given number of bins (returns `int32`) |
+| `run_histogram` | `fp16` | `torch.histogram` over a given number of bins, for an input of any shape (returns the `fp32` counts and the bin edges) |
 
 `run_complete_rows` keys on `int64` (`torch::kLong`) while dispatching the `int32` kernel;
 `run_complete_blocks` keys on `int32`. The two are not interchangeable.

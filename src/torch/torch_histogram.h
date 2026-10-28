@@ -9,6 +9,9 @@
 #include <pybind11/pybind11.h>
 #include <torch/extension.h>
 
+#include <tuple>
+#include <vector>
+
 #include "../tiling/heuristics/heuristics_histogram.h"
 #include "../tiling/tiling_histogram.h"
 #include "commons.h"
@@ -19,61 +22,105 @@
 /// @cond
 extern "C" void launch_histogram_fp16(uint32_t blockDim, void* stream,
                                       void* vec_in, void* bounds, void* vec_out,
-                                      void* workspace, void* tiling_gm);
+                                      void* bin_edges, void* workspace,
+                                      void* tiling_gm);
 /// @endcond
 
 namespace tcuscan {
 
 /**
- * @brief Histogram using vector cores.
+ * @brief Histogram using vector cores; the `torch.histogram` of `x`.
  *
- * The histogram spans `[hist_min, hist_max]`. When those are not given they
- * default to the range of `x`, which is computed on the device and handed to
- * the kernel as a two-element tensor: reading the reduction back to the host
- * would need a blocking synchronization costing far more than the kernel
- * itself.
+ * Every element of `x` is histogrammed whatever its shape or layout, as
+ * `torch.histogram` does. Bin `j` spans `[bin_edges[j], bin_edges[j + 1])`,
+ * the last bin is closed on both ends, and elements outside the range are not
+ * counted.
  *
- * @param [in] x Input data vector.
- * @param [in] num_bins Number of bins.
- * @param [in] hist_min Lower end of the histogram range. Defaults to `min(x)`.
- * @param [in] hist_max Upper end of the histogram range. Defaults to `max(x)`.
- * @return Tensor of length `bin_count` containing the histogram of range
- * [hist_min, hist_max].
+ * The histogram spans `range` when it is given and `[min(x), max(x)]`
+ * otherwise. The default range is computed on the device and handed to the
+ * kernel as a two-element tensor: reading the reduction back to the host would
+ * need a blocking synchronization costing far more than the kernel itself.
+ *
+ * The edges come back from the kernel rather than being reconstructed here:
+ * they are the float32 values it compared against, and on the default path
+ * the host does not even know the range they span.
+ *
+ * Unlike `torch.histogram`, the counts come back as float32 rather than in the
+ * dtype of `x`: float16 cannot represent counts above 2048 exactly, so it
+ * would corrupt the result of any input larger than that.
+ *
+ * @param [in] x Input data tensor of any shape; only `float16` is supported.
+ * @param [in] bins Number of equal-width bins.
+ * @param [in] range Two values bounding the bins. Defaults to the range of
+ * `x`. An empty range, whether given or degenerate, is widened by half a unit
+ * on each side, as `torch.histogram` does.
+ * @return Pair of the `bins` counts and the `bins + 1` bin edges.
  */
-at::Tensor run_histogram(const at::Tensor& x, uint32_t num_bins,
-                         c10::optional<double> hist_min = c10::nullopt,
-                         c10::optional<double> hist_max = c10::nullopt) {
-  TORCH_CHECK(hist_min.has_value() == hist_max.has_value(),
-              "run_histogram: hist_min and hist_max must be given together, "
-              "or neither of them.");
+std::tuple<at::Tensor, at::Tensor> run_histogram(
+    const at::Tensor& x, int64_t bins,
+    c10::optional<std::vector<double>> range = c10::nullopt) {
+  TORCH_CHECK(bins > 0, "run_histogram: bins must be > 0, but got ", bins, ".");
+  TORCH_CHECK(x.scalar_type() == at::kHalf,
+              "run_histogram: only float16 input is supported, but got ",
+              x.scalar_type(), ".");
+  TORCH_CHECK(!range.has_value() || range->size() == 2,
+              "run_histogram: range must hold exactly two values, but got ",
+              range.has_value() ? range->size() : 0, ".");
 
   const auto ascendc_platform =
       platform_ascendc::PlatformAscendCManager::GetInstance();
   const at::Device device = x.options().device();
-  const auto dtype = x.options().dtype();
+  const auto float_options =
+      at::TensorOptions().dtype(torch::kFloat32).device(device);
+
+  // `torch.histogram` histograms every element whatever the shape, and the
+  // kernel reads its input as a flat row-major buffer, ignoring both strides
+  // and the storage offset. `contiguous()` is a no-op when the layout already
+  // is one, and the reshape is then a view.
+  const at::Tensor x_flat = x.contiguous().reshape({-1});
+  const uint32_t vec_len = static_cast<uint32_t>(x_flat.numel());
+  const uint32_t num_bins = static_cast<uint32_t>(bins);
 
   // Without caller-supplied bounds the range is a device-side reduction that
-  // the kernel reads itself; `bounds` must outlive the launch below.
-  const bool bounds_in_gm = !hist_min.has_value();
+  // the kernel reads itself; `bounds` must outlive the launch below. An empty
+  // input has no range to reduce over, and torch falls back to [0, 1].
+  const bool bounds_in_gm = !range.has_value() && vec_len > 0;
   at::Tensor bounds;
   float x_min = 0.0F;
-  float x_max = 0.0F;
+  float x_max = 1.0F;
 
-  if (bounds_in_gm) {
-    const auto x_minmax = torch::aminmax(x);
-    bounds = torch::stack({std::get<0>(x_minmax), std::get<1>(x_minmax)});
-  } else {
-    x_min = static_cast<float>(hist_min.value());
-    x_max = static_cast<float>(hist_max.value());
+  if (range.has_value()) {
+    x_min = static_cast<float>((*range)[0]);
+    x_max = static_cast<float>((*range)[1]);
     TORCH_CHECK(x_min <= x_max,
-                "run_histogram: hist_min must not exceed hist_max, got ", x_min,
-                " > ", x_max, ".");
+                "run_histogram: range min must not exceed range max, got ",
+                x_min, " > ", x_max, ".");
+    // An empty range would collapse every edge onto one value and make the
+    // step zero; torch widens it so that the input lands in the middle bin.
+    if (x_min == x_max) {
+      x_min -= 0.5F;
+      x_max += 0.5F;
+    }
   }
 
-  const uint32_t vec_len = x.numel();
-  const at::Tensor z = at::zeros(
-      {num_bins}, at::TensorOptions().dtype(torch::kInt32).device(device));
+  if (bounds_in_gm) {
+    const auto x_minmax = torch::aminmax(x_flat);
+    bounds = torch::stack({std::get<0>(x_minmax), std::get<1>(x_minmax)});
+  }
 
+  const at::Tensor z = at::zeros(
+      {bins}, at::TensorOptions().dtype(torch::kInt32).device(device));
+
+  // An empty input leaves every bin at zero, and there is no tile to hand to
+  // a core; the kernel that would have written the edges never runs, so they
+  // are interpolated here instead. Nothing was counted, so the handful of ulp
+  // between `linspace` and the kernel's own edges cannot matter.
+  if (vec_len == 0) {
+    return {z.to(torch::kFloat32),
+            at::linspace(x_min, x_max, bins + 1, float_options)};
+  }
+
+  const at::Tensor bin_edges = at::empty({bins + 1}, float_options);
   const at::Tensor workspace_tensor = alloc_workspace(0, device);
 
   const uint32_t num_aiv_cores = ascendc_platform->GetCoreNumAiv();
@@ -86,19 +133,14 @@ at::Tensor run_histogram(const at::Tensor& x, uint32_t num_bins,
 
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
-  if (dtype == at::kHalf) {
-    launch_histogram_fp16(
-        block_dim, acl_stream, const_cast<void*>(x.storage().data()),
-        bounds_in_gm ? const_cast<void*>(bounds.storage().data()) : nullptr,
-        const_cast<void*>(z.storage().data()),
-        const_cast<void*>(workspace_tensor.storage().data()),
-        tiling_device.data_ptr());
-  } else {
-    /* Unsupported */
-  }
+  launch_histogram_fp16(block_dim, acl_stream, x_flat.data_ptr(),
+                        bounds_in_gm ? bounds.data_ptr() : nullptr,
+                        z.data_ptr(), bin_edges.data_ptr(),
+                        const_cast<void*>(workspace_tensor.storage().data()),
+                        tiling_device.data_ptr());
 
   aclrtSynchronizeStream(acl_stream);
 
-  return z;
+  return {z.to(torch::kFloat32), bin_edges};
 }
 }  // namespace tcuscan
