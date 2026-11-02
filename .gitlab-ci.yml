@@ -1,5 +1,5 @@
 default:
-  image: quay.io/ascend/cann:9.2.0-beta.1-910b-ubuntu22.04-py3.12
+  image: quay.io/ascend/cann:9.2.0-910b-ubuntu22.04-py3.12
   tags: [cpu]
 
 stages:
@@ -411,6 +411,12 @@ test_filter_greater_equal:
   script:
     - make setup_once
     - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_filter_greater_equal
+
+test_greater_equal_ind:
+  <<: *test_config
+  script:
+    - make setup_once
+    - source /usr/local/Ascend/ascend-toolkit/set_env.sh && make test_greater_equal_ind
 
 test_where:
   <<: *test_config

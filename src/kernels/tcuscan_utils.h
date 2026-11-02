@@ -1265,6 +1265,20 @@ __aicore__ inline void ScalarWaitForVec() {
 }
 
 /**
+ * @brief Makes scalar unit wait for the MTE2 (GM -> UB) pipe.
+ *
+ * Scalar unit continues execution only after all previous MTE2 copies are
+ * finished. Required before reading a freshly copied-in tensor with
+ * `LocalTensor::GetValue`: dequeuing a `VECIN` queue only inserts an MTE2 ->
+ * V dependency, which does not order the scalar unit against the copy.
+ */
+__aicore__ inline void ScalarWaitForMte2() {
+  const TEventID event_id = GetTPipePtr()->FetchEventID(HardEvent::MTE2_S);
+  SetFlag<HardEvent::MTE2_S>(event_id);
+  WaitFlag<HardEvent::MTE2_S>(event_id);
+}
+
+/**
  * @brief Makes vector unit wait for scalar unit.
  *
  * Vector unit continues execution only after all previous scalar operations
@@ -2173,7 +2187,9 @@ constexpr float FP16_MIN_NORMAL = std::numeric_limits<half>::min();
 /// @brief Float number with the largest value.
 constexpr float FP16_MAX_NORMAL = std::numeric_limits<half>::max();
 /// @brief Float number with the most negative value.
-constexpr float FP16_LOWEST_NORMAL = 0xfc00;
+/// `0xfc00` is the fp16 bit pattern for -inf, but written as an integer
+/// literal it is the positive value 64512, so spell the number out.
+constexpr float FP16_LOWEST_NORMAL = -65504.0f;
 /// @brief Difference between float 1 and the next representable value.
 constexpr float FP16_EPSILON = 0x1.0p-10;
 /// @brief Float 1.

@@ -110,7 +110,7 @@ class KernelCountIf {
         // Gather mask is used only to count the 1s in the mask; input and
         // output are ignored
         size_t num_gathered_elems = 0;
-        GatherMask(work_lt, work_lt, mask_lt, true, input_len, {1, 1, 8, 8},
+        GatherMask(work_lt, work_lt, mask_lt, true, num_elems, {1, 1, 8, 8},
                    num_gathered_elems);
         // Ensure the vector pipe has written num_gathered_elems before the
         // scalar CPU reads it in the accumulation below.
@@ -156,11 +156,16 @@ class KernelCountIf {
                                       ? fp16::FP16_LOWEST_NORMAL
                                       : std::numeric_limits<InputT>::lowest();
 
-  // this array maps CMPMODE to a value that always returns false when compared
-  // to the input.
+  // Maps CMPMODE to a padding value that makes the comparison *false*, so that
+  // lanes past the end of the data are never selected. The enum order is
+  // {LT, GT, EQ, LE, GE, NE}: `x < pivot` and `x <= pivot` are falsified by
+  // +inf, `x > pivot` and `x >= pivot` by -inf.
+  // `NE` has no such constant - only the pivot itself falsifies `x != pivot` -
+  // so it is padded with NaN, which is wrong, but the counting below never
+  // looks at the padded lanes.
   // Issue: NaN may behave unexpectedly with CompareScalar
-  constexpr static InputT MAP_CMPMODE_TO_BOUNDARY[] = {N_INF, P_INF, NAN,
-                                                       N_INF, P_INF, NAN};
+  constexpr static InputT MAP_CMPMODE_TO_BOUNDARY[] = {P_INF, N_INF, NAN,
+                                                       P_INF, N_INF, NAN};
 
   const uint32_t vec_core_num_;
   const CMPMODE compare_mode_;
@@ -191,6 +196,33 @@ __aicore__ inline void run_count_if(GM_ADDR vec_in, GM_ADDR vec_out,
                                     AscendC::CMPMODE compare_mode) {
   if ASCEND_IS_AIV {
     KernelCountIf<InputT> op(vec_len, tile_len, compare_mode);
+    op.Init(vec_in, vec_out);
+    op.Process(pivot);
+  }
+}
+
+/**
+ * @brief Run the `count_if` kernel keeping the partial count of every core.
+ *
+ * Unlike \c run_count_if, the per-core counts are *not* accumulated: core `i`
+ * writes its own count at `vec_out[i]`. The output buffer must therefore hold
+ * at least `GetBlockNum() * GetTaskRation()` `int32_t` elements.
+ *
+ * @param [in] vec_in Pointer to the input vector.
+ * @param [in] vec_out Pointer to the per-core output counts.
+ * @param [in] vec_len Dimension of the input vector.
+ * @param [in] tile_len Tile length.
+ * @param [in] pivot Pivot to compare against.
+ * @param [in] compare_mode Comparison enum of \c AscendC::CompareScalar.
+ */
+template <typename InputT>
+__aicore__ inline void run_count_if_per_block(GM_ADDR vec_in, GM_ADDR vec_out,
+                                              uint32_t vec_len,
+                                              uint32_t tile_len, InputT pivot,
+                                              AscendC::CMPMODE compare_mode) {
+  if ASCEND_IS_AIV {
+    KernelCountIf<InputT, /*ReduceBlocks=*/false> op(vec_len, tile_len,
+                                                     compare_mode);
     op.Init(vec_in, vec_out);
     op.Process(pivot);
   }

@@ -1203,6 +1203,75 @@ def count_if_benchmark(
     return _run_benchmark(device, run_count_if_fn), 1
 
 
+def _greater_equal_pivot(pivot: Optional[float], density: Optional[float]) -> float:
+    """
+    Pivot to compare against for the `greater_equal_ind` benchmarks.
+
+    The inputs are drawn uniformly from [0, 1), so a pivot of `1 - density`
+    selects a `density` fraction of them on average. This keeps the selectivity
+    knob identical to the `--density` used by `compress` / `masked_select`.
+    """
+    if pivot is not None:
+        return pivot
+    if density is None:
+        return 0.5
+    return 1.0 - density
+
+
+def greater_equal_ind_benchmark(
+    device: Device,
+    size: int,
+    dtype: torch.dtype,
+    s: int,
+    pivot: Optional[float] = None,
+    segm_density: Optional[float] = None,
+) -> Tuple[float, int]:
+    if dtype not in {torch.float16, torch.float32}:
+        raise RuntimeError(f"`greater_equal_ind` supports fp16/fp32. Got {dtype}.")
+
+    x = torch.rand(size, device=device.str, dtype=dtype)
+    pivot = _greater_equal_pivot(pivot, segm_density)
+
+    def run_greater_equal_ind() -> None:
+        _ = tcuscan_ops.run_greater_equal_ind(x, pivot, s)
+
+    values, _ = tcuscan_ops.run_greater_equal_ind(x, pivot, s)
+    outputsize = values.numel()
+
+    return _run_benchmark(device, run_greater_equal_ind), outputsize
+
+
+def greater_equal_ind_cann_benchmark(
+    device: Device,
+    size: int,
+    dtype: torch.dtype,
+    s: int,
+    pivot: Optional[float] = None,
+    segm_density: Optional[float] = None,
+) -> Tuple[float, int]:
+    """
+    CANN baseline for `greater_equal_ind`: compare, then gather the surviving
+    values and their positions. The `arange` of positions is hoisted out of the
+    timed region, since the TCUSCAN kernel derives the indices on the fly.
+    """
+    del s  # unused: kept for a signature consistent with the TCUSCAN benchmark
+    if dtype not in {torch.float16, torch.float32}:
+        raise RuntimeError(f"dtype {dtype} is not supported in torch.masked_select")
+
+    x = torch.rand(size, device=device.str, dtype=dtype)
+    positions = torch.arange(0, size, 1, dtype=torch.int32, device=device.str)
+    pivot = _greater_equal_pivot(pivot, segm_density)
+
+    def run_greater_equal_ind_cann() -> None:
+        mask = (x >= pivot).to(torch.uint8)
+        _ = torch.masked_select(x, mask)
+        _ = torch.masked_select(positions, mask)
+
+    outputsize = torch.masked_select(x, (x >= pivot).to(torch.uint8)).numel()
+
+    return _run_benchmark(device, run_greater_equal_ind_cann), outputsize
+
+
 def benchmark(
     device: Device,
     op_name: str,
@@ -1298,6 +1367,8 @@ if __name__ == "__main__":  # noqa
             "cube_reduce",
             "reduce_tiles",
             "count_if",
+            "greater_equal_ind",
+            "greater_equal_ind_cann",
         ],
     )
     parser.add_argument("--dtype", choices=["int8", "fp16", "int16", "int32", "fp32"])
@@ -1306,6 +1377,7 @@ if __name__ == "__main__":  # noqa
     parser.add_argument("--max_size", type=int, default=1e8, required=False)
     parser.add_argument("--num_cores", type=int, default=20, required=False)
     parser.add_argument("--density", type=float, default=None, required=False)
+    parser.add_argument("--pivot", type=float, default=None, required=False)
     parser.add_argument("--min-iter-index", type=int, default=1, required=False)
     parser.add_argument("--iter-step-multiplier", type=int, default=1, required=False)
     parser.add_argument("--iter-step-divider", type=int, default=1, required=False)
@@ -1318,6 +1390,7 @@ if __name__ == "__main__":  # noqa
     s = args.s
     k = args.k
     density = args.density
+    pivot = args.pivot
     min_iter_index = args.min_iter_index
     iter_step_multiplier = args.iter_step_multiplier
     iter_step_divider = args.iter_step_divider
@@ -1349,6 +1422,7 @@ if __name__ == "__main__":  # noqa
     logger.info(f"* s              : {s}")
     logger.info(f"* K              : {k}")
     logger.info(f"* density        : {density}")
+    logger.info(f"* pivot          : {pivot}")
     logger.info(f"* device         : {device.str}")
     logger.info("*******************************")
     logger.info("*******************************")
@@ -1874,6 +1948,38 @@ if __name__ == "__main__":  # noqa
             f"count_if_{s}",
             dtype,
             partial(count_if_benchmark, dtype=tdtype, s=s),
+            sizes,
+            density,
+        )
+    elif bench == "greater_equal_ind" and dtype in ["fp16", "fp32"]:
+        tdtype = STR_TO_DTYPE[dtype]
+        benchmark(
+            device,
+            f"greater_equal_ind_{s}_{density}",
+            dtype,
+            partial(
+                greater_equal_ind_benchmark,
+                dtype=tdtype,
+                s=s,
+                pivot=pivot,
+                segm_density=density,
+            ),
+            sizes,
+            density,
+        )
+    elif bench == "greater_equal_ind_cann" and dtype in ["fp16", "fp32"]:
+        tdtype = STR_TO_DTYPE[dtype]
+        benchmark(
+            device,
+            f"greater_equal_ind_cann_{s}_{density}",
+            dtype,
+            partial(
+                greater_equal_ind_cann_benchmark,
+                dtype=tdtype,
+                s=s,
+                pivot=pivot,
+                segm_density=density,
+            ),
             sizes,
             density,
         )

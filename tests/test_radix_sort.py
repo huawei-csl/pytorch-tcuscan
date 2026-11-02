@@ -104,3 +104,21 @@ def test_tcuscan_sort_fp16(vec_len: int, s: int):
 def test_tcuscan_sort_int16(vec_len: int, s: int):
     dtype = torch.int16
     _test_sort(vec_len, dtype, s)
+
+
+# A prime number of tiles used to collapse the launch down to a single block,
+# because the block count was required to divide `num_tiles` exactly.
+@pytest.mark.parametrize("num_tiles", [23, 25, 641, 643])
+@pytest.mark.parametrize("s", [128])
+def test_tcuscan_sort_fp16_awkward_tile_counts(num_tiles: int, s: int):
+    vec_len = num_tiles * s * s
+    x = torch.rand(vec_len, dtype=torch.float16, device=NPU_DEVICE)
+
+    torch.npu.synchronize()
+    values, indices = tcuscan_ops.run_radix_sort(x, s)
+    torch.npu.synchronize()
+
+    expected, _ = torch.sort(x)
+    assert torch.equal(values, expected)
+    # Ties make the index set itself ambiguous, so check the pairing instead.
+    assert torch.equal(x[indices.long()], values)

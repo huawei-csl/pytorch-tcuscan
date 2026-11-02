@@ -8,7 +8,6 @@
 #include "kernels/constants.h"
 #include "kernels/kernel_arithmetic_progression.h"
 #include "kernels/kernel_radix_enc.h"
-#include "kernels/kernel_single_radix.h"
 #include "kernels/kernel_split.h"
 #include "kernels/tcuscan_utils.h"
 #include "tiling/tiling_radix_sort.h"
@@ -18,11 +17,13 @@ __aicore__ inline void _radix_sort_iter(GM_ADDR in, GM_ADDR radices_ws,
                                         GM_ADDR indices_out, GM_ADDR split_ws,
                                         uint32_t in_len, uint32_t vec_tile_len,
                                         uint16_t bit_idx, bool zeros_first) {
-  tcuscan::run_single_radix<false>(in, radices_ws, in_len, vec_tile_len,
-                                   bit_idx);
-  SyncAll<false /*isAIVOnly*/>();
-  tcuscan::run_split_ind_uint16(in, radices_ws, indices_in, out, indices_out,
-                                split_ws, in_len, vec_tile_len, zeros_first);
+  // The split derives the mask from `bit_idx` itself, so there is no separate
+  // pass materialising it in global memory and no barrier to order it.
+  (void)radices_ws;
+  tcuscan::run_split_ind_uint16<false /* ComputeNumOnes */,
+                                true /* MaskFromBit */>(
+      in, radices_ws, indices_in, out, indices_out, split_ws, in_len,
+      vec_tile_len, zeros_first, bit_idx);
 }
 
 /**
@@ -72,9 +73,9 @@ extern "C" __global__ __aicore__ void radix_sort_fp16(GM_ADDR in, GM_ADDR out,
   GM_ADDR iter_out = out2;
   GM_ADDR indices_in = indices;
   GM_ADDR indices_out = indices_ws;
-  for (int i = 0; i < 16; i++) {
-    SyncAll<true /*isAIVOnly*/>();
+  SyncAll<true /*isAIVOnly*/>();
 
+  for (int i = 0; i < 16; i++) {
     const bool is_last_iter = i == 15;
     if (is_last_iter) {
       are_zeros_first = !are_zeros_first;
@@ -140,8 +141,6 @@ extern "C" __global__ __aicore__ void radix_sort_int16(GM_ADDR in, GM_ADDR out,
   _radix_sort_iter(in, radices, out2, indices, indices_ws, split_workspace,
                    vec_len, vec_tile_len, 0, are_zeros_first);
 
-  SyncAll<true /*isAIVOnly*/>();
-
   GM_ADDR iter_in = out2;
   GM_ADDR iter_out = out;
   GM_ADDR indices_in = indices_ws;
@@ -154,8 +153,6 @@ extern "C" __global__ __aicore__ void radix_sort_int16(GM_ADDR in, GM_ADDR out,
     _radix_sort_iter(iter_in, radices, iter_out, indices_in, indices_out,
                      split_workspace, vec_len, vec_tile_len, i,
                      are_zeros_first);
-
-    SyncAll<true /*isAIVOnly*/>();
 
     GM_ADDR tmp = iter_in;
     iter_in = iter_out;

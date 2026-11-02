@@ -8,6 +8,7 @@
 
 #include "ascendc_kernel_operator.h"
 #include "kernel_arithmetic_progression.h"
+#include "kernel_count_bit_tiles.h"
 #include "kernel_scan_multi_core.h"
 #include "tcuscan_utils.h"
 
@@ -38,7 +39,7 @@ namespace tcuscan {
  * @tparam T Data type of the input vector.
  * @tparam WithIndices Indicates whether to calculate indices or not.
  */
-template <typename T, bool WithIndices>
+template <typename T, bool WithIndices, bool MaskFromBit = false>
 class KernelSplit {
   using MaskT = uint8_t;
   using PosT = int32_t;
@@ -60,10 +61,12 @@ class KernelSplit {
    * @param [in] zeros_first Indicates whether the first elements in the
    * output vector are the ones with corresponding mask value set to zero or
    * one.
+   * @param [in] bit_idx Index of the bit to retrieve.
    */
   __aicore__ inline KernelSplit(uint32_t vec_len, uint32_t tile_len,
-                                bool zeros_first)
-      : vec_len_(vec_len),
+                                bool zeros_first, uint16_t bit_idx = 0)
+      : bit_idx_(bit_idx),
+        vec_len_(vec_len),
         block_num_(GetBlockNum() * GetTaskRation()),
         tile_len_(tile_len),
         zeros_first_(zeros_first),
@@ -84,11 +87,13 @@ class KernelSplit {
                                   GM_ADDR output) {
     global_input_.SetGlobalBuffer((__gm__ T*)input, vec_len_);
     global_output_.SetGlobalBuffer((__gm__ T*)output, vec_len_);
-    global_mask_.SetGlobalBuffer((__gm__ MaskT*)mask, vec_len_);
     global_pos_.SetGlobalBuffer((__gm__ PosT*)pos, block_num_);
 
     pipe.InitBuffer(vec_in_q_, 1, tile_len_ * sizeof(T));
-    pipe.InitBuffer(mask_in_q_, 1, tile_len_ * sizeof(MaskT));
+    if constexpr (!MaskFromBit) {
+      global_mask_.SetGlobalBuffer((__gm__ MaskT*)mask, vec_len_);
+      pipe.InitBuffer(mask_in_q_, 1, tile_len_ * sizeof(MaskT));
+    }
     pipe.InitBuffer(mask_fp16_buf_, tile_len_ * sizeof(half));
     pipe.InitBuffer(packed_mask_buf_,
                     packed_mask_tile_size_ * sizeof(PackedMaskT));
@@ -156,10 +161,15 @@ class KernelSplit {
       const uint32_t num_elems =
           scalar::NextTileLen(tile_len_, global_offset, vec_len_);
 
-      LoadAndConvertMask(global_offset, num_elems);
+      if constexpr (!MaskFromBit) {
+        LoadAndConvertMask(global_offset, num_elems);
+      }
       copy::CopyGmToVec(vec_in_q_, global_input_[global_offset], num_elems);
 
       LocalTensor<T> input_lt = vec_in_q_.DeQue<T>();
+      if constexpr (MaskFromBit) {
+        ComputeMaskFromInput(input_lt, num_elems);
+      }
 
       // Gather ones.
       const uint32_t num_gathered_ones = GatherAndStore(
@@ -197,13 +207,18 @@ class KernelSplit {
       const uint32_t num_elems =
           scalar::NextTileLen(tile_len_, global_offset, vec_len_);
 
-      LoadAndConvertMask(global_offset, num_elems);
+      if constexpr (!MaskFromBit) {
+        LoadAndConvertMask(global_offset, num_elems);
+      }
 
       copy::CopyGmToVec(vec_in_q_, global_input_[global_offset], num_elems);
       copy::CopyGmToVec(ind_in_q_, global_ind_in_[global_offset], num_elems);
 
       LocalTensor<T> input_lt = vec_in_q_.DeQue<T>();
       LocalTensor<IndicesT> ind_input_lt = ind_in_q_.DeQue<IndicesT>();
+      if constexpr (MaskFromBit) {
+        ComputeMaskFromInput(input_lt, num_elems);
+      }
       // Gather ones
       const uint32_t num_gathered_ones = GatherAndStore(
           input_lt, gathered_out_q_, global_output_[ones_offset], num_elems);
@@ -278,6 +293,39 @@ class KernelSplit {
                   CMPMODE::EQ, mask_fp16_lt.GetSize());
   }
 
+  /**
+   * @brief Builds the packed mask from bit `bit_idx_` of the input tile.
+   *
+   * `GatherMask` wants one bit per element, and `CompareScalar` is the only
+   * way to produce that, but it needs a floating point source. Shifting the
+   * wanted bit up into the sign position and comparing against zero gets there
+   * without a constant tensor: the cast to `half` is lossy in magnitude for
+   * large values but always preserves the sign, which is all that is read.
+   */
+  __aicore__ inline void ComputeMaskFromInput(const LocalTensor<T>& input_lt,
+                                              uint32_t num_elems) {
+    const LocalTensor<half> work_fp16_lt = mask_fp16_buf_.Get<half>();
+    const LocalTensor<uint16_t> work_u16_lt =
+        work_fp16_lt.template ReinterpretCast<uint16_t>();
+    const LocalTensor<int16_t> work_i16_lt =
+        work_fp16_lt.template ReinterpretCast<int16_t>();
+    const LocalTensor<uint16_t> input_u16_lt =
+        input_lt.template ReinterpretCast<uint16_t>();
+
+    const uint32_t size = work_fp16_lt.GetSize();
+    ShiftLeft(work_u16_lt, input_u16_lt, static_cast<uint16_t>(15 - bit_idx_),
+              size);
+
+    PipeBarrier<PIPE_V>();
+
+    Cast(work_fp16_lt, work_i16_lt, RoundMode::CAST_NONE, size);
+
+    const LocalTensor<PackedMaskT> packed_mask_8b =
+        packed_mask_buf_.Get<PackedMaskT>();
+    CompareScalar(packed_mask_8b, work_fp16_lt, static_cast<half>(0),
+                  CMPMODE::LT, size);
+  }
+
   template <typename GatherT, int32_t _NumBuf>
   __aicore__ inline uint32_t GatherAndStore(
       const LocalTensor<GatherT>& input_lt,
@@ -341,6 +389,7 @@ class KernelSplit {
   TQue<QuePosition::VECIN, 1> ind_in_q_;
   TQue<QuePosition::VECOUT, 2> gathered_ind_q_;
 
+  const uint16_t bit_idx_;
   const uint32_t vec_len_;
   const uint32_t block_num_;
   const uint32_t tile_len_;
@@ -482,42 +531,59 @@ __aicore__ inline void run_split_uint16(GM_ADDR in, GM_ADDR mask, GM_ADDR out,
  * iteration.
  * @param [in] zeros_first Indicates whether the first elements in the output
  * vector are the ones with corresponding mask value set to zero or one.
+ * @param [in] bit_idx Index of the bit to retrieve.
  * @return Number of ones in the mask.
  */
+template <bool ComputeNumOnes = true, bool MaskFromBit = false>
 __aicore__ inline uint32_t run_split_ind_uint16(
     GM_ADDR in, GM_ADDR mask, GM_ADDR indices_in, GM_ADDR out,
     GM_ADDR indices_out, GM_ADDR workspace, uint32_t vec_len, uint32_t tile_len,
-    bool zeros_first) {
+    bool zeros_first, uint16_t bit_idx = 0) {
   exec_mode::EnableCubeCores();
 
   GM_ADDR const sums = workspace;
 
   if ASCEND_IS_AIV {
-    KernelReduceTiles<int8_t> op_reduce_tiles(tile_len, vec_len);
-    op_reduce_tiles.Init(mask, sums);
-    op_reduce_tiles.Process();
+    if constexpr (MaskFromBit) {
+      // Counting straight off the keys keeps the mask out of global memory.
+      KernelCountBitTiles op_count(tile_len, vec_len, bit_idx);
+      op_count.Init(in, sums);
+      op_count.Process();
+    } else {
+      KernelReduceTiles<int8_t> op_reduce_tiles(tile_len, vec_len);
+      op_reduce_tiles.Init(mask, sums);
+      op_reduce_tiles.Process();
+    }
   }
 
   SyncAll<false /*isAIVOnly*/>();
 
   if ASCEND_IS_AIV {
     constexpr bool with_indices = true;
-    KernelSplit<uint16_t, with_indices> op(vec_len, tile_len, zeros_first);
+    KernelSplit<uint16_t, with_indices, MaskFromBit> op(vec_len, tile_len,
+                                                        zeros_first, bit_idx);
     op.Init(in, mask, sums, out, indices_in, indices_out);
     op.Process();
   }
 
   SyncAll<false /*isAIVOnly*/>();
 
-  if ASCEND_IS_AIV {
-    KernelReduce<uint32_t> op_reduce(GetBlockNum());
-    op_reduce.Init(sums, sums);
-    op_reduce.Process();
+  // Callers that only need the partitioned output - radix sort, for one - can
+  // skip the reduction and the barrier it needs, since the split above has
+  // already been separated from whatever comes next.
+  if constexpr (!ComputeNumOnes) {
+    return 0;
+  } else {
+    if ASCEND_IS_AIV {
+      KernelReduce<uint32_t> op_reduce(GetBlockNum());
+      op_reduce.Init(sums, sums);
+      op_reduce.Process();
+    }
+
+    SyncAll<false /*isAIVOnly*/>();
+
+    return scalar::GetGMValue<int32_t>(sums, 0, GetBlockNum());
   }
-
-  SyncAll<false /*isAIVOnly*/>();
-
-  return scalar::GetGMValue<int32_t>(sums, 0, GetBlockNum());
 }
 
 }  // namespace tcuscan

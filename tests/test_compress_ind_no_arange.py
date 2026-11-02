@@ -87,3 +87,52 @@ def test_tcuscan_compress_ind_no_arange_fp32_s_64(vec_len: int, offset: int):
 @pytest.mark.parametrize("offset", _OFFSETS)
 def test_tcuscan_compress_ind_no_arange_fp32_s_128(vec_len: int, offset: int):
     _test_compress_ind_no_arange(vec_len - offset, 128, torch.float32)
+
+
+# --------------------------------------------------------------------------------
+# Output length
+#
+# As in `test_compress_ind.py`: the output length is the number of mask ones,
+# which the kernel reports through its own reduction rather than the host
+# computing it before the launch.
+# --------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("s", [32, 64, 128], ids=lambda x: f"s:{x}")
+@pytest.mark.parametrize("ones", [0, 1], ids=lambda x: f"mask:{'all' if x else 'none'}")
+def test_tcuscan_compress_ind_no_arange_uniform_mask(s: int, ones: int):
+    vec_len = 20 * s * s
+    x = torch.randint(0, 2**7 - 1, (vec_len,), dtype=torch.float16, device=NPU_DEVICE)
+    mask = torch.full((vec_len,), ones, dtype=torch.int8, device=NPU_DEVICE)
+    torch.npu.synchronize()
+
+    actual, actual_indices = tcuscan_compress_ind_no_arange(x, mask, s)
+    torch.npu.synchronize()
+
+    indices_in = torch.arange(0, vec_len, 1, dtype=torch.int32, device=NPU_DEVICE)
+    assert actual.numel() == vec_len * ones
+    assert actual_indices.numel() == vec_len * ones
+    assert torch.equal(torch.masked_select(x, mask.to(torch.uint8)), actual)
+    assert torch.equal(
+        torch.masked_select(indices_in, mask.to(torch.uint8)), actual_indices
+    )
+
+
+@pytest.mark.parametrize("density", [0.001, 0.01, 0.5, 0.99], ids=lambda x: f"d:{x}")
+def test_tcuscan_compress_ind_no_arange_sparse_and_dense_masks(density: float):
+    """The reported length must track the mask at either end of the density range."""
+    s = 128
+    vec_len = 20 * s * s
+    x = torch.randint(0, 2**7 - 1, (vec_len,), dtype=torch.float16, device=NPU_DEVICE)
+    mask = (torch.rand(vec_len, device=NPU_DEVICE) < density).to(torch.int8)
+    torch.npu.synchronize()
+
+    actual, actual_indices = tcuscan_compress_ind_no_arange(x, mask, s)
+    torch.npu.synchronize()
+
+    indices_in = torch.arange(0, vec_len, 1, dtype=torch.int32, device=NPU_DEVICE)
+    expected = torch.masked_select(x, mask.to(torch.uint8))
+    expected_indices = torch.masked_select(indices_in, mask.to(torch.uint8))
+    assert actual.numel() == expected.numel()
+    assert torch.equal(expected, actual)
+    assert torch.equal(expected_indices, actual_indices)
