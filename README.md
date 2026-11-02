@@ -2,12 +2,27 @@
 
 AscendC TCUSCAN operators (scan, sort, split, top-k, compress, etc) using the Cube unit.
 
-## Performance highlights
+## What is a TCU?
 
-TCUSCAN expresses prefix-sum-style work as matrix multiplications so that it runs on the
-Cube (matrix) units. That unlocks a compute resource these operators normally leave idle
-and keeps the Vector units free for the surrounding element-wise work, which turns
-several latency-bound PyTorch operators into bandwidth-bound ones.
+A **TCU (Tensor Core Unit)** is a fixed-function matrix engine built into an accelerator:
+hardware whose primitive instruction is a tile-sized matrix multiply-accumulate,
+`D = A @ B + C`, at a throughput the general-purpose vector and scalar units cannot reach.
+Every vendor ships one under its own name — NVIDIA calls them Tensor Cores, Google's TPU
+calls it the MXU, Intel calls it AMX/XMX — and on **Ascend the TCU is the Cube unit**, as
+opposed to the Vector unit that runs element-wise work.
+
+**TCUSCAN** is what this repository builds on top of that unit: the scan family
+(prefix sum, and the sort, split, top-k and compaction kernels derived from it) rewritten
+as matrix multiplications so the work lands on the Cube unit instead of the Vector unit.
+The core identity is that multiplying a tile of values by a lower-triangular matrix of
+ones yields that tile's prefix sums, which turns a scan into a GEMM.
+
+Two things follow, and they are the reason for the speedups below. The Cube unit is
+otherwise idle during these operators, so using it is free throughput; and the Vector
+units stay available for the surrounding element-wise work. Together they move operators
+that are normally latency-bound into the bandwidth-bound regime.
+
+## Performance highlights
 
 The numbers below come from this repository's own profiling harness
 (`scripts/profiling/profile_tcuscan_ops.py`: 10 warm-up and 100 timed device-side
@@ -96,7 +111,14 @@ The algorithms behind the scan, sort, compaction and sampling kernels are descri
 > *Parallel Scan on Ascend AI Accelerators*. arXiv:2505.15112, 2025.
 > <https://arxiv.org/abs/2505.15112>
 
-The notebooks under `nbs/paper-plots/` regenerate the figures of that paper from the CSV
+The idea of expressing reductions and scans as matrix multiplications so that they run on
+a TCU originates in:
+
+> Abdul Dakkak, Cheng Li, Jinjun Xiong, Isaac Gelado, Wen-mei Hwu.
+> *Accelerating Reduction and Scan Using Tensor Core Units*. ICS 2019.
+> <https://arxiv.org/abs/1811.09736>
+
+The notebooks under `nbs/paper-plots/` regenerate the figures of the Ascend paper from the CSV
 files these `make profile_*` targets produce. Absolute numbers there were measured on an
 Ascend 910B4 and differ from the table above.
 
