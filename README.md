@@ -16,46 +16,50 @@ iterations per point), measured on:
 | | |
 | --- | --- |
 | Accelerator | Ascend 910B2, 24 Cube / 48 Vector cores, 192 MB L2 |
-| CANN | 9.1.0 |
+| CANN | 9.2.0-beta.2 |
 | `torch-npu` | 2.10.0 |
 | Build | Release, `SOC_VERSION=Ascend910B4` |
 
 Inputs are `fp16` vectors swept up to ~10^8 elements. *Speedup* is the baseline time
 divided by the TCUSCAN time at the largest size measured, with the median over the whole
 sweep in parentheses. For scale, a device-to-device `copy` of the same tensors peaks at
-**916 GB/s** here, which is the practical roofline for the bandwidth column.
+**907 GB/s** here, which is the practical roofline for the bandwidth column.
 
 | Operator | Baseline | Speedup | Peak bandwidth | Reproduce with |
 | --- | --- | --- | --- | --- |
-| `run_scan_multi_core` | `torch.cumsum` | **189×** (median 123×) | 415 GB/s | `make profile_mcscan` |
-| `run_compress` | `torch.masked_select` | **39–44×** (median 28×) | 404 GB/s | `make profile_compress_paper` |
-| `run_histogram`, 32 bins | `torch.histc` | **49×** (median 47×) | 112 GB/s | `make profile_histogram` |
-| `run_radix_sort` | `torch.sort` | **10.6×** (median 9.9×) | 30 GB/s | `make profile_fp16_radix_sort` |
-| `run_scan_batch` | `torch.cumsum(dim=1)` | **3.3×** (median 2.9×) | 458 GB/s | `make profile_scan_batch` |
+| `run_scan_multi_cube` | `torch.cumsum` | **271×** (median 173×) | 595 GB/s | `make profile_scan_multi_cube` |
+| `run_scan_multi_core` | `torch.cumsum` | **196×** (median 136×) | 429 GB/s | `make profile_mcscan` |
+| `run_compress` | `torch.masked_select` | **41–45×** (median 30×) | 454 GB/s | `make profile_compress_paper` |
+| `run_histogram`, 32 bins | `torch.histc` | **46×** (median 42×) | 107 GB/s | `make profile_histogram` |
+| `run_radix_sort` | `torch.sort` | **10.5×** (median 9.8×) | 31 GB/s | `make profile_fp16_radix_sort` |
+| `run_scan_batch` | `torch.cumsum(dim=1)` | **3.4×** (median 3.0×) | 456 GB/s | `make profile_scan_batch` |
 | `run_topk_int16`, k=256 | `torch.topk` | **1.6×** | — | `make profile_int16_topk` |
 
 How to read that table:
 
 - **Scan.** `torch.cumsum` does not parallelise a *single* long 1-D scan: it takes 273 ms
-  for 10^8 `fp16` elements (2 GB/s) where `run_scan_multi_core` takes 1.4 ms (415 GB/s).
-  The 189× therefore says as much about the baseline as about the kernel. The batch-scan
+  for 10^8 `fp16` elements (2 GB/s) where `run_scan_multi_core` takes 1.4 ms (429 GB/s).
+  The 196× therefore says as much about the baseline as about the kernel. The batch-scan
   row is the fairer throughput comparison: with 65 536-wide rows `torch.cumsum(dim=1)`
-  *can* parallelise across the batch and reaches 89 GB/s, and TCUSCAN is still 3.3×
-  faster at 458 GB/s, i.e. half the copy roofline.
+  *can* parallelise across the batch and reaches 132 GB/s, and TCUSCAN is still 3.4×
+  faster at 456 GB/s, i.e. half the copy roofline. Of the two single-vector scans,
+  `run_scan_multi_cube` is the faster: it spreads the block scan over the cube units and
+  finishes 10^8 elements in 1.0 ms against 1.4 ms for `run_scan_multi_core`, reaching
+  595 GB/s — two thirds of the copy roofline.
 - **Compress** and **histogram** are timed on exactly the same inputs as their baselines
   (the same device-resident mask, the same tensor); only the compaction / binning call is
-  measured. Both PyTorch baselines are slow for this access pattern (7–10 GB/s and
+  measured. Both PyTorch baselines are slow for this access pattern (7–11 GB/s and
   2.3 GB/s). The histogram comparison is conservative: `run_histogram` derives its bin
   edges from the data, while `torch.histc` is handed explicit bounds and skips that pass.
 - **Radix sort** is multi-pass, so its *effective* bandwidth is low by construction and
-  the speedup is the meaningful number. It leads `torch.sort` across the entire sweep,
-  from 1.2× at 3·10^5 elements to 9.9× (median) from 10^6 upwards, peaking at 12.4× at
-  2·10^7. The small end is dominated by the fixed per-call cost rather than by the
-  sort itself.
+  the speedup is the meaningful number. It trails `torch.sort` only at the very small
+  end (0.9× at 3·10^5 elements) and reaches 9.8× (median) from 10^6 upwards, peaking at
+  12.3× at 2·10^7. The small end is dominated by the fixed per-call cost rather than by
+  the sort itself.
 - **Top-k** is where the Cube-based approach does not pay off for `fp16`:
-  `run_topk_fp16` is **0.54×** of `torch.topk` at k=2048, matching the negative result
+  `run_topk_fp16` is **0.50×** of `torch.topk` at k=2048, matching the negative result
   reported in the paper for k ≤ 4096. The `int16` path is ahead at 1.6× (71.7 ms versus
-  115.9 ms at 10^8), but note that `torch.topk` is itself ~35× slower on `int16` than on
+  116.1 ms at 10^8), but note that `torch.topk` is itself ~37× slower on `int16` than on
   `fp16`, so part of that margin is a weak baseline rather than a fast kernel.
 
 Small inputs are not the target: every kernel above carries a fixed launch and
