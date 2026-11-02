@@ -5,6 +5,7 @@
  * @brief Kernel implementing a support debug operation.
  */
 #pragma once
+#include "ascendc_kernel_operator.h"
 
 namespace tcuscan {
 
@@ -32,7 +33,7 @@ class KernelSupport {
    *
    * */
   __aicore__ inline void Init(GM_ADDR input) {
-    global_input_.SetGlobalBuffer((__gm__ T *)input, size_);
+    global_input_.SetGlobalBuffer((__gm__ T*)input, size_);
 
     pipe.InitBuffer(vecin_q_, 1, size_ * sizeof(T));
   }

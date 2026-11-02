@@ -6,7 +6,7 @@
  */
 #pragma once
 
-#include "kernel_operator.h"
+#include "ascendc_kernel_operator.h"
 #include "tcuscan_utils.h"
 
 using namespace AscendC;
