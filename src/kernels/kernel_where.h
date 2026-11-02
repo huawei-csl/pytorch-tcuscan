@@ -7,6 +7,7 @@
 #pragma once
 
 #include "ascendc_kernel_operator.h"
+#include "kernel_reduce_tiles.h"
 #include "tcuscan_utils.h"
 
 using namespace AscendC;
@@ -220,15 +221,29 @@ class KernelWhere {
  * @tparam T Input data type
  *
  * @param [in] mask_in Pointer to the input mask vector.
- * @param [in] num_ones_per_block Point to number of mask ones per block.
  * @param [in] vec_out Pointer ot the output vector.
+ * @param [in] workspace Pointer to workspace. The number of mask ones per
+ * vector core is left at its start.
  * @param [in] vec_len Dimension of the input vector.
  * @param [in] tile_len Tile length.
  */
-__aicore__ inline void run_where(GM_ADDR mask_in, GM_ADDR num_ones_per_block,
-                                 GM_ADDR vec_out, uint32_t vec_len,
+__aicore__ inline void run_where(GM_ADDR mask_in, GM_ADDR vec_out,
+                                 GM_ADDR workspace, uint32_t vec_len,
                                  uint32_t tile_len) {
   exec_mode::EnableCubeCores();
+
+  GM_ADDR const num_ones_per_block = workspace;
+
+  // Each core writes its indices after those of every core before it, so it
+  // needs their counts of mask ones. Reducing the mask here rather than on
+  // the host keeps the count on the device, where it is only ever used.
+  if ASCEND_IS_AIV {
+    KernelReduceTiles<int8_t> op_reduce(tile_len, vec_len);
+    op_reduce.Init(mask_in, num_ones_per_block);
+    op_reduce.Process();
+  }
+
+  SyncAll<false /*isAIVOnly*/>();
 
   if ASCEND_IS_AIV {
     KernelWhere op(vec_len, tile_len);

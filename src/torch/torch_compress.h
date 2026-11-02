@@ -29,39 +29,51 @@ extern "C" void launch_compress_fp32(uint32_t blockDim, void* stream, void* x,
                                      void* tiling_gm);
 extern "C" void launch_compress_ind_fp16(uint32_t blockDim, void* stream,
                                          void* vec_in, void* indices_in,
-                                         void* mask, void* num_ones_per_block,
-                                         void* vec_out, void* indices_out,
-                                         void* workspace, void* tiling_gm);
+                                         void* mask, void* vec_out,
+                                         void* indices_out, void* workspace,
+                                         void* tiling_gm);
 extern "C" void launch_compress_ind_fp32(uint32_t blockDim, void* stream,
                                          void* vec_in, void* indices_in,
-                                         void* mask, void* num_ones_per_block,
-                                         void* vec_out, void* indices_out,
-                                         void* workspace, void* tiling_gm);
+                                         void* mask, void* vec_out,
+                                         void* indices_out, void* workspace,
+                                         void* tiling_gm);
 extern "C" void launch_compress_ind_no_arange_fp16(
-    uint32_t blockDim, void* stream, void* vec_in, void* mask,
-    void* num_ones_per_block, void* vec_out, void* indices_out, void* workspace,
-    void* tiling_gm);
+    uint32_t blockDim, void* stream, void* vec_in, void* mask, void* vec_out,
+    void* indices_out, void* workspace, void* tiling_gm);
 extern "C" void launch_compress_ind_no_arange_fp32(
-    uint32_t blockDim, void* stream, void* vec_in, void* mask,
-    void* num_ones_per_block, void* vec_out, void* indices_out, void* workspace,
-    void* tiling_gm);
-extern "C" void launch_compress_with_sums_fp16(uint32_t blockDim, void* stream,
-                                               void* x, void* mask,
-                                               void* num_ones_per_block,
-                                               void* z, void* workspace,
-                                               void* tiling_gm);
-extern "C" void launch_compress_with_sums_fp32(uint32_t blockDim, void* stream,
-                                               void* x, void* mask,
-                                               void* num_ones_per_block,
-                                               void* z, void* workspace,
-                                               void* tiling_gm);
+    uint32_t blockDim, void* stream, void* vec_in, void* mask, void* vec_out,
+    void* indices_out, void* workspace, void* tiling_gm);
 extern "C" void launch_where_fp16(uint32_t blockDim, void* stream,
-                                  void* mask_in, void* num_ones_per_block,
-                                  void* vec_out, void* workspace,
+                                  void* mask_in, void* vec_out, void* workspace,
                                   void* tiling_gm);
 /// @endcond
 
 namespace tcuscan {
+
+namespace {
+
+/**
+ * @brief The per-core counts of mask ones that the kernel wrote.
+ *
+ * The kernel-side `run_compress`, `run_compress_ind` and `run_where` all
+ * reduce the mask before compacting and leave one count per vector core at
+ * the start of the workspace, which they then turn into each core's output
+ * offset. Every entry is written, including those of cores that got no tile,
+ * so the counts are a complete partition of the ones in the mask.
+ *
+ * @param [in] workspace Workspace handed to the kernel.
+ * @param [in] block_dim Number of AI cores the kernel was launched with.
+ * @return An `int32` view of the counts; one entry per vector core.
+ */
+at::Tensor mask_ones_block_counts(const at::Tensor& workspace,
+                                  uint32_t block_dim) {
+  const int64_t num_counts = host_utils::MAX_AIV_PER_BLOCK * block_dim;
+
+  return workspace.slice(0, 0, num_counts * sizeof(int32_t))
+      .view(torch::kInt32);
+}
+
+}  // namespace
 
 /**
  * @brief Parallel vector compaction / compress.
@@ -92,12 +104,14 @@ at::Tensor run_compress(const at::Tensor& x, const at::Tensor& mask, int S) {
     block_dim = 1;
   }
 
-  const at::Tensor num_ones_per_block =
-      run_reduce_tiles(mask, tile_len / 2, 2 * block_dim);
-  const int32_t num_ones = num_ones_per_block.sum().item<int32_t>();
-
-  const at::Tensor z =
-      at::empty({num_ones}, at::TensorOptions().dtype(dtype).device(device));
+  // The output is as long as there are ones in `mask`, which only the device
+  // knows. Allocating that exactly would mean reducing the mask on the host
+  // first and reading the total back, a blocking synchronization that stalls
+  // the stream before the kernel is even launched. Allocate for the worst
+  // case instead -- every element selected -- and return a view of the part
+  // that was written; the kernel reduces the mask itself.
+  const at::Tensor z = at::empty(
+      {total_length}, at::TensorOptions().dtype(dtype).device(device));
 
   const CompressTiling tiling{block_dim, total_length, matmul_size};
   const at::Tensor tiling_device = alloc_copy_tiling_tensor(tiling, device);
@@ -109,26 +123,30 @@ at::Tensor run_compress(const at::Tensor& x, const at::Tensor& mask, int S) {
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
   if (dtype == torch::kHalf or dtype == torch::kInt16) {
-    launch_compress_with_sums_fp16(
-        block_dim, acl_stream, const_cast<void*>(x.storage().data()),
-        const_cast<void*>(mask.storage().data()),
-        const_cast<void*>(num_ones_per_block.storage().data()),
-        const_cast<void*>(z.storage().data()),
-        const_cast<void*>(workspace_tensor.storage().data()),
-        tiling_device.data_ptr());
+    launch_compress_fp16(block_dim, acl_stream,
+                         const_cast<void*>(x.storage().data()),
+                         const_cast<void*>(mask.storage().data()),
+                         const_cast<void*>(z.storage().data()),
+                         const_cast<void*>(workspace_tensor.storage().data()),
+                         tiling_device.data_ptr());
   } else {
-    launch_compress_with_sums_fp32(
-        block_dim, acl_stream, const_cast<void*>(x.storage().data()),
-        const_cast<void*>(mask.storage().data()),
-        const_cast<void*>(num_ones_per_block.storage().data()),
-        const_cast<void*>(z.storage().data()),
-        const_cast<void*>(workspace_tensor.storage().data()),
-        tiling_device.data_ptr());
+    launch_compress_fp32(block_dim, acl_stream,
+                         const_cast<void*>(x.storage().data()),
+                         const_cast<void*>(mask.storage().data()),
+                         const_cast<void*>(z.storage().data()),
+                         const_cast<void*>(workspace_tensor.storage().data()),
+                         tiling_device.data_ptr());
   }
 
   aclrtSynchronizeStream(acl_stream);
 
-  return z;
+  // The kernel's own reduction left one count of ones per vector core at the
+  // start of the workspace -- the same counts it turned into output offsets --
+  // so the output length comes back without a second pass over the mask.
+  const int32_t num_ones =
+      mask_ones_block_counts(workspace_tensor, block_dim).sum().item<int32_t>();
+
+  return z.slice(0, 0, num_ones);
 }
 
 /**
@@ -228,15 +246,14 @@ std::tuple<at::Tensor, at::Tensor> run_compress_ind(
     block_dim = 1;
   }
 
-  const at::Tensor num_ones_per_block =
-      run_reduce_tiles(mask, tile_len / 2, 2 * block_dim);
-  const int32_t num_ones = num_ones_per_block.sum().item<int32_t>();
-
-  const at::Tensor z =
-      at::empty({num_ones}, at::TensorOptions().dtype(dtype).device(device));
+  // Both outputs are as long as there are ones in `mask`, a length only the
+  // device knows; see `run_compress` for why they are allocated for the worst
+  // case and sliced afterwards rather than sized up front.
+  const at::Tensor z = at::empty(
+      {total_length}, at::TensorOptions().dtype(dtype).device(device));
 
   const at::Tensor indices_out = at::empty(
-      {num_ones}, at::TensorOptions().dtype(indices_dtype).device(device));
+      {total_length}, at::TensorOptions().dtype(indices_dtype).device(device));
 
   const CompressTiling tiling{block_dim, total_length, matmul_size};
   const at::Tensor tiling_device = alloc_copy_tiling_tensor(tiling, device);
@@ -252,7 +269,6 @@ std::tuple<at::Tensor, at::Tensor> run_compress_ind(
         block_dim, acl_stream, const_cast<void*>(x.storage().data()),
         const_cast<void*>(indices_in.storage().data()),
         const_cast<void*>(mask.storage().data()),
-        const_cast<void*>(num_ones_per_block.storage().data()),
         const_cast<void*>(z.storage().data()),
         const_cast<void*>(indices_out.storage().data()),
         const_cast<void*>(workspace_tensor.storage().data()),
@@ -262,7 +278,6 @@ std::tuple<at::Tensor, at::Tensor> run_compress_ind(
         block_dim, acl_stream, const_cast<void*>(x.storage().data()),
         const_cast<void*>(indices_in.storage().data()),
         const_cast<void*>(mask.storage().data()),
-        const_cast<void*>(num_ones_per_block.storage().data()),
         const_cast<void*>(z.storage().data()),
         const_cast<void*>(indices_out.storage().data()),
         const_cast<void*>(workspace_tensor.storage().data()),
@@ -271,7 +286,11 @@ std::tuple<at::Tensor, at::Tensor> run_compress_ind(
 
   aclrtSynchronizeStream(acl_stream);
 
-  return std::make_tuple(z, indices_out);
+  const int32_t num_ones =
+      mask_ones_block_counts(workspace_tensor, block_dim).sum().item<int32_t>();
+
+  return std::make_tuple(z.slice(0, 0, num_ones),
+                         indices_out.slice(0, 0, num_ones));
 }
 
 /**
@@ -304,15 +323,14 @@ std::tuple<at::Tensor, at::Tensor> run_compress_ind_no_arange(
     block_dim = 1;
   }
 
-  const at::Tensor num_ones_per_block =
-      run_reduce_tiles(mask, tile_len / 2, 2 * block_dim);
-  const int32_t num_ones = num_ones_per_block.sum().item<int32_t>();
-
-  const at::Tensor z =
-      at::empty({num_ones}, at::TensorOptions().dtype(dtype).device(device));
+  // Both outputs are as long as there are ones in `mask`, a length only the
+  // device knows; see `run_compress` for why they are allocated for the worst
+  // case and sliced afterwards rather than sized up front.
+  const at::Tensor z = at::empty(
+      {total_length}, at::TensorOptions().dtype(dtype).device(device));
 
   const at::Tensor indices_out = at::empty(
-      {num_ones}, at::TensorOptions().dtype(torch::kInt32).device(device));
+      {total_length}, at::TensorOptions().dtype(torch::kInt32).device(device));
 
   const CompressTiling tiling{block_dim, total_length, matmul_size};
   const at::Tensor tiling_device = alloc_copy_tiling_tensor(tiling, device);
@@ -325,7 +343,6 @@ std::tuple<at::Tensor, at::Tensor> run_compress_ind_no_arange(
     launch_compress_ind_no_arange_fp16(
         block_dim, acl_stream, const_cast<void*>(x.storage().data()),
         const_cast<void*>(mask.storage().data()),
-        const_cast<void*>(num_ones_per_block.storage().data()),
         const_cast<void*>(z.storage().data()),
         const_cast<void*>(indices_out.storage().data()),
         const_cast<void*>(workspace_tensor.storage().data()),
@@ -334,7 +351,6 @@ std::tuple<at::Tensor, at::Tensor> run_compress_ind_no_arange(
     launch_compress_ind_no_arange_fp32(
         block_dim, acl_stream, const_cast<void*>(x.storage().data()),
         const_cast<void*>(mask.storage().data()),
-        const_cast<void*>(num_ones_per_block.storage().data()),
         const_cast<void*>(z.storage().data()),
         const_cast<void*>(indices_out.storage().data()),
         const_cast<void*>(workspace_tensor.storage().data()),
@@ -343,7 +359,11 @@ std::tuple<at::Tensor, at::Tensor> run_compress_ind_no_arange(
 
   aclrtSynchronizeStream(acl_stream);
 
-  return std::make_tuple(z, indices_out);
+  const int32_t num_ones =
+      mask_ones_block_counts(workspace_tensor, block_dim).sum().item<int32_t>();
+
+  return std::make_tuple(z.slice(0, 0, num_ones),
+                         indices_out.slice(0, 0, num_ones));
 }
 
 /**
@@ -399,6 +419,13 @@ at::Tensor run_where(const at::Tensor& x, float pivot, int S) {
   const at::Device device = x.options().device();
   const auto dtype = x.options().dtype();
 
+  // The output length now comes out of the workspace the kernel filled in, so
+  // there is no longer a sensible value to return when no kernel runs: the
+  // unsupported dtype has to be refused rather than silently answered.
+  TORCH_CHECK(dtype == at::kHalf,
+              "run_where: only float16 input is supported, but got ",
+              x.scalar_type(), ".");
+
   const uint32_t total_len = x.numel();
 
   const uint32_t matmul_size = static_cast<uint32_t>(S);
@@ -419,34 +446,33 @@ at::Tensor run_where(const at::Tensor& x, float pivot, int S) {
 
   const at::Tensor mask = run_greater_equal(x, pivot, vec_tile_len);
 
-  const at::Tensor num_ones_per_block =
-      run_reduce_tiles(mask, vec_tile_len, 2 * block_dim);
-  const int32_t num_ones = num_ones_per_block.sum().item<int32_t>();
-
+  // One index per mask one, a count only the device knows; see `run_compress`
+  // for why the output is allocated for the worst case and sliced afterwards
+  // rather than sized up front.
   const at::Tensor z = at::empty(
-      {num_ones}, at::TensorOptions().dtype(torch::kInt32).device(device));
-
-  const at::Tensor workspace_tensor = alloc_workspace(0, device);
+      {total_length}, at::TensorOptions().dtype(torch::kInt32).device(device));
 
   const WhereTiling tiling{block_dim, total_len, vec_tile_len, pivot};
   const at::Tensor tiling_device = alloc_copy_tiling_tensor(tiling, device);
 
+  const uint32_t user_workspace_size = tcuscan::get_workspace_size(tiling);
+  const at::Tensor workspace_tensor =
+      alloc_workspace(user_workspace_size, device);
+
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
-  if (dtype == at::kHalf) {
-    launch_where_fp16(block_dim, acl_stream,
-                      const_cast<void*>(mask.storage().data()),
-                      const_cast<void*>(num_ones_per_block.storage().data()),
-                      const_cast<void*>(z.storage().data()),
-                      const_cast<void*>(workspace_tensor.storage().data()),
-                      tiling_device.data_ptr());
-  } else {
-    /* Unsupported */
-  }
+  launch_where_fp16(block_dim, acl_stream,
+                    const_cast<void*>(mask.storage().data()),
+                    const_cast<void*>(z.storage().data()),
+                    const_cast<void*>(workspace_tensor.storage().data()),
+                    tiling_device.data_ptr());
 
   aclrtSynchronizeStream(acl_stream);
 
-  return z;
+  const int32_t num_ones =
+      mask_ones_block_counts(workspace_tensor, block_dim).sum().item<int32_t>();
+
+  return z.slice(0, 0, num_ones);
 }
 
 }  // namespace tcuscan

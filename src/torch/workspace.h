@@ -24,6 +24,7 @@
 #include "../tiling/tiling_seg_sum_single_cube.h"
 #include "../tiling/tiling_split.h"
 #include "../tiling/tiling_tri_inv_cube_col_sweep.h"
+#include "../tiling/tiling_where.h"
 
 namespace tcuscan {
 
@@ -136,10 +137,30 @@ constexpr uint32_t get_workspace_size(const ScanMultiCubeTiling& tiling) {
  * @return Size of the workspace in bytes.
  */
 constexpr uint32_t get_workspace_size(const CompressTiling& tiling) {
+  // One count per *vector* core, not per AI core: the reduction the kernel
+  // runs over the mask is vector-only, so it writes two counts per block.
+  const uint32_t num_block_counts =
+      host_utils::MAX_AIV_PER_BLOCK * tiling.num_blocks;
   const uint32_t block_counts_size = host_utils::AlignUp(
-      tiling.num_blocks * sizeof(int32_t), host_utils::GM_ALIGNMENT);
+      num_block_counts * sizeof(int32_t), host_utils::GM_ALIGNMENT);
   return block_counts_size;
 };
+
+/**
+ * @brief Calculate the workspace size for `where`.
+ *
+ * @param [in] tiling Tiling parameters used in the kernel.
+ * @return Size of the workspace in bytes.
+ */
+constexpr uint32_t get_workspace_size(const WhereTiling& tiling) {
+  // As for compress: one count of mask ones per vector core, which the
+  // kernel's own reduction fills in before turning the counts into each
+  // core's output offset.
+  const uint32_t num_block_counts =
+      host_utils::MAX_AIV_PER_BLOCK * tiling.num_blocks;
+  return host_utils::AlignUp(num_block_counts * sizeof(int32_t),
+                             host_utils::GM_ALIGNMENT);
+}
 
 /**
  * @brief Calculate the workspace size for single core scan.
