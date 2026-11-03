@@ -137,8 +137,9 @@ PYBIND11_MODULE(tcuscan_ops, m) {
         "Generate lower triangular matrix");
   m.def("run_reduce_tiles", &tcuscan::run_reduce_tiles,
         "Sum-reduce over tiles");
-  m.def("run_cube_reduce", &tcuscan::run_cube_reduce,
-        "Block reduction using AIC/AIV cores.");
+  m.def("run_cube_reduce", &tcuscan::run_cube_reduce, pybind11::arg("x"),
+        "Sum over every element of a tensor of any shape, using the AIC/AIV "
+        "cores. Returns a one-element tensor.");
   m.def("run_complete_rows", &tcuscan::run_complete_rows,
         "Down-sweep (second) phase of MCSCAN");
   m.def("run_complete_blocks", &tcuscan::run_complete_blocks,

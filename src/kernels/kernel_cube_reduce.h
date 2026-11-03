@@ -232,30 +232,34 @@ class KernelCompleteCubeReduce {
    * @brief Initialize global and local memory structures.
    *
    * @param [in] vec_in Pointer to input buffer in global memory.
-   * @param [in] vec_out Pointer to output buffer in global memory.
+   * @param [in] partials Pointer to scratch for one partial sum per block.
+   * @param [in] vec_out Pointer to the single-element output.
    */
-  __aicore__ inline void Init(GM_ADDR vec_in, GM_ADDR vec_out) {
+  __aicore__ inline void Init(GM_ADDR vec_in, GM_ADDR partials,
+                              GM_ADDR vec_out) {
     global_input_.SetGlobalBuffer((__gm__ T*)vec_in, GetBlockNum() * tile_len_);
-    global_output_.SetGlobalBuffer((__gm__ T*)vec_out, block_num_);
+    global_partials_.SetGlobalBuffer((__gm__ T*)partials, block_num_);
+    global_output_.SetGlobalBuffer((__gm__ T*)vec_out, 1);
 
     pipe_.InitBuffer(vecin_q_, 1, tile_len_ * sizeof(T));
     pipe_.InitBuffer(res_out_q_, 1, MIN_VEC_SIZE * sizeof(T));
+    pipe_.InitBuffer(partials_q_, 1,
+                     scalar::AlignUp(block_num_ * sizeof(T), UB_ALIGNMENT));
   }
 
   /**
-   * @brief The first AIV core of each AI core, writes a scalar zero to the
-   * output. This is required since atomic-add operation is used later in the
-   * kernel.
+   * @brief The first AIV core of each AI core zeroes its block's partial sum,
+   * which its two AIV cores then atomically add into.
    */
   __aicore__ inline void WriteOutZero() {
     const uint32_t aiv_id = static_cast<uint32_t>(GetSubBlockIdx());
     // Only the first AIV core of each AI core, writes zero to the output.
     if (aiv_id == 0) {
-      const uint32_t output_idx =
+      const uint32_t block_idx =
           scalar::FloorDiv(GetBlockIdx(), GetTaskRation());
 
       // Write zero since later atomic-add is used.
-      copy::CopyScalarToGm(global_output_[output_idx], res_out_q_,
+      copy::CopyScalarToGm(global_partials_[block_idx], res_out_q_,
                            static_cast<T>(0));
     }
   }
@@ -266,6 +270,13 @@ class KernelCompleteCubeReduce {
    */
   __aicore__ inline void Process() {
     WriteOutZero();
+    // Only AIV 0 of each AI core writes that zero, while both AIVs atomically
+    // add their half-column in `ProcessTile`. `SyncGroup` below pairs each AIV
+    // with the *cube* core, not the two AIVs with each other, so nothing else
+    // orders the store against the partner's add: the partner writes no zero,
+    // so it can reach its add while AIV 0's store is still queued on MTE3, and
+    // the zero then erases it. That drops one AIV's half of the block's sum --
+    // the failure the `int8` sizes of `test_cube_reduce` were hitting.
     SyncAll<true /*isAIVOnly*/>();
 
     // A synchronization barrier is expected by the Cube unit.
@@ -273,6 +284,40 @@ class KernelCompleteCubeReduce {
       sync::SyncGroup<sync::GroupSyncDirection::FULL>();
     }
     ProcessTile();
+
+    // Every block has now left its own partial sum behind; one core adds them
+    // up into the single output element.
+    SyncAll<true /*isAIVOnly*/>();
+    CombinePartials();
+  }
+
+  /**
+   * @brief Sum the per-block partials into the one-element output.
+   *
+   * A single core does this rather than every block atomically adding into the
+   * output directly: a four-byte atomic add issued by many *different* cores
+   * to one address loses updates on this part, where the two AIVs of a single
+   * core accumulating into their own block's slot is reliable. There are only
+   * `block_num_` values to add, so the serial pass costs nothing.
+   */
+  __aicore__ inline void CombinePartials() {
+    if (GetBlockIdx() != 0 || GetSubBlockIdx() != 0) {
+      return;
+    }
+
+    copy::CopyGmToVec(partials_q_, global_partials_, block_num_);
+    LocalTensor<T> partials_lt = partials_q_.template DeQue<T>();
+    // `DeQue` orders the vector unit against the copy, not the scalar unit
+    // that reads the values below.
+    sync::ScalarWaitForMte2();
+
+    T total = 0;
+    for (uint32_t i = 0; i < block_num_; i++) {
+      total += partials_lt.GetValue(i);
+    }
+    partials_q_.FreeTensor(partials_lt);
+
+    copy::CopyScalarToGm(global_output_[0], res_out_q_, total);
   }
 
   /**
@@ -283,8 +328,10 @@ class KernelCompleteCubeReduce {
     const uint32_t aiv_id = static_cast<uint32_t>(GetSubBlockIdx());
     const uint32_t ratio = static_cast<uint32_t>(GetTaskRation());
 
-    const uint32_t output_idx = scalar::FloorDiv(id, ratio);
-    const uint32_t gm_offset = output_idx * tile_len_;
+    // Which block's matrix tile this core reduces; the result of every one
+    // of them lands in the same output element.
+    const uint32_t input_idx = scalar::FloorDiv(id, ratio);
+    const uint32_t gm_offset = input_idx * tile_len_;
 
     // ReduceSum input matrix tile into a scalar.
     copy::CopyGmToVec(vecin_q_, global_input_[gm_offset], tile_len_);
@@ -305,7 +352,7 @@ class KernelCompleteCubeReduce {
 
     PipeBarrier<PIPE_ALL>();
     AscendC::SetAtomicAdd<T>();
-    copy::CopyScalarToGm(global_output_[output_idx], res_out_q_, sum);
+    copy::CopyScalarToGm(global_partials_[input_idx], res_out_q_, sum);
     // `SetAtomicNone` is a scalar config write that takes effect as soon as it
     // retires, while the store above is still queued on MTE3. Without this
     // barrier the mode can be cleared before the store executes, turning this
@@ -322,7 +369,10 @@ class KernelCompleteCubeReduce {
   TQue<QuePosition::VECIN, 2> vecin_q_;
   TQue<QuePosition::VECOUT, 1> res_out_q_;
 
+  TQue<QuePosition::VECIN, 1> partials_q_;
+
   GlobalTensor<T> global_input_;
+  GlobalTensor<T> global_partials_;
   GlobalTensor<T> global_output_;
 
   const uint32_t block_num_;
@@ -358,7 +408,14 @@ __aicore__ inline void run_cube_reduce(GM_ADDR vec_in, GM_ADDR vec_out,
 
     run_pad_kernel<T, false>(vec_in, padded_input, vec_len, align_size);
 
+    // Every vector core pads its own tiles and every cube core then reads all
+    // of them, so this barrier has to span the device. `SyncGroup` alone pairs
+    // a cube core with its own two AIVs alone, which leaves it free to read
+    // tiles another group has not written yet -- it would reduce whatever the
+    // workspace happened to hold.
+    AscendC::SyncAll<false /*isAIVOnly*/>();
     sync::SyncGroup<sync::GroupSyncDirection::FULL>();
+    PipeBarrier<PIPE_ALL>();
 
     // Cube kernel must read the padded input from workspace
     vec_len = padded_vec_len;
@@ -373,8 +430,14 @@ __aicore__ inline void run_cube_reduce(GM_ADDR vec_in, GM_ADDR vec_out,
   }
 
   if ASCEND_IS_AIV {
+    // One partial sum per block, parked after the cube stage's output.
+    GM_ADDR const block_partials =
+        padded_cube_reductions + GetBlockNum() * matmul_size *
+                                     KernelCubeReduce<T>::MAT_DIM_16 *
+                                     sizeof(OutputT);
+
     KernelCompleteCubeReduce<OutputT, true /* Sync */> op_vec(matmul_size);
-    op_vec.Init(padded_cube_reductions, vec_out);
+    op_vec.Init(padded_cube_reductions, block_partials, vec_out);
     op_vec.Process();
   }
 }

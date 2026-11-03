@@ -100,57 +100,76 @@ at::Tensor run_reduce_tiles(const at::Tensor& x, uint32_t tile_len,
 }
 
 /**
- * @brief Returns the sum-reductions over each tile of an input 1D vector.
+ * @brief Returns the sum over every element of an input tensor.
  *
- * @param [in] x Input 1D vector.
- * @param [in] num_blocks Number of blocks
- * @return Returns a vector of length `num_blocks` where each entry contains the
- * i-th block reduction.
+ * The reduction is global and the result is a single element: the cube units
+ * reduce the input blockwise and the vector units accumulate those partials
+ * into one output, so the blocking is an implementation detail and the number
+ * of blocks is chosen by the tiling heuristic from the input length and the
+ * core count -- it is not the caller's to pick.
+ *
+ * Every element is summed whatever the shape of `x`.
+ *
+ * @param [in] x Input tensor of any shape; `fp16` or `int8`.
+ * @return A one-element tensor holding the sum; `fp32` for an `fp16` input,
+ * `int32` for an `int8` one.
  */
-at::Tensor run_cube_reduce(const at::Tensor& x, uint32_t num_blocks) {
+at::Tensor run_cube_reduce(const at::Tensor& x) {
+  const auto ascendc_platform =
+      platform_ascendc::PlatformAscendCManager::GetInstance();
   const at::Device device = x.options().device();
   const auto dtype = x.options().dtype();
+
+  TORCH_CHECK(dtype == torch::kHalf or dtype == torch::kInt8,
+              "run_cube_reduce: only float16 and int8 inputs are supported, "
+              "but got ",
+              x.scalar_type(), ".");
+
   const auto dtype_out =
       dtype == torch::kHalf ? torch::kFloat32 : torch::kInt32;
 
-  const uint32_t vec_len = x.numel();
+  // The kernel reads its input as a flat row-major buffer, ignoring both
+  // strides and the storage offset, so non-contiguous views have to be
+  // materialized first. `contiguous()` is a no-op when the layout already is
+  // one, and the reshape is then a view.
+  const at::Tensor x_flat = x.contiguous().reshape({-1});
+  const uint32_t vec_len = static_cast<uint32_t>(x_flat.numel());
 
-  const at::Tensor z = at::zeros(
-      {num_blocks}, at::TensorOptions().dtype(dtype_out).device(device));
+  // Zeroed, not empty: the cores accumulate into it atomically.
+  const at::Tensor z =
+      at::zeros({1}, at::TensorOptions().dtype(dtype_out).device(device));
+
+  if (vec_len == 0) {
+    return z;
+  }
 
   const tcuscan::CubeReduceTiling tiling =
-      tcuscan::tiling::heuristics::cube_reduce::CalculateTiling(vec_len,
-                                                                num_blocks);
+      tcuscan::tiling::heuristics::cube_reduce::CalculateTiling(
+          vec_len, ascendc_platform->GetCoreNumAic());
   const at::Tensor tiling_device = alloc_copy_tiling_tensor(tiling, device);
 
+  const uint32_t workspace_size =
+      dtype == torch::kInt8 ? tcuscan::get_workspace_size<int8_t>(tiling)
+                            : tcuscan::get_workspace_size<int16_t>(tiling);
+  const at::Tensor workspace_tensor = alloc_workspace(workspace_size, device);
+
+  auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
+
   if (dtype == torch::kInt8) {
-    const uint32_t workspace_size = tcuscan::get_workspace_size<int8_t>(tiling);
-    const at::Tensor workspace_tensor = alloc_workspace(workspace_size, device);
-    auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
     launch_cube_reduce_int8(
-        num_blocks, acl_stream, const_cast<void*>(x.storage().data()),
+        tiling.num_blocks, acl_stream, x_flat.data_ptr(),
         const_cast<void*>(z.storage().data()),
         const_cast<void*>(workspace_tensor.storage().data()),
         tiling_device.data_ptr());
-
-    aclrtSynchronizeStream(acl_stream);
-
-    aclrtSynchronizeStream(acl_stream);
-
-  } else if (dtype == torch::kHalf) {
-    const uint32_t workspace_size =
-        tcuscan::get_workspace_size<int16_t>(tiling);
-    const at::Tensor workspace_tensor = alloc_workspace(workspace_size, device);
-    auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
+  } else {
     launch_cube_reduce_fp16(
-        num_blocks, acl_stream, const_cast<void*>(x.storage().data()),
+        tiling.num_blocks, acl_stream, x_flat.data_ptr(),
         const_cast<void*>(z.storage().data()),
         const_cast<void*>(workspace_tensor.storage().data()),
         tiling_device.data_ptr());
-
-    aclrtSynchronizeStream(acl_stream);
-    aclrtSynchronizeStream(acl_stream);
   }
+
+  aclrtSynchronizeStream(acl_stream);
 
   return z;
 }

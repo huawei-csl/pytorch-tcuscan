@@ -1167,10 +1167,12 @@ def cube_reduce_benchmark(
     else:
         raise RuntimeError(f"`cube_reduce` supports fp16/int8. Got {dtype}.")
 
+    # `num_cores` is no longer passed: the block count is a tiling decision
+    # inside the wrapper. The output is a single element.
     def run_cube_reduce() -> None:
-        _ = tcuscan_ops.run_cube_reduce(x, num_cores)
+        _ = tcuscan_ops.run_cube_reduce(x)
 
-    return _run_benchmark(device, run_cube_reduce), num_cores
+    return _run_benchmark(device, run_cube_reduce), 1
 
 
 def reduce_tiles_benchmark(
