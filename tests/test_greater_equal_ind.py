@@ -102,3 +102,40 @@ def test_greater_equal_ind_negative_pivot(s: int, dtype: torch.dtype):
 def test_greater_equal_ind_edge_pivots(pivot: float):
     # pivot below the minimum selects everything, above the maximum nothing.
     _test_greater_equal_ind(20 * 32 * 32, 32, torch.float16, pivot)
+
+
+# --------------------------------------------------------------------------------
+# Output length
+#
+# Both outputs are as long as there are elements at or above the pivot.  The
+# wrapper no longer counts them on the host to size the outputs: it allocates
+# for the worst case, lets the kernel's own `count_if` pass report how many
+# each core wrote, and returns that prefix.  The pivots below put every
+# element on one side or the other, plus a sparse and a dense case in between.
+# --------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("s", [32, 64, 128], ids=lambda x: f"s:{x}")
+@pytest.mark.parametrize("pivot", [-1.0, 1000.0], ids=lambda x: f"pivot:{x}")
+def test_greater_equal_ind_pivot_outside_the_data(s: int, pivot: float):
+    _test_greater_equal_ind(20 * s * s, s, torch.float16, pivot)
+
+
+@pytest.mark.parametrize("pivot", [1.0, 32.0, 64.0, 120.0], ids=lambda x: f"pivot:{x}")
+def test_greater_equal_ind_sparse_and_dense(pivot: float):
+    """The reported length must track how many elements pass the pivot."""
+    _test_greater_equal_ind(20 * 128 * 128, 128, torch.float16, pivot)
+
+
+@pytest.mark.parametrize("s", [32, 128], ids=lambda x: f"s:{x}")
+def test_greater_equal_ind_empty_result_is_empty(s: int):
+    """A pivot above every element selects nothing, not a slice of garbage."""
+    vec_len = 20 * s * s
+    x = torch.randint(0, 2**7 - 1, (vec_len,), dtype=torch.float16, device=NPU_DEVICE)
+    torch.npu.synchronize()
+
+    actual, actual_indices = tcuscan_ops.run_greater_equal_ind(x, 1000.0, s)
+    torch.npu.synchronize()
+
+    assert actual.numel() == 0
+    assert actual_indices.numel() == 0

@@ -26,11 +26,12 @@ namespace tcuscan {
  * are compacted in the same tile iteration (they share the same output
  * offsets, since they are selected by the same bitmask).
  *
- * The kernel takes the per-core number of elements satisfying the predicate,
- * which is used to compute the output offset of each core. That vector must be
- * produced with the *same* `vec_len`, `tile_len` and launch `blockDim` as this
- * kernel (see \c run_count_if_per_block), otherwise the outputs of the cores
- * interleave incorrectly.
+ * Each core writes its output after every core before it, so it needs their
+ * counts of selected elements. `run_greater_equal_ind` produces them with a
+ * `count_if` pass over the same input in the same launch, which is what keeps
+ * them consistent with this pass: counting separately on the host would have
+ * to match this kernel's `vec_len`, `tile_len` and `blockDim` exactly, or the
+ * outputs of the cores interleave incorrectly.
  *
  * The compaction is stable: the relative order of the selected elements is the
  * same as in the input.
@@ -282,17 +283,29 @@ class KernelGreaterEqualInd {
  *
  * @param [in] vec_in Pointer to the input data vector.
  * @param [in] pivot Value to compare the input with.
- * @param [in] num_ges_per_block Pointer to the per-core number of elements
- * satisfying `{x_i >= pivot}`.
  * @param [in] vec_out Pointer to the output data vector.
  * @param [in] indices_out Pointer to the output indices vector.
+ * @param [in] workspace Pointer to workspace. The number of selected elements
+ * per vector core is left at its start; it must be zeroed, since only the
+ * cores that take part write their entry.
  * @param [in] vec_len Length of the input vector.
  * @param [in] tile_len Tile length.
  */
 template <typename T>
 __aicore__ inline void run_greater_equal_ind(
-    GM_ADDR vec_in, T pivot, GM_ADDR num_ges_per_block, GM_ADDR vec_out,
-    GM_ADDR indices_out, uint32_t vec_len, uint32_t tile_len) {
+    GM_ADDR vec_in, T pivot, GM_ADDR vec_out, GM_ADDR indices_out,
+    GM_ADDR workspace, uint32_t vec_len, uint32_t tile_len) {
+  GM_ADDR const num_ges_per_block = workspace;
+
+  // The compaction below needs each core's output offset, which is the running
+  // total of selected elements before it. Counting here rather than on the
+  // host keeps the count on the device -- the host only ever needs the total,
+  // and only once the kernel has finished.
+  run_count_if_per_block<T>(vec_in, num_ges_per_block, vec_len, tile_len, pivot,
+                            AscendC::CMPMODE::GE);
+
+  SyncAll<true /*isAIVOnly*/>();
+
   if ASCEND_IS_AIV {
     KernelGreaterEqualInd<T> op(vec_len, tile_len);
     op.Init(vec_in, num_ges_per_block, vec_out, indices_out);
