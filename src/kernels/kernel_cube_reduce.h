@@ -266,6 +266,7 @@ class KernelCompleteCubeReduce {
    */
   __aicore__ inline void Process() {
     WriteOutZero();
+    SyncAll<true /*isAIVOnly*/>();
 
     // A synchronization barrier is expected by the Cube unit.
     if constexpr (SyncBefore) {
