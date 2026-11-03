@@ -1158,7 +1158,7 @@ def triu_inv_rec_unroll_benchmark(
 
 
 def cube_reduce_benchmark(
-    device: Device, size: int, dtype: torch.dtype, num_cores: int
+    device: Device, size: int, dtype: torch.dtype
 ) -> Tuple[float, int]:
     if dtype == torch.float16:
         x = torch.rand(size, device=device.str, dtype=dtype)
@@ -1167,10 +1167,12 @@ def cube_reduce_benchmark(
     else:
         raise RuntimeError(f"`cube_reduce` supports fp16/int8. Got {dtype}.")
 
+    # `num_cores` is no longer passed: the block count is a tiling decision
+    # inside the wrapper. The output is a single element.
     def run_cube_reduce() -> None:
-        _ = tcuscan_ops.run_cube_reduce(x, num_cores)
+        _ = tcuscan_ops.run_cube_reduce(x)
 
-    return _run_benchmark(device, run_cube_reduce), num_cores
+    return _run_benchmark(device, run_cube_reduce), 1
 
 
 def reduce_tiles_benchmark(
@@ -1927,7 +1929,7 @@ if __name__ == "__main__":  # noqa
             device,
             f"cube_reduce_{s}",
             dtype,
-            partial(cube_reduce_benchmark, dtype=tdtype, num_cores=num_cores),
+            partial(cube_reduce_benchmark, dtype=tdtype),
             sizes,
             density,
         )
