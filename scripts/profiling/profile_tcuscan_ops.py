@@ -1157,7 +1157,9 @@ def triu_inv_rec_unroll_benchmark(
     return _run_benchmark(device, run_triu_inv_rec_unroll), size
 
 
-def cube_reduce_benchmark(device: Device, size: int, dtype: torch.dtype) -> Tuple[float, int]:
+def cube_reduce_benchmark(
+    device: Device, size: int, dtype: torch.dtype
+) -> Tuple[float, int]:
     if dtype == torch.float16:
         x = torch.rand(size, device=device.str, dtype=dtype)
     elif dtype in {torch.int8}:
