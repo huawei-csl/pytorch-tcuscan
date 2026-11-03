@@ -1157,9 +1157,7 @@ def triu_inv_rec_unroll_benchmark(
     return _run_benchmark(device, run_triu_inv_rec_unroll), size
 
 
-def cube_reduce_benchmark(
-    device: Device, size: int, dtype: torch.dtype, num_cores: int
-) -> Tuple[float, int]:
+def cube_reduce_benchmark(device: Device, size: int, dtype: torch.dtype) -> Tuple[float, int]:
     if dtype == torch.float16:
         x = torch.rand(size, device=device.str, dtype=dtype)
     elif dtype in {torch.int8}:
@@ -1929,7 +1927,7 @@ if __name__ == "__main__":  # noqa
             device,
             f"cube_reduce_{s}",
             dtype,
-            partial(cube_reduce_benchmark, dtype=tdtype, num_cores=num_cores),
+            partial(cube_reduce_benchmark, dtype=tdtype),
             sizes,
             density,
         )
