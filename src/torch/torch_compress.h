@@ -50,31 +50,6 @@ extern "C" void launch_where_fp16(uint32_t blockDim, void* stream,
 
 namespace tcuscan {
 
-namespace {
-
-/**
- * @brief The per-core counts of mask ones that the kernel wrote.
- *
- * The kernel-side `run_compress`, `run_compress_ind` and `run_where` all
- * reduce the mask before compacting and leave one count per vector core at
- * the start of the workspace, which they then turn into each core's output
- * offset. Every entry is written, including those of cores that got no tile,
- * so the counts are a complete partition of the ones in the mask.
- *
- * @param [in] workspace Workspace handed to the kernel.
- * @param [in] block_dim Number of AI cores the kernel was launched with.
- * @return An `int32` view of the counts; one entry per vector core.
- */
-at::Tensor mask_ones_block_counts(const at::Tensor& workspace,
-                                  uint32_t block_dim) {
-  const int64_t num_counts = host_utils::MAX_AIV_PER_BLOCK * block_dim;
-
-  return workspace.slice(0, 0, num_counts * sizeof(int32_t))
-      .view(torch::kInt32);
-}
-
-}  // namespace
-
 /**
  * @brief Parallel vector compaction / compress.
  *
@@ -144,7 +119,7 @@ at::Tensor run_compress(const at::Tensor& x, const at::Tensor& mask, int S) {
   // start of the workspace -- the same counts it turned into output offsets --
   // so the output length comes back without a second pass over the mask.
   const int32_t num_ones =
-      mask_ones_block_counts(workspace_tensor, block_dim).sum().item<int32_t>();
+      workspace_block_counts(workspace_tensor, block_dim).sum().item<int32_t>();
 
   return z.slice(0, 0, num_ones);
 }
@@ -287,7 +262,7 @@ std::tuple<at::Tensor, at::Tensor> run_compress_ind(
   aclrtSynchronizeStream(acl_stream);
 
   const int32_t num_ones =
-      mask_ones_block_counts(workspace_tensor, block_dim).sum().item<int32_t>();
+      workspace_block_counts(workspace_tensor, block_dim).sum().item<int32_t>();
 
   return std::make_tuple(z.slice(0, 0, num_ones),
                          indices_out.slice(0, 0, num_ones));
@@ -360,7 +335,7 @@ std::tuple<at::Tensor, at::Tensor> run_compress_ind_no_arange(
   aclrtSynchronizeStream(acl_stream);
 
   const int32_t num_ones =
-      mask_ones_block_counts(workspace_tensor, block_dim).sum().item<int32_t>();
+      workspace_block_counts(workspace_tensor, block_dim).sum().item<int32_t>();
 
   return std::make_tuple(z.slice(0, 0, num_ones),
                          indices_out.slice(0, 0, num_ones));
@@ -470,7 +445,7 @@ at::Tensor run_where(const at::Tensor& x, float pivot, int S) {
   aclrtSynchronizeStream(acl_stream);
 
   const int32_t num_ones =
-      mask_ones_block_counts(workspace_tensor, block_dim).sum().item<int32_t>();
+      workspace_block_counts(workspace_tensor, block_dim).sum().item<int32_t>();
 
   return z.slice(0, 0, num_ones);
 }

@@ -13,6 +13,7 @@
 
 #include <cstring>
 
+#include "../host_utils.h"
 #include "tiling/platform/platform_ascendc.h"
 #include "torch_npu/csrc/core/npu/CachingHostAllocator.h"
 #include "torch_npu/csrc/core/npu/NPUStream.h"
@@ -56,6 +57,33 @@ at::Tensor alloc_zeros_workspace(uint32_t user_workspace_size,
       {workspace_size}, at::TensorOptions().dtype(at::kByte).device(device));
 
   return workspace_tensor;
+}
+
+/**
+ * @brief An `int32` view of the per-core counts a kernel left in its workspace.
+ *
+ * The compaction kernels -- `compress`, `compress_ind`, `where` and
+ * `greater_equal_ind` -- count the elements each vector core selects before
+ * compacting, and leave those counts at the start of the workspace, where
+ * they become each core's output offset. Summing them after the launch gives
+ * the output length without a second pass over the input, and without the
+ * host having to know it before the kernel runs.
+ *
+ * The view covers two entries per block, which is the most any launch can
+ * write (one per vector core of an AI core). An AIV-only kernel writes only
+ * the first half; the rest must be zero, so such kernels take a zeroed
+ * workspace.
+ *
+ * @param [in] workspace Workspace handed to the kernel.
+ * @param [in] block_dim Number of blocks the kernel was launched with.
+ * @return An `int32` view of the counts.
+ */
+at::Tensor workspace_block_counts(const at::Tensor& workspace,
+                                  uint32_t block_dim) {
+  const int64_t num_counts = host_utils::MAX_AIV_PER_BLOCK * block_dim;
+
+  return workspace.slice(0, 0, num_counts * sizeof(int32_t))
+      .view(torch::kInt32);
 }
 
 /**

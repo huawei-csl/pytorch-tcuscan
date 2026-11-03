@@ -12,6 +12,7 @@
 #include "../tiling/tiling_compress.h"
 #include "../tiling/tiling_copy.h"
 #include "../tiling/tiling_cube_reduce.h"
+#include "../tiling/tiling_greater_equal.h"
 #include "../tiling/tiling_radix_sort.h"
 #include "../tiling/tiling_scan_batch.h"
 #include "../tiling/tiling_scan_multi_core.h"
@@ -145,6 +146,23 @@ constexpr uint32_t get_workspace_size(const CompressTiling& tiling) {
       num_block_counts * sizeof(int32_t), host_utils::GM_ALIGNMENT);
   return block_counts_size;
 };
+
+/**
+ * @brief Calculate the workspace size for `greater_equal_ind`.
+ *
+ * @param [in] tiling Tiling parameters used in the kernel.
+ * @return Size of the workspace in bytes.
+ */
+constexpr uint32_t get_workspace_size(const GreaterEqualTiling& tiling) {
+  // One count of selected elements per vector core, which the kernel's own
+  // `count_if` pass fills in before compacting. The kernel is AIV-only, so it
+  // writes `num_blocks` of them; the buffer is sized for two per block, as
+  // `workspace_block_counts` reads it, and the spare half stays zero.
+  const uint32_t num_block_counts =
+      host_utils::MAX_AIV_PER_BLOCK * tiling.num_blocks;
+  return host_utils::AlignUp(num_block_counts * sizeof(int32_t),
+                             host_utils::GM_ALIGNMENT);
+}
 
 /**
  * @brief Calculate the workspace size for `where`.

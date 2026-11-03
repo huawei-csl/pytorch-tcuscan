@@ -36,14 +36,12 @@ extern "C" void launch_greater_equal_count_fp32(uint32_t blockDim, void* stream,
                                                 void* workspace,
                                                 void* tiling_gm);
 extern "C" void launch_greater_equal_ind_fp16(uint32_t blockDim, void* stream,
-                                              void* vec_in,
-                                              void* num_ges_per_block,
-                                              void* vec_out, void* indices_out,
+                                              void* vec_in, void* vec_out,
+                                              void* indices_out,
                                               void* workspace, void* tiling_gm);
 extern "C" void launch_greater_equal_ind_fp32(uint32_t blockDim, void* stream,
-                                              void* vec_in,
-                                              void* num_ges_per_block,
-                                              void* vec_out, void* indices_out,
+                                              void* vec_in, void* vec_out,
+                                              void* indices_out,
                                               void* workspace, void* tiling_gm);
 /// @endcond
 
@@ -210,52 +208,32 @@ std::tuple<at::Tensor, at::Tensor> run_greater_equal_ind(const at::Tensor& x,
   const uint32_t block_dim =
       std::max(1u, std::min(num_tiles, ascendc_platform->GetCoreNumAiv()));
 
-  // The kernels index this buffer by `GetBlockNum() * GetTaskRation()`; the
-  // kernels are AIV-only, so that is `block_dim`. It is over-allocated to keep
-  // the host independent of the task ratio -- the extra entries stay zero and
-  // contribute nothing to the prefix sums.
-  const at::Tensor num_ges_per_block = at::zeros(
-      {2 * block_dim}, at::TensorOptions().dtype(torch::kInt32).device(device));
-
   const GreaterEqualTiling tiling{block_dim, vec_len, tile_len, pivot};
   const at::Tensor tiling_device = alloc_copy_tiling_tensor(tiling, device);
-  const at::Tensor workspace_tensor = alloc_workspace(0, device);
+
+  // The kernel counts the selected elements per core into the workspace
+  // before compacting. Only the cores that take part write an entry, so the
+  // buffer is zeroed; see `workspace_block_counts`.
+  const uint32_t user_workspace_size = tcuscan::get_workspace_size(tiling);
+  const at::Tensor workspace_tensor =
+      alloc_zeros_workspace(user_workspace_size, device);
+
+  // Both outputs are as long as there are elements at or above the pivot,
+  // which only the device knows. Allocating that exactly would mean counting
+  // on the host first and reading the total back, a blocking synchronization
+  // that stalls the stream before the kernel is even launched. Allocate for
+  // the worst case instead -- every element selected -- and return a view of
+  // the part that was written.
+  const at::Tensor z =
+      at::empty({vec_len}, at::TensorOptions().dtype(dtype).device(device));
+  const at::Tensor indices_out = at::empty(
+      {vec_len}, at::TensorOptions().dtype(torch::kInt32).device(device));
 
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
-  const bool is_fp16 = (dtype == torch::kHalf);
-
-  if (is_fp16) {
-    launch_greater_equal_count_fp16(
-        block_dim, acl_stream, const_cast<void*>(x.storage().data()),
-        const_cast<void*>(num_ges_per_block.storage().data()),
-        const_cast<void*>(workspace_tensor.storage().data()),
-        tiling_device.data_ptr());
-  } else {
-    launch_greater_equal_count_fp32(
-        block_dim, acl_stream, const_cast<void*>(x.storage().data()),
-        const_cast<void*>(num_ges_per_block.storage().data()),
-        const_cast<void*>(workspace_tensor.storage().data()),
-        tiling_device.data_ptr());
-  }
-
-  aclrtSynchronizeStream(acl_stream);
-
-  const int32_t num_ges = num_ges_per_block.sum().item<int32_t>();
-
-  const at::Tensor z =
-      at::empty({num_ges}, at::TensorOptions().dtype(dtype).device(device));
-  const at::Tensor indices_out = at::empty(
-      {num_ges}, at::TensorOptions().dtype(torch::kInt32).device(device));
-
-  if (num_ges == 0) {
-    return std::make_tuple(z, indices_out);
-  }
-
-  if (is_fp16) {
+  if (dtype == torch::kHalf) {
     launch_greater_equal_ind_fp16(
         block_dim, acl_stream, const_cast<void*>(x.storage().data()),
-        const_cast<void*>(num_ges_per_block.storage().data()),
         const_cast<void*>(z.storage().data()),
         const_cast<void*>(indices_out.storage().data()),
         const_cast<void*>(workspace_tensor.storage().data()),
@@ -263,7 +241,6 @@ std::tuple<at::Tensor, at::Tensor> run_greater_equal_ind(const at::Tensor& x,
   } else {
     launch_greater_equal_ind_fp32(
         block_dim, acl_stream, const_cast<void*>(x.storage().data()),
-        const_cast<void*>(num_ges_per_block.storage().data()),
         const_cast<void*>(z.storage().data()),
         const_cast<void*>(indices_out.storage().data()),
         const_cast<void*>(workspace_tensor.storage().data()),
@@ -272,6 +249,10 @@ std::tuple<at::Tensor, at::Tensor> run_greater_equal_ind(const at::Tensor& x,
 
   aclrtSynchronizeStream(acl_stream);
 
-  return std::make_tuple(z, indices_out);
+  const int32_t num_ges =
+      workspace_block_counts(workspace_tensor, block_dim).sum().item<int32_t>();
+
+  return std::make_tuple(z.slice(0, 0, num_ges),
+                         indices_out.slice(0, 0, num_ges));
 }
 }  // namespace tcuscan

@@ -125,18 +125,16 @@ extern "C" __global__ __aicore__ void greater_equal_count_fp32(
  * Computes `x[x >= pivot]` together with the corresponding input positions.
  *
  * @param [in] vec_in Input data vector.
- * @param [in] num_ges_per_block Per-core number of `{x_i >= pivot}`.
  * @param [in] vec_out Output data vector.
  * @param [in] indices_out Output indices vector.
  * @param [in] workspace Pointer to workspace.
  * @param [in] tiling_gm Pointer to tiling structure.
  */
 extern "C" __global__ __aicore__ void greater_equal_ind_fp16(
-    GM_ADDR vec_in, GM_ADDR num_ges_per_block, GM_ADDR vec_out,
-    GM_ADDR indices_out, GM_ADDR workspace, GM_ADDR tiling_gm) {
+    GM_ADDR vec_in, GM_ADDR vec_out, GM_ADDR indices_out, GM_ADDR workspace,
+    GM_ADDR tiling_gm) {
   KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_AIV_ONLY);
 
-  (void)workspace;
   tcuscan::GreaterEqualTiling tiling;
   GetTilingData(&tiling, tiling_gm);
 
@@ -144,26 +142,24 @@ extern "C" __global__ __aicore__ void greater_equal_ind_fp16(
   const uint32_t tile_len = tiling.tile_len;
   const half pivot = static_cast<half>(tiling.pivot);
 
-  tcuscan::run_greater_equal_ind<half>(vec_in, pivot, num_ges_per_block,
-                                       vec_out, indices_out, vec_len, tile_len);
+  tcuscan::run_greater_equal_ind<half>(vec_in, pivot, vec_out, indices_out,
+                                       workspace, vec_len, tile_len);
 }
 
 /**
  * @brief Greater-equal kernel returning values and indices, for dtype fp32.
  *
  * @param [in] vec_in Input data vector.
- * @param [in] num_ges_per_block Per-core number of `{x_i >= pivot}`.
  * @param [in] vec_out Output data vector.
  * @param [in] indices_out Output indices vector.
  * @param [in] workspace Pointer to workspace.
  * @param [in] tiling_gm Pointer to tiling structure.
  */
 extern "C" __global__ __aicore__ void greater_equal_ind_fp32(
-    GM_ADDR vec_in, GM_ADDR num_ges_per_block, GM_ADDR vec_out,
-    GM_ADDR indices_out, GM_ADDR workspace, GM_ADDR tiling_gm) {
+    GM_ADDR vec_in, GM_ADDR vec_out, GM_ADDR indices_out, GM_ADDR workspace,
+    GM_ADDR tiling_gm) {
   KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_AIV_ONLY);
 
-  (void)workspace;
   tcuscan::GreaterEqualTiling tiling;
   GetTilingData(&tiling, tiling_gm);
 
@@ -171,9 +167,8 @@ extern "C" __global__ __aicore__ void greater_equal_ind_fp32(
   const uint32_t tile_len = tiling.tile_len;
   const float pivot = tiling.pivot;
 
-  tcuscan::run_greater_equal_ind<float>(vec_in, pivot, num_ges_per_block,
-                                        vec_out, indices_out, vec_len,
-                                        tile_len);
+  tcuscan::run_greater_equal_ind<float>(vec_in, pivot, vec_out, indices_out,
+                                        workspace, vec_len, tile_len);
 }
 
 /**
@@ -281,18 +276,18 @@ extern "C" void launch_greater_equal_count_fp32(uint32_t blockDim, void* stream,
  * @param [in] blockDim Number of blocks for the kernel launch.
  * @param [in] stream NPU stream.
  * @param [in] vec_in Pointer to the input vector.
- * @param [in] num_ges_per_block Pointer to the per-core counts.
  * @param [in] vec_out Pointer to the output data vector.
  * @param [in] indices_out Pointer to the output indices vector.
  * @param [in] workspace Pointer to workspace.
  * @param [in] tiling_gm Pointer to the tiling buffer.
  */
-extern "C" void launch_greater_equal_ind_fp16(
-    uint32_t blockDim, void* stream, uint8_t* vec_in,
-    uint8_t* num_ges_per_block, uint8_t* vec_out, uint8_t* indices_out,
-    uint8_t* workspace, uint8_t* tiling_gm) {
+extern "C" void launch_greater_equal_ind_fp16(uint32_t blockDim, void* stream,
+                                              uint8_t* vec_in, uint8_t* vec_out,
+                                              uint8_t* indices_out,
+                                              uint8_t* workspace,
+                                              uint8_t* tiling_gm) {
   greater_equal_ind_fp16<<<blockDim, nullptr, stream>>>(
-      vec_in, num_ges_per_block, vec_out, indices_out, workspace, tiling_gm);
+      vec_in, vec_out, indices_out, workspace, tiling_gm);
 }
 
 /**
@@ -301,18 +296,18 @@ extern "C" void launch_greater_equal_ind_fp16(
  * @param [in] blockDim Number of blocks for the kernel launch.
  * @param [in] stream NPU stream.
  * @param [in] vec_in Pointer to the input vector.
- * @param [in] num_ges_per_block Pointer to the per-core counts.
  * @param [in] vec_out Pointer to the output data vector.
  * @param [in] indices_out Pointer to the output indices vector.
  * @param [in] workspace Pointer to workspace.
  * @param [in] tiling_gm Pointer to the tiling buffer.
  */
-extern "C" void launch_greater_equal_ind_fp32(
-    uint32_t blockDim, void* stream, uint8_t* vec_in,
-    uint8_t* num_ges_per_block, uint8_t* vec_out, uint8_t* indices_out,
-    uint8_t* workspace, uint8_t* tiling_gm) {
+extern "C" void launch_greater_equal_ind_fp32(uint32_t blockDim, void* stream,
+                                              uint8_t* vec_in, uint8_t* vec_out,
+                                              uint8_t* indices_out,
+                                              uint8_t* workspace,
+                                              uint8_t* tiling_gm) {
   greater_equal_ind_fp32<<<blockDim, nullptr, stream>>>(
-      vec_in, num_ges_per_block, vec_out, indices_out, workspace, tiling_gm);
+      vec_in, vec_out, indices_out, workspace, tiling_gm);
 }
 
 /**
