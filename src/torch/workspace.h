@@ -413,12 +413,17 @@ constexpr uint32_t get_workspace_size(const CubeReduceTiling& tiling) {
   const uint32_t padded_input_size = padded_input_len * sizeof(T);
   const uint32_t cube_reductions_size =
       num_blocks * matmul_size * matmul_size * sizeof(OutputT);
-  // One partial sum per block, which one core then adds up into the single
-  // output element; see `KernelCompleteCubeReduce::CombinePartials`.
+  // One partial sum per block from the cube side and one per vector core
+  // from the vector side; one core adds them all into the single output
+  // element. See `KernelCompleteCubeReduce::CombinePartials`.
   const uint32_t block_partials_size = host_utils::AlignUp(
       num_blocks * sizeof(OutputT), host_utils::GM_ALIGNMENT);
+  const uint32_t vec_partials_size = host_utils::AlignUp(
+      host_utils::MAX_AIV_PER_BLOCK * num_blocks * sizeof(OutputT),
+      host_utils::GM_ALIGNMENT);
 
-  return padded_input_size + cube_reductions_size + block_partials_size;
+  return padded_input_size + cube_reductions_size + block_partials_size +
+         vec_partials_size;
 }
 
 /**

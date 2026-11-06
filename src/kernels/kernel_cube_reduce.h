@@ -9,6 +9,7 @@
 
 #include "ascendc_kernel_operator.h"
 #include "kernels/kernel_pad.h"
+#include "kernels/kernel_reduce_tiles.h"
 #include "tcuscan_utils.h"
 
 using namespace AscendC;
@@ -77,7 +78,10 @@ class KernelCubeReduce {
     global_c_.SetGlobalBuffer((__gm__ OutputT*)vec_out,
                               block_num_ * all_ones_len_);
 
-    pipe_.InitBuffer(a1_q_, 1, tile_len_ * sizeof(InputT));
+    // Double-buffered: the GM->L1 copy of the next tile can run while the
+    // current one is being fed to L0A and multiplied. 2 x 32 KB of L1 for the
+    // largest tile, against 512 KB available.
+    pipe_.InitBuffer(a1_q_, A1_BUFFER_NUM, tile_len_ * sizeof(InputT));
     pipe_.InitBuffer(a2_q_, 1, tile_len_ * sizeof(InputT));
     pipe_.InitBuffer(b1_q_, 1, all_ones_len_ * sizeof(InputT));
     pipe_.InitBuffer(b2_q_, 1, all_ones_len_ * sizeof(InputT));
@@ -143,7 +147,7 @@ class KernelCubeReduce {
     cube_unit::Multiply<InputT, AccumulateL0C /* accumulate_c */,
                         true /* free_a*/, false /* free_b */>(
         a2_q_, b2_q_, co1_q_, matmul_size_, MAT_DIM_16, matmul_size_);
-    AscendC::PipeBarrier<PIPE_ALL>();
+    // EXPERIMENT: barrier removed to let the next tile's GM->L1 copy overlap.
   }
 
   /**
@@ -168,7 +172,12 @@ class KernelCubeReduce {
 
   TPipe pipe_;
 
-  TQue<QuePosition::A1, 1> a1_q_;
+  /// @brief Depth of the L1 queue holding the A tile; 2 enables double
+  /// buffering. L0A cannot take a second tile -- one already fills half of
+  /// it -- and the L0C queue is the accumulator, so neither is doubled.
+  constexpr static int32_t A1_BUFFER_NUM = 2;
+
+  TQue<QuePosition::A1, A1_BUFFER_NUM> a1_q_;
   TQue<QuePosition::A2, 1> a2_q_;
   TQue<QuePosition::B1, 1> b1_q_;
   TQue<QuePosition::B2, 1> b2_q_;
@@ -225,6 +234,7 @@ class KernelCompleteCubeReduce {
    */
   __aicore__ inline KernelCompleteCubeReduce(uint32_t matmul_size)
       : block_num_(GetBlockNum()),
+        num_vec_cores_(GetBlockNum() * GetTaskRation()),
         matmul_size_(matmul_size),
         tile_len_(matmul_size_ * MAT_DIM_16) {}
 
@@ -236,15 +246,17 @@ class KernelCompleteCubeReduce {
    * @param [in] vec_out Pointer to the single-element output.
    */
   __aicore__ inline void Init(GM_ADDR vec_in, GM_ADDR partials,
-                              GM_ADDR vec_out) {
+                              GM_ADDR vec_partials, GM_ADDR vec_out) {
     global_input_.SetGlobalBuffer((__gm__ T*)vec_in, GetBlockNum() * tile_len_);
     global_partials_.SetGlobalBuffer((__gm__ T*)partials, block_num_);
+    global_vec_partials_.SetGlobalBuffer((__gm__ T*)vec_partials,
+                                         num_vec_cores_);
     global_output_.SetGlobalBuffer((__gm__ T*)vec_out, 1);
 
     pipe_.InitBuffer(vecin_q_, 1, tile_len_ * sizeof(T));
     pipe_.InitBuffer(res_out_q_, 1, MIN_VEC_SIZE * sizeof(T));
     pipe_.InitBuffer(partials_q_, 1,
-                     scalar::AlignUp(block_num_ * sizeof(T), UB_ALIGNMENT));
+                     scalar::AlignUp(num_vec_cores_ * sizeof(T), UB_ALIGNMENT));
   }
 
   /**
@@ -268,7 +280,15 @@ class KernelCompleteCubeReduce {
    * @brief Run the kernel.
    *
    */
-  __aicore__ inline void Process() {
+  __aicore__ inline void Process(bool has_cube_part, bool has_vec_part) {
+    if (!has_cube_part) {
+      // Nothing came through the cube units; only the vector partials have to
+      // be added up.
+      SyncAll<true /*isAIVOnly*/>();
+      CombinePartials(false, has_vec_part);
+      return;
+    }
+
     WriteOutZero();
     // Only AIV 0 of each AI core writes that zero, while both AIVs atomically
     // add their half-column in `ProcessTile`. `SyncGroup` below pairs each AIV
@@ -288,7 +308,7 @@ class KernelCompleteCubeReduce {
     // Every block has now left its own partial sum behind; one core adds them
     // up into the single output element.
     SyncAll<true /*isAIVOnly*/>();
-    CombinePartials();
+    CombinePartials(true, has_vec_part);
   }
 
   /**
@@ -300,24 +320,44 @@ class KernelCompleteCubeReduce {
    * core accumulating into their own block's slot is reliable. There are only
    * `block_num_` values to add, so the serial pass costs nothing.
    */
-  __aicore__ inline void CombinePartials() {
+  __aicore__ inline void CombinePartials(bool has_cube_part,
+                                         bool has_vec_part) {
     if (GetBlockIdx() != 0 || GetSubBlockIdx() != 0) {
       return;
     }
 
-    copy::CopyGmToVec(partials_q_, global_partials_, block_num_);
+    T total = 0;
+    if (has_cube_part) {
+      total += SumPartials(global_partials_, block_num_);
+    }
+    if (has_vec_part) {
+      total += SumPartials(global_vec_partials_, num_vec_cores_);
+    }
+
+    copy::CopyScalarToGm(global_output_[0], res_out_q_, total);
+  }
+
+  /**
+   * @brief Sum `count` partial sums held in global memory.
+   *
+   * @param [in] global Buffer of partial sums.
+   * @param [in] count Number of entries to add.
+   */
+  __aicore__ inline T SumPartials(const GlobalTensor<T>& global,
+                                  uint32_t count) {
+    copy::CopyGmToVec(partials_q_, global, count);
     LocalTensor<T> partials_lt = partials_q_.template DeQue<T>();
     // `DeQue` orders the vector unit against the copy, not the scalar unit
     // that reads the values below.
     sync::ScalarWaitForMte2();
 
-    T total = 0;
-    for (uint32_t i = 0; i < block_num_; i++) {
-      total += partials_lt.GetValue(i);
+    T sum = 0;
+    for (uint32_t i = 0; i < count; i++) {
+      sum += partials_lt.GetValue(i);
     }
     partials_q_.FreeTensor(partials_lt);
 
-    copy::CopyScalarToGm(global_output_[0], res_out_q_, total);
+    return sum;
   }
 
   /**
@@ -373,9 +413,11 @@ class KernelCompleteCubeReduce {
 
   GlobalTensor<T> global_input_;
   GlobalTensor<T> global_partials_;
+  GlobalTensor<T> global_vec_partials_;
   GlobalTensor<T> global_output_;
 
   const uint32_t block_num_;
+  const uint32_t num_vec_cores_;
   const uint32_t matmul_size_;
   const uint32_t tile_len_;
 };
@@ -384,6 +426,20 @@ class KernelCompleteCubeReduce {
  * @ingroup reduce
  * @brief Run the `cube_reduce` kernel.
  *
+ * The input is split between the two kinds of core, which run concurrently in
+ * the one launch: the cube units reduce the leading `cube_len` elements
+ * through their matmul pipeline while the vector units reduce the rest with
+ * `KernelReduceTiles`. Both leave partial sums in the workspace and one core
+ * adds them into the single output at the end.
+ *
+ * `cube_len == 0` is the small-input path: the cube pipeline costs about
+ * 70 us of fixed time to set up, which a short input never earns back, so the
+ * vector units simply take everything.
+ *
+ * `cube_len` is a whole number of `matmul_size * matmul_size` tiles, so the
+ * cube side never needs the padding path; a ragged tail belongs to the vector
+ * side, which reduces partial tiles natively.
+ *
  * @tparam T Input data type.
  *
  * @param [in] vec_in Pointer to an input vector.
@@ -391,54 +447,55 @@ class KernelCompleteCubeReduce {
  * @param [in] workspace Pointer to the kernel workspace.
  * @param [in] vec_len Number of elements to process.
  * @param [in] matmul_size Size of the matmul tile used in the kernel.
+ * @param [in] cube_len Leading elements reduced by the cube units; the
+ * remaining `vec_len - cube_len` go to the vector units.
  */
 template <typename T>
 __aicore__ inline void run_cube_reduce(GM_ADDR vec_in, GM_ADDR vec_out,
                                        GM_ADDR workspace, uint32_t vec_len,
-                                       uint16_t matmul_size) {
+                                       uint16_t matmul_size,
+                                       uint32_t cube_len) {
   using OutputT = tcuscan::cube_unit::CubeOutType_t<T>;
 
-  const uint32_t align_size = matmul_size * matmul_size;
-  const uint32_t padded_vec_len = scalar::AlignUp(vec_len, align_size);
+  const uint32_t vec_part_len = vec_len - cube_len;
 
-  GM_ADDR padded_cube_reductions = workspace;
+  GM_ADDR const cube_reductions = workspace;
+  GM_ADDR const block_partials =
+      cube_reductions + GetBlockNum() * matmul_size *
+                            KernelCubeReduce<T>::MAT_DIM_16 * sizeof(OutputT);
+  GM_ADDR const vec_partials =
+      block_partials + scalar::AlignUp(GetBlockNum() * sizeof(OutputT),
+                                       static_cast<uint32_t>(GM_ALIGNMENT));
 
-  if (vec_len % (matmul_size * matmul_size) || vec_len % UB_ALIGNMENT) {
-    GM_ADDR const padded_input = workspace;
-
-    run_pad_kernel<T, false>(vec_in, padded_input, vec_len, align_size);
-
-    // Every vector core pads its own tiles and every cube core then reads all
-    // of them, so this barrier has to span the device. `SyncGroup` alone pairs
-    // a cube core with its own two AIVs alone, which leaves it free to read
-    // tiles another group has not written yet -- it would reduce whatever the
-    // workspace happened to hold.
-    AscendC::SyncAll<false /*isAIVOnly*/>();
-    sync::SyncGroup<sync::GroupSyncDirection::FULL>();
-    PipeBarrier<PIPE_ALL>();
-
-    // Cube kernel must read the padded input from workspace
-    vec_len = padded_vec_len;
-    vec_in = padded_input;
-    padded_cube_reductions = workspace + padded_vec_len * sizeof(T);
-  }
-
+  // Both branches are entered at once by the two kinds of core, so the two
+  // halves of the input are reduced in parallel.
   if ASCEND_IS_AIC {
-    KernelCubeReduce<T, true /* Sync */> op_vec(vec_len, matmul_size);
-    op_vec.Init(vec_in, padded_cube_reductions);
-    op_vec.Process();
+    if (cube_len > 0) {
+      KernelCubeReduce<T, true /* Sync */> op_cube(cube_len, matmul_size);
+      op_cube.Init(vec_in, cube_reductions);
+      op_cube.Process();
+    }
   }
 
   if ASCEND_IS_AIV {
-    // One partial sum per block, parked after the cube stage's output.
-    GM_ADDR const block_partials =
-        padded_cube_reductions + GetBlockNum() * matmul_size *
-                                     KernelCubeReduce<T>::MAT_DIM_16 *
-                                     sizeof(OutputT);
+    if (vec_part_len > 0) {
+      // Tiles of half a matmul tile: the vector reducer holds one in UB.
+      const uint32_t vec_tile_len = matmul_size * matmul_size / 2;
+      KernelReduceTiles<T> op_vec_part(vec_tile_len, vec_part_len);
+      op_vec_part.Init(vec_in + cube_len * sizeof(T), vec_partials);
+      op_vec_part.Process();
+    }
+  }
 
-    KernelCompleteCubeReduce<OutputT, true /* Sync */> op_vec(matmul_size);
-    op_vec.Init(padded_cube_reductions, block_partials, vec_out);
-    op_vec.Process();
+  // No device-wide barrier here: `KernelCubeReduce` ends by waiting on the
+  // group handshake that `KernelCompleteCubeReduce` completes below, so a
+  // barrier the cube cores reach first would deadlock against it. The vector
+  // partials written above are covered by the AIV-only barrier inside
+  // `Process`, which runs before anything reads them.
+  if ASCEND_IS_AIV {
+    KernelCompleteCubeReduce<OutputT, true /* Sync */> op_complete(matmul_size);
+    op_complete.Init(cube_reductions, block_partials, vec_partials, vec_out);
+    op_complete.Process(cube_len > 0, vec_part_len > 0);
   }
 }
 

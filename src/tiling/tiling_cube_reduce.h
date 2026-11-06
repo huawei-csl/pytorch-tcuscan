@@ -22,6 +22,15 @@ struct CubeReduceTiling {
   uint32_t vec_len;
   /// @brief Matrix multiplication size.
   uint32_t matmul_size;
+  /// @brief How many of the leading elements the cube units reduce.
+  ///
+  /// The rest is reduced by the vector units in the same launch and the two
+  /// partial sums are added at the end. Always a whole number of
+  /// `matmul_size * matmul_size` tiles, so the cube side never needs padding;
+  /// any ragged tail falls to the vector side, which handles it natively.
+  /// Zero means the vector units do all of it -- the fast path for small
+  /// inputs, where the cube pipeline's fixed cost dominates.
+  uint32_t cube_len;
 };
 #pragma pack(pop)
 

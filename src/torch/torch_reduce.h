@@ -135,38 +135,41 @@ at::Tensor run_cube_reduce(const at::Tensor& x) {
   const at::Tensor x_flat = x.contiguous().reshape({-1});
   const uint32_t vec_len = static_cast<uint32_t>(x_flat.numel());
 
-  // Zeroed, not empty: the cores accumulate into it atomically.
+  // Uninitialized: the kernel's last step stores the total over it. Zeroing
+  // would cost a `memset` launch -- about 28 us of the floor, which is a
+  // tenth of the whole call on a short input.
   const at::Tensor z =
-      at::zeros({1}, at::TensorOptions().dtype(dtype_out).device(device));
+      at::empty({1}, at::TensorOptions().dtype(dtype_out).device(device));
 
   if (vec_len == 0) {
-    return z;
+    // No kernel runs, so nothing writes the output.
+    return at::zeros({1}, at::TensorOptions().dtype(dtype_out).device(device));
   }
 
   const tcuscan::CubeReduceTiling tiling =
       tcuscan::tiling::heuristics::cube_reduce::CalculateTiling(
           vec_len, ascendc_platform->GetCoreNumAic());
-  const at::Tensor tiling_device = alloc_copy_tiling_tensor(tiling, device);
 
   const uint32_t workspace_size =
       dtype == torch::kInt8 ? tcuscan::get_workspace_size<int8_t>(tiling)
                             : tcuscan::get_workspace_size<int16_t>(tiling);
+
+  const at::Tensor tiling_device = alloc_copy_tiling_tensor(tiling, device);
   const at::Tensor workspace_tensor = alloc_workspace(workspace_size, device);
 
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
+  void* const in_ptr = x_flat.data_ptr();
+  void* const out_ptr = const_cast<void*>(z.storage().data());
+  void* const ws_ptr = const_cast<void*>(workspace_tensor.storage().data());
+  void* const tiling_ptr = tiling_device.data_ptr();
+
   if (dtype == torch::kInt8) {
-    launch_cube_reduce_int8(
-        tiling.num_blocks, acl_stream, x_flat.data_ptr(),
-        const_cast<void*>(z.storage().data()),
-        const_cast<void*>(workspace_tensor.storage().data()),
-        tiling_device.data_ptr());
+    launch_cube_reduce_int8(tiling.num_blocks, acl_stream, in_ptr, out_ptr,
+                            ws_ptr, tiling_ptr);
   } else {
-    launch_cube_reduce_fp16(
-        tiling.num_blocks, acl_stream, x_flat.data_ptr(),
-        const_cast<void*>(z.storage().data()),
-        const_cast<void*>(workspace_tensor.storage().data()),
-        tiling_device.data_ptr());
+    launch_cube_reduce_fp16(tiling.num_blocks, acl_stream, in_ptr, out_ptr,
+                            ws_ptr, tiling_ptr);
   }
 
   aclrtSynchronizeStream(acl_stream);
