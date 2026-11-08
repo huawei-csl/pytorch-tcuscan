@@ -55,17 +55,19 @@ def get_sizes():
     return [i * num_cores * s * s for i in range(1, max_iters, 16 * 128 // s)]
 
 
-def generate_random_int(dtype, vec_len):
-    if dtype == torch.int16:
+def generate_random_input(dtype, vec_len):
+    if not dtype.is_floating_point:
         xmin = torch.iinfo(dtype).min
         xmax = torch.iinfo(dtype).max
         return torch.randint(xmin, xmax, (vec_len,), dtype=dtype, device=NPU_DEVICE)
     else:
-        return torch.rand((vec_len,), dtype=dtype, device=NPU_DEVICE)
+        # Centered on zero, so that the encoding of the negative values - and
+        # the reversed split on the sign bit - is exercised too.
+        return torch.rand((vec_len,), dtype=dtype, device=NPU_DEVICE) - 0.5
 
 
 def _test_sort(vec_len: int, dtype: torch.dtype, s: int):
-    x = generate_random_int(dtype, vec_len)
+    x = generate_random_input(dtype, vec_len)
 
     torch.npu.synchronize()
     expected, expected_indices = torch.sort(x, dim=-1, descending=False)
@@ -106,13 +108,79 @@ def test_tcuscan_sort_int16(vec_len: int, s: int):
     _test_sort(vec_len, dtype, s)
 
 
+@pytest.mark.parametrize("vec_len", _SORT_SIZES)
+@pytest.mark.parametrize("s", [32, 64, 128])
+def test_tcuscan_sort_fp32(vec_len: int, s: int):
+    if vec_len >= s * s:
+        _test_sort(vec_len, torch.float32, s)
+
+
+@pytest.mark.parametrize("vec_len", get_sizes())
+@pytest.mark.parametrize("s", [64, 128])
+def test_tcuscan_sort_int32(vec_len: int, s: int):
+    _test_sort(vec_len, torch.int32, s)
+
+
+# Lengths that are not a multiple of the tile size, so that the last tile of
+# the last block is partial.
+@pytest.mark.parametrize("vec_len", [1000, 3000, 100003, 262145])
+@pytest.mark.parametrize(
+    "dtype", [torch.float16, torch.float32, torch.int16, torch.int32]
+)
+def test_tcuscan_sort_irregular_length(vec_len: int, dtype: torch.dtype):
+    _test_sort(vec_len, dtype, 64)
+
+
+def test_tcuscan_sort_fp32_special_values():
+    specials = [
+        0.0,
+        -0.0,
+        1.0,
+        -1.0,
+        float("inf"),
+        -float("inf"),
+        1e-45,  # denormal
+        -1e-45,
+        3.4e38,
+        -3.4e38,
+    ]
+    x = torch.tensor(specials * 103, dtype=torch.float32, device=NPU_DEVICE)
+
+    values, indices = tcuscan_ops.run_radix_sort(x, 32)
+    torch.npu.synchronize()
+
+    expected, _ = torch.sort(x)
+    assert torch.equal(values, expected)
+    assert torch.equal(x[indices.long()], values)
+
+
+def test_tcuscan_sort_int32_extreme_values():
+    info = torch.iinfo(torch.int32)
+    extremes = [info.min, info.max, 0, -1, 1, info.min + 1, info.max - 1]
+    x = torch.tensor(extremes * 149, dtype=torch.int32, device=NPU_DEVICE)
+
+    values, indices = tcuscan_ops.run_radix_sort(x, 32)
+    torch.npu.synchronize()
+
+    expected, _ = torch.sort(x)
+    assert torch.equal(values, expected)
+    assert torch.equal(x[indices.long()], values)
+
+
+def test_tcuscan_sort_rejects_unsupported_dtype():
+    x = torch.rand(4096, dtype=torch.float64, device=NPU_DEVICE)
+    with pytest.raises(RuntimeError, match="unsupported dtype"):
+        tcuscan_ops.run_radix_sort(x, 64)
+
+
 # A prime number of tiles used to collapse the launch down to a single block,
 # because the block count was required to divide `num_tiles` exactly.
 @pytest.mark.parametrize("num_tiles", [23, 25, 641, 643])
 @pytest.mark.parametrize("s", [128])
-def test_tcuscan_sort_fp16_awkward_tile_counts(num_tiles: int, s: int):
+@pytest.mark.parametrize("dtype", [torch.float16, torch.float32])
+def test_tcuscan_sort_awkward_tile_counts(num_tiles: int, s: int, dtype: torch.dtype):
     vec_len = num_tiles * s * s
-    x = torch.rand(vec_len, dtype=torch.float16, device=NPU_DEVICE)
+    x = torch.rand(vec_len, dtype=dtype, device=NPU_DEVICE) - 0.5
 
     torch.npu.synchronize()
     values, indices = tcuscan_ops.run_radix_sort(x, s)

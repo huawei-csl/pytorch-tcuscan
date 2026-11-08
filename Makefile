@@ -262,7 +262,7 @@ profile_fp16_diff_real:
 profile_fp32_revert_mcscan:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench seg_scan_mc_revert --dtype fp32 --num_cores 20 --s 128 --density ${DENSITY}
 
-profile_radix_sort: profile_fp16_radix_sort profile_int16_radix_sort
+profile_radix_sort: profile_fp16_radix_sort profile_int16_radix_sort profile_fp32_radix_sort profile_int32_radix_sort
 
 profile_fp16_radix_sort:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench sort --dtype fp16 --s 128 --num_cores 20
@@ -275,6 +275,18 @@ profile_int16_radix_sort:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench radix_sort --dtype int16 --s 32 --num_cores 20 --iter-step-multiplier 4
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench radix_sort --dtype int16 --s 64 --num_cores 20 --iter-step-multiplier 2
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench radix_sort --dtype int16 --s 128 --num_cores 20
+
+profile_fp32_radix_sort:
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench sort --dtype fp32 --s 128 --num_cores 20
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench radix_sort --dtype fp32 --s 32 --num_cores 20 --iter-step-multiplier 4
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench radix_sort --dtype fp32 --s 64 --num_cores 20 --iter-step-multiplier 2
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench radix_sort --dtype fp32 --s 128 --num_cores 20
+
+profile_int32_radix_sort:
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench sort --dtype int32 --s 128 --num_cores 20
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench radix_sort --dtype int32 --s 32 --num_cores 20 --iter-step-multiplier 4
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench radix_sort --dtype int32 --s 64 --num_cores 20 --iter-step-multiplier 2
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench radix_sort --dtype int32 --s 128 --num_cores 20
 
 profile_int16_topk:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench topk --dtype int16 --s 128 --num_cores 20

@@ -22,7 +22,13 @@
 extern "C" void launch_radix_sort_fp16(uint32_t blockDim, void* stream,
                                        void* in, void* out, void* indices,
                                        void* workspace, void* tiling);
+extern "C" void launch_radix_sort_fp32(uint32_t blockDim, void* stream,
+                                       void* in, void* out, void* indices,
+                                       void* workspace, void* tiling);
 extern "C" void launch_radix_sort_int16(uint32_t blockDim, void* stream,
+                                        void* in, void* out, void* indices,
+                                        void* workspace, void* tiling);
+extern "C" void launch_radix_sort_int32(uint32_t blockDim, void* stream,
                                         void* in, void* out, void* indices,
                                         void* workspace, void* tiling);
 /// @endcond
@@ -31,6 +37,8 @@ namespace tcuscan {
 
 /**
  * @brief Radix sort on 1D vector with indices.
+ *
+ * Supported data types are `float16`, `float32`, `int16` and `int32`.
  *
  * @param x Input 1D vector.
  * @param S Tiling parameter. Typical values: 32,64, 128.
@@ -41,6 +49,11 @@ std::tuple<at::Tensor, at::Tensor> run_radix_sort(const at::Tensor& x, int S) {
       platform_ascendc::PlatformAscendCManager::GetInstance();
   const at::Device device = x.options().device();
   const auto dtype = x.options().dtype();
+
+  TORCH_CHECK(dtype == torch::kHalf || dtype == torch::kFloat32 ||
+                  dtype == torch::kInt16 || dtype == torch::kInt32,
+              "run_radix_sort: unsupported dtype ", dtype,
+              "; expected float16, float32, int16 or int32.");
 
   const uint32_t total_length = x.numel();
   const uint32_t matmul_size = static_cast<uint32_t>(S);
@@ -65,31 +78,43 @@ std::tuple<at::Tensor, at::Tensor> run_radix_sort(const at::Tensor& x, int S) {
   const at::Tensor indices_out = at::empty(
       {total_length}, at::TensorOptions().dtype(torch::kInt32).device(device));
 
-  RadixSortTiling tiling{block_dim, total_length, matmul_size, tile_elems / 2};
+  // The split keeps about 28 bytes of UB per element of a tile, so a 4-byte
+  // key has to halve the tile a 2-byte one uses to stay inside the 192 KB.
+  const uint32_t elem_size = static_cast<uint32_t>(x.element_size());
+  const uint32_t vec_tile_size = tile_elems / (elem_size == 2 ? 2 : 4);
+
+  RadixSortTiling tiling{block_dim, total_length, matmul_size, vec_tile_size};
   const at::Tensor tiling_device =
       tcuscan::alloc_copy_tiling_tensor(tiling, device);
 
   const uint32_t user_workspace_size =
-      tcuscan::get_workspace_size<int16_t>(tiling);
+      elem_size == 2 ? tcuscan::get_workspace_size<int16_t>(tiling)
+                     : tcuscan::get_workspace_size<int32_t>(tiling);
   const at::Tensor workspace_tensor =
       tcuscan::alloc_workspace(user_workspace_size, device);
 
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
+  // `data_ptr()` rather than `storage().data()`, so that a view with a
+  // non-zero storage offset is read from the right place.
+  const at::Tensor x_contig = x.contiguous();
+  void* const in_ptr = x_contig.data_ptr();
+  void* const out_ptr = vec_out.data_ptr();
+  void* const indices_ptr = indices_out.data_ptr();
+  void* const ws_ptr = workspace_tensor.data_ptr();
+
   if (dtype == torch::kHalf) {
-    launch_radix_sort_fp16(block_dim, acl_stream,
-                           const_cast<void*>(x.storage().data()),
-                           const_cast<void*>(vec_out.storage().data()),
-                           const_cast<void*>(indices_out.storage().data()),
-                           const_cast<void*>(workspace_tensor.storage().data()),
-                           tiling_device.data_ptr());
+    launch_radix_sort_fp16(block_dim, acl_stream, in_ptr, out_ptr, indices_ptr,
+                           ws_ptr, tiling_device.data_ptr());
+  } else if (dtype == torch::kFloat32) {
+    launch_radix_sort_fp32(block_dim, acl_stream, in_ptr, out_ptr, indices_ptr,
+                           ws_ptr, tiling_device.data_ptr());
   } else if (dtype == torch::kInt16) {
-    launch_radix_sort_int16(
-        block_dim, acl_stream, const_cast<void*>(x.storage().data()),
-        const_cast<void*>(vec_out.storage().data()),
-        const_cast<void*>(indices_out.storage().data()),
-        const_cast<void*>(workspace_tensor.storage().data()),
-        tiling_device.data_ptr());
+    launch_radix_sort_int16(block_dim, acl_stream, in_ptr, out_ptr, indices_ptr,
+                            ws_ptr, tiling_device.data_ptr());
+  } else {
+    launch_radix_sort_int32(block_dim, acl_stream, in_ptr, out_ptr, indices_ptr,
+                            ws_ptr, tiling_device.data_ptr());
   }
 
   aclrtSynchronizeStream(acl_stream);

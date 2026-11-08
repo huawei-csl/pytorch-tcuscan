@@ -208,7 +208,7 @@ y = tcuscan_ops.run_spmv_v2(vals, indptr, cols, x, s, alpha=2.0, beta=1.0, y=y) 
 
 | Operator | Input dtypes | Description |
 | --- | --- | --- |
-| `run_radix_sort` | `fp16`, `int16` | Radix sort of a 1D vector, returns values and `int32` indices |
+| `run_radix_sort` | `fp16`, `fp32`, `int16`, `int32` | Radix sort of a 1D vector, returns values and `int32` indices |
 | `run_topk_fp16` / `run_topk_int16` | `fp16` / `int16` | Top-K elements via parallel splits |
 | `run_topk_pivot_fp16` | `fp16` | K-largest value estimator by sampling (`num_samples`, default 32) |
 | `run_split` | `fp16`, `int16` | Binary split of a vector given a boolean mask |
