@@ -243,6 +243,7 @@ class KernelCompleteCubeReduce {
    *
    * @param [in] vec_in Pointer to input buffer in global memory.
    * @param [in] partials Pointer to scratch for one partial sum per block.
+   * @param [in] vec_partials Pointer to scratch for one partial sum per vector core.
    * @param [in] vec_out Pointer to the single-element output.
    */
   __aicore__ inline void Init(GM_ADDR vec_in, GM_ADDR partials,
@@ -279,6 +280,8 @@ class KernelCompleteCubeReduce {
   /**
    * @brief Run the kernel.
    *
+   * @param [in] has_cube_part Whether cube cores produced partial sums.
+   * @param [in] has_vec_part Whether vector cores produced partial sums.
    */
   __aicore__ inline void Process(bool has_cube_part, bool has_vec_part) {
     if (!has_cube_part) {
@@ -319,6 +322,9 @@ class KernelCompleteCubeReduce {
    * to one address loses updates on this part, where the two AIVs of a single
    * core accumulating into their own block's slot is reliable. There are only
    * `block_num_` values to add, so the serial pass costs nothing.
+   *
+   * @param [in] has_cube_part Whether cube cores produced partial sums.
+   * @param [in] has_vec_part Whether vector cores produced partial sums.
    */
   __aicore__ inline void CombinePartials(bool has_cube_part,
                                          bool has_vec_part) {
@@ -342,6 +348,7 @@ class KernelCompleteCubeReduce {
    *
    * @param [in] global Buffer of partial sums.
    * @param [in] count Number of entries to add.
+   * @return The sum of the partial sums.
    */
   __aicore__ inline T SumPartials(const GlobalTensor<T>& global,
                                   uint32_t count) {
