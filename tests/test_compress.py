@@ -39,9 +39,9 @@ def tcuscan_compress(x, mask, s: int):
 
 def _test_compress(vec_len: int, s: int, dtype: torch.dtype):
     x = torch.randint(0, 2**7 - 1, (vec_len,), dtype=dtype, device=NPU_DEVICE)
-    mask = (torch.randn(vec_len) > 0).to(torch.int8).npu()
+    mask = (torch.randn(vec_len) > 0).npu()
 
-    expected = torch.masked_select(x, mask.to(torch.uint8))
+    expected = torch.masked_select(x, mask)
     torch.npu.synchronize()
     actual = tcuscan_compress(x, mask, s)
 
@@ -99,13 +99,13 @@ def test_tcuscan_compress_fp32_s_128(vec_len: int, offset: int):
 def test_tcuscan_compress_uniform_mask(s: int, ones: int):
     vec_len = 20 * s * s
     x = torch.randint(0, 2**7 - 1, (vec_len,), dtype=torch.float16, device=NPU_DEVICE)
-    mask = torch.full((vec_len,), ones, dtype=torch.int8, device=NPU_DEVICE)
+    mask = torch.full((vec_len,), bool(ones), dtype=torch.bool, device=NPU_DEVICE)
     torch.npu.synchronize()
 
     actual = tcuscan_ops.run_compress(x, mask, s)
     torch.npu.synchronize()
 
-    expected = torch.masked_select(x, mask.to(torch.uint8))
+    expected = torch.masked_select(x, mask)
     assert actual.numel() == vec_len * ones
     assert torch.equal(expected, actual)
 
@@ -116,12 +116,126 @@ def test_tcuscan_compress_sparse_and_dense_masks(density: float):
     s = 128
     vec_len = 20 * s * s
     x = torch.randint(0, 2**7 - 1, (vec_len,), dtype=torch.float16, device=NPU_DEVICE)
-    mask = (torch.rand(vec_len, device=NPU_DEVICE) < density).to(torch.int8)
+    mask = torch.rand(vec_len, device=NPU_DEVICE) < density
     torch.npu.synchronize()
 
     actual = tcuscan_ops.run_compress(x, mask, s)
     torch.npu.synchronize()
 
-    expected = torch.masked_select(x, mask.to(torch.uint8))
+    expected = torch.masked_select(x, mask)
     assert actual.numel() == expected.numel()
     assert torch.equal(expected, actual)
+
+
+# --------------------------------------------------------------------------------
+# `torch.masked_select` parity
+#
+# `run_compress(x, mask)` is the same operator: the elements of `x` where
+# `mask` is true, in row-major order, as a 1-D tensor.  `x` and `mask` need
+# only be broadcastable -- either side can be the one that is stretched -- and
+# the tile size is chosen by the tiling heuristic rather than the caller.
+#
+# The one deliberate difference is the mask dtype: torch insists on a
+# `BoolTensor`, while this also takes the `int8` masks the other kernels in
+# the repository produce.
+# --------------------------------------------------------------------------------
+
+
+def _assert_matches_masked_select(x: torch.Tensor, mask: torch.Tensor) -> None:
+    torch.npu.synchronize()
+    actual = tcuscan_ops.run_compress(x, mask)
+    torch.npu.synchronize()
+
+    expected = torch.masked_select(x.cpu(), mask.cpu().bool())
+    assert actual.dim() == 1, f"masked_select returns 1-D, got {actual.shape}."
+    assert actual.shape == expected.shape, f"{actual.shape} != {expected.shape}"
+    assert torch.equal(expected, actual.cpu())
+
+
+@pytest.mark.parametrize(
+    "shape", [(327680,), (20, 16384), (4, 5, 16384), (7, 11, 13), ()], ids=str
+)
+def test_compress_masked_select_any_shape(shape):
+    """Any shape, selected over its flattened self into a 1-D result."""
+    numel = int(np.prod(shape, dtype=np.int64))
+    x = torch.randint(
+        0, 2**7 - 1, (numel,), dtype=torch.float16, device=NPU_DEVICE
+    ).reshape(shape)
+    _assert_matches_masked_select(x, torch.rand(shape, device=NPU_DEVICE) > 0.5)
+
+
+def test_compress_masked_select_broadcast_rows():
+    """One flag per row selects whole rows, as torch does."""
+    x = torch.rand(20, 16384, dtype=torch.float16, device=NPU_DEVICE)
+    _assert_matches_masked_select(x, torch.rand(20, 1, device=NPU_DEVICE) > 0.5)
+
+
+def test_compress_masked_select_broadcast_columns():
+    """One flag per column selects the same column of every row."""
+    x = torch.rand(20, 16384, dtype=torch.float16, device=NPU_DEVICE)
+    _assert_matches_masked_select(x, torch.rand(16384, device=NPU_DEVICE) > 0.5)
+
+
+def test_compress_masked_select_broadcasts_the_input():
+    """A mask larger than `x` stretches `x`, not just the mask."""
+    x = torch.rand(4, dtype=torch.float16, device=NPU_DEVICE)
+    _assert_matches_masked_select(x, torch.rand(8, 4, device=NPU_DEVICE) > 0.5)
+
+
+def test_compress_masked_select_non_contiguous():
+    """A transposed view is selected in its own row-major order."""
+    x = torch.rand(128, 97, dtype=torch.float16, device=NPU_DEVICE).t()
+
+    assert not x.is_contiguous()
+    _assert_matches_masked_select(x, torch.rand(x.shape, device=NPU_DEVICE) > 0.5)
+
+
+@pytest.mark.parametrize("value", [True, False], ids=lambda v: f"mask:{v}")
+def test_compress_masked_select_uniform_mask(value: bool):
+    """An all-false mask gives an empty tensor; an all-true one gives `x`."""
+    x = torch.rand(327680, dtype=torch.float16, device=NPU_DEVICE)
+    mask = torch.full((327680,), value, dtype=torch.bool, device=NPU_DEVICE)
+    _assert_matches_masked_select(x, mask)
+
+
+def test_compress_masked_select_empty_input():
+    x = torch.empty(0, dtype=torch.float16, device=NPU_DEVICE)
+    _assert_matches_masked_select(
+        x, torch.empty(0, dtype=torch.bool, device=NPU_DEVICE)
+    )
+
+
+def test_compress_requires_a_bool_mask():
+    """As `torch.masked_select` does -- an `int8` mask has to be converted.
+
+    The other kernels here emit `int8` masks, so chaining one in needs a
+    `.to(torch.bool)`; both dtypes are a byte wide, so it costs a launch
+    rather than a reinterpretation of the data.
+    """
+    x = torch.rand(327680, dtype=torch.float16, device=NPU_DEVICE)
+    mask = torch.rand(327680, device=NPU_DEVICE) > 0.5
+    torch.npu.synchronize()
+
+    with pytest.raises(RuntimeError, match="BoolTensor"):
+        tcuscan_ops.run_compress(x, mask.to(torch.int8))
+
+    assert torch.equal(
+        tcuscan_ops.run_compress(x, mask.to(torch.int8).to(torch.bool)),
+        tcuscan_ops.run_compress(x, mask),
+    )
+
+
+def test_compress_rejects_bad_mask_and_dtype():
+    x = torch.rand(327680, dtype=torch.float16, device=NPU_DEVICE)
+    torch.npu.synchronize()
+
+    with pytest.raises(RuntimeError, match="BoolTensor"):
+        tcuscan_ops.run_compress(x, torch.rand(327680, device=NPU_DEVICE))
+
+    with pytest.raises(RuntimeError, match="float16, int16 and float32"):
+        tcuscan_ops.run_compress(
+            x.to(torch.int32), torch.rand(327680, device=NPU_DEVICE) > 0.5
+        )
+
+    with pytest.raises(RuntimeError):  # not broadcastable
+        tcuscan_ops.run_compress(x, torch.ones(5, dtype=torch.bool, device=NPU_DEVICE))

@@ -597,7 +597,8 @@ def compress_benchmark(
     device: Device, size: int, dtype: torch.dtype, s: int, segm_density: float
 ) -> Tuple[float, int]:
 
-    mask = (torch.rand(size=(size,)) < segm_density).to(torch.int8).npu()
+    # `run_compress` takes a bool mask, as `torch.masked_select` does.
+    mask = (torch.rand(size=(size,)) < segm_density).npu()
     if dtype in {torch.float16, torch.float32}:
         x = torch.rand(size, device=device.str, dtype=dtype)
     else:

@@ -10,6 +10,7 @@
 #include <pybind11/pybind11.h>
 #include <torch/extension.h>
 
+#include "../tiling/heuristics/heuristics_compress.h"
 #include "../tiling/tiling_compress.h"
 #include "../tiling/tiling_where.h"
 #include "commons.h"
@@ -51,33 +52,56 @@ extern "C" void launch_where_fp16(uint32_t blockDim, void* stream,
 namespace tcuscan {
 
 /**
- * @brief Parallel vector compaction / compress.
+ * @brief `torch.masked_select` on the vector cores.
  *
- * @param [in] x Input data 1D vector.
- * @param [in] mask Input boolean flag/mask vector of dtype int8.
- * @param [in] S Tiling parameter. Typical values: 32, 64, 128.
- * @return The subvector of `x`: `x[f == 1]`. Output length is `sum(f == 1)`.
+ * Returns a 1-D tensor of the elements of `x` where `mask` is true, in
+ * row-major order, matching `torch.masked_select(x, mask)`:
+ *
+ * - `x` and `mask` need not have the same shape, only be broadcastable; both
+ *   are broadcast to the common shape before selecting, so a mask can select
+ *   whole rows of a matrix, and a mask larger than `x` repeats `x`.
+ * - the result is always 1-D, whatever the rank of the inputs,
+ * - an all-false mask gives an empty tensor.
+ *
+ * The mask must be a `BoolTensor`, as `torch.masked_select` requires. The
+ * other kernels here hand out `int8` masks, so chaining one into this takes
+ * a `.to(torch.bool)` on the way -- free in bytes, since both dtypes are one
+ * byte wide, but a kernel launch all the same.
+ *
+ * @param [in] x Input data tensor of any shape; `fp16`, `int16` or `fp32`.
+ * @param [in] mask Boolean mask, broadcastable to `x`.
+ * @param [in] S Tile size, or 0 to let the tiling heuristic choose. Not part
+ * of the `torch.masked_select` signature; leave it out.
+ * @return The selected elements of `x` as a 1-D tensor.
  */
-at::Tensor run_compress(const at::Tensor& x, const at::Tensor& mask, int S) {
+at::Tensor run_compress(const at::Tensor& x, const at::Tensor& mask,
+                        int S = 0) {
   const auto ascendc_platform =
       platform_ascendc::PlatformAscendCManager::GetInstance();
   const at::Device device = x.options().device();
   const auto dtype = x.options().dtype();
 
-  const uint32_t matmul_size = static_cast<uint32_t>(S);
-  const uint32_t total_length = x.numel();
+  TORCH_CHECK(dtype == torch::kHalf or dtype == torch::kInt16 or
+                  dtype == torch::kFloat32,
+              "run_compress: only float16, int16 and float32 inputs are "
+              "supported, but got ",
+              x.scalar_type(), ".");
+  TORCH_CHECK(mask.scalar_type() == at::kBool,
+              "run_compress: expected BoolTensor for mask, but got ",
+              mask.scalar_type(), ".");
 
-  const uint32_t tile_len = matmul_size * matmul_size;
+  // `torch.masked_select` broadcasts the two against each other and selects
+  // over the common shape. Both sides are materialized because the kernel
+  // reads flat row-major buffers: an expanded view has zero strides, and a
+  // non-contiguous one does not match the order the kernel walks in.
+  const std::vector<int64_t> shape = at::infer_size(x.sizes(), mask.sizes());
+  const at::Tensor x_flat = x.expand(shape).contiguous().reshape({-1});
+  // A `bool` is one byte holding 0 or 1, which is what the kernel reads; the
+  // reinterpret avoids a conversion pass over the mask.
+  const at::Tensor mask_flat =
+      mask.expand(shape).contiguous().reshape({-1}).view(torch::kChar);
 
-  const uint32_t num_tiles = host_utils::CeilDiv(total_length, tile_len);
-
-  uint32_t block_dim = ascendc_platform->GetCoreNumAic();
-  while (num_tiles % block_dim != 0) {
-    block_dim--;
-  }
-  if (block_dim <= 1) {
-    block_dim = 1;
-  }
+  const uint32_t total_length = static_cast<uint32_t>(x_flat.numel());
 
   // The output is as long as there are ones in `mask`, which only the device
   // knows. Allocating that exactly would mean reducing the mask on the host
@@ -88,7 +112,15 @@ at::Tensor run_compress(const at::Tensor& x, const at::Tensor& mask, int S) {
   const at::Tensor z = at::empty(
       {total_length}, at::TensorOptions().dtype(dtype).device(device));
 
-  const CompressTiling tiling{block_dim, total_length, matmul_size};
+  if (total_length == 0) {
+    return z;
+  }
+
+  const CompressTiling tiling =
+      tcuscan::tiling::heuristics::compress::CalculateTiling(
+          total_length, ascendc_platform->GetCoreNumAic(),
+          static_cast<uint32_t>(S));
+  const uint32_t block_dim = tiling.num_blocks;
   const at::Tensor tiling_device = alloc_copy_tiling_tensor(tiling, device);
 
   const uint32_t user_workspace_size = tcuscan::get_workspace_size(tiling);
@@ -98,16 +130,14 @@ at::Tensor run_compress(const at::Tensor& x, const at::Tensor& mask, int S) {
   auto acl_stream = c10_npu::getCurrentNPUStream().stream(true);
 
   if (dtype == torch::kHalf or dtype == torch::kInt16) {
-    launch_compress_fp16(block_dim, acl_stream,
-                         const_cast<void*>(x.storage().data()),
-                         const_cast<void*>(mask.storage().data()),
+    launch_compress_fp16(block_dim, acl_stream, x_flat.data_ptr(),
+                         mask_flat.data_ptr(),
                          const_cast<void*>(z.storage().data()),
                          const_cast<void*>(workspace_tensor.storage().data()),
                          tiling_device.data_ptr());
   } else {
-    launch_compress_fp32(block_dim, acl_stream,
-                         const_cast<void*>(x.storage().data()),
-                         const_cast<void*>(mask.storage().data()),
+    launch_compress_fp32(block_dim, acl_stream, x_flat.data_ptr(),
+                         mask_flat.data_ptr(),
                          const_cast<void*>(z.storage().data()),
                          const_cast<void*>(workspace_tensor.storage().data()),
                          tiling_device.data_ptr());

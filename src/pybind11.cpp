@@ -44,7 +44,11 @@ PYBIND11_MODULE(tcuscan_ops, m) {
   m.def("run_scan_multi_core_no_l2", &tcuscan::run_scan_multi_core_no_l2,
         "Multi-core Scan (no L2 cache optimization)");
   m.def("run_csr_gather", &tcuscan::run_csr_gather, "CSR gather");
-  m.def("run_compress", &tcuscan::run_compress, "Compaction/compress");
+  m.def("run_compress", &tcuscan::run_compress, pybind11::arg("x"),
+        pybind11::arg("mask"), pybind11::arg("S") = 0,
+        "torch.masked_select: the elements of `x` where `mask` is "
+        "true, as a 1-D tensor. `x` and `mask` need only be "
+        "broadcastable. `S` is an optional tile-size override.");
   m.def("run_filter_greater_eq", &tcuscan::run_filter_greater_equal,
         "Filter by great-equal pivot.");
   m.def("run_filter_less_eq", &tcuscan::run_filter_less_equal,

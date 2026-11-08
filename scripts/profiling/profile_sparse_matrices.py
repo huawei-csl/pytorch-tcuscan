@@ -225,7 +225,8 @@ def compress_benchmark(device: Device, x: torch.Tensor, f: torch.Tensor, s: int)
         Average time in microseconds.
     """
     x_npu = x.npu()
-    f_npu = f.npu()
+    # `run_compress` takes a bool mask, as `torch.masked_select` does.
+    f_npu = f.npu().to(torch.bool)
 
     def run_compress() -> None:
         _ = tcuscan_ops.run_compress(x_npu, f_npu, s)
