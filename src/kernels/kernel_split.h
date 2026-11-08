@@ -547,14 +547,19 @@ __aicore__ inline void run_split_uint16(GM_ADDR in, GM_ADDR mask, GM_ADDR out,
  * @param [in] bit_idx Index of the bit to retrieve.
  * @return Number of ones in the mask.
  */
-template <typename KeyT, bool ComputeNumOnes = true, bool MaskFromBit = false>
+template <typename KeyT, bool ComputeNumOnes = true, bool MaskFromBit = false,
+          bool AIVOnly = false>
 __aicore__ inline uint32_t run_split_ind(GM_ADDR in, GM_ADDR mask,
                                          GM_ADDR indices_in, GM_ADDR out,
                                          GM_ADDR indices_out, GM_ADDR workspace,
                                          uint32_t vec_len, uint32_t tile_len,
                                          bool zeros_first,
                                          uint16_t bit_idx = 0) {
-  exec_mode::EnableCubeCores();
+  if constexpr (!AIVOnly) {
+    // The caller is a mix-mode kernel, so the cube cores have to be given
+    // something to do for the barriers below to be the mix-mode ones.
+    exec_mode::EnableCubeCores();
+  }
 
   GM_ADDR const sums = workspace;
 
@@ -571,7 +576,7 @@ __aicore__ inline uint32_t run_split_ind(GM_ADDR in, GM_ADDR mask,
     }
   }
 
-  SyncAll<false /*isAIVOnly*/>();
+  SyncAll<AIVOnly>();
 
   if ASCEND_IS_AIV {
     constexpr bool with_indices = true;
@@ -581,7 +586,7 @@ __aicore__ inline uint32_t run_split_ind(GM_ADDR in, GM_ADDR mask,
     op.Process();
   }
 
-  SyncAll<false /*isAIVOnly*/>();
+  SyncAll<AIVOnly>();
 
   // Callers that only need the partitioned output - radix sort, for one - can
   // skip the reduction and the barrier it needs, since the split above has
@@ -595,7 +600,7 @@ __aicore__ inline uint32_t run_split_ind(GM_ADDR in, GM_ADDR mask,
       op_reduce.Process();
     }
 
-    SyncAll<false /*isAIVOnly*/>();
+    SyncAll<AIVOnly>();
 
     return scalar::GetGMValue<int32_t>(sums, 0, GetBlockNum());
   }
@@ -607,12 +612,13 @@ __aicore__ inline uint32_t run_split_ind(GM_ADDR in, GM_ADDR mask,
  * Thin alias kept for the callers that predate the key-width template; see
  * `run_split_ind` for the parameters.
  */
-template <bool ComputeNumOnes = true, bool MaskFromBit = false>
+template <bool ComputeNumOnes = true, bool MaskFromBit = false,
+          bool AIVOnly = false>
 __aicore__ inline uint32_t run_split_ind_uint16(
     GM_ADDR in, GM_ADDR mask, GM_ADDR indices_in, GM_ADDR out,
     GM_ADDR indices_out, GM_ADDR workspace, uint32_t vec_len, uint32_t tile_len,
     bool zeros_first, uint16_t bit_idx = 0) {
-  return run_split_ind<uint16_t, ComputeNumOnes, MaskFromBit>(
+  return run_split_ind<uint16_t, ComputeNumOnes, MaskFromBit, AIVOnly>(
       in, mask, indices_in, out, indices_out, workspace, vec_len, tile_len,
       zeros_first, bit_idx);
 }

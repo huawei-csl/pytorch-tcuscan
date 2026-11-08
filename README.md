@@ -35,10 +35,11 @@ iterations per point), measured on:
 | `torch-npu` | 2.10.0 |
 | Build | Release, `SOC_VERSION=Ascend910B4` |
 
-Inputs are `fp16` vectors swept up to ~10^8 elements. *Speedup* is the baseline time
-divided by the TCUSCAN time at the largest size measured, with the median over the whole
-sweep in parentheses. For scale, a device-to-device `copy` of the same tensors peaks at
-**907 GB/s** here, which is the practical roofline for the bandwidth column.
+Inputs are `fp16` vectors swept up to ~10^8 elements, except where a row names another
+dtype. *Speedup* is the baseline time divided by the TCUSCAN time at the largest size
+measured, with the median over the whole sweep in parentheses. For scale, a
+device-to-device `copy` of the same tensors peaks at **907 GB/s** here, which is the
+practical roofline for the bandwidth column.
 
 | Operator | Baseline | Speedup | Peak bandwidth | Reproduce with |
 | --- | --- | --- | --- | --- |
@@ -46,7 +47,8 @@ sweep in parentheses. For scale, a device-to-device `copy` of the same tensors p
 | `run_scan_multi_core` | `torch.cumsum` | **196×** (median 136×) | 429 GB/s | `make profile_mcscan` |
 | `run_compress` | `torch.masked_select` | **41–45×** (median 30×) | 454 GB/s | `make profile_compress_paper` |
 | `run_histogram`, 32 bins | `torch.histc` | **46×** (median 42×) | 107 GB/s | `make profile_histogram` |
-| `run_radix_sort` | `torch.sort` | **10.5×** (median 9.8×) | 31 GB/s | `make profile_fp16_radix_sort` |
+| `run_radix_sort`, `fp16` | `torch.sort` | **10.6×** (median 9.9×) | 31 GB/s | `make profile_fp16_radix_sort` |
+| `run_radix_sort`, `fp32` | `torch.sort` | **2.7×** (median 2.7×) | 21 GB/s | `make profile_fp32_radix_sort` |
 | `run_scan_batch` | `torch.cumsum(dim=1)` | **3.4×** (median 3.0×) | 456 GB/s | `make profile_scan_batch` |
 | `run_topk_int16`, k=256 | `torch.topk` | **1.6×** | — | `make profile_int16_topk` |
 
@@ -66,11 +68,15 @@ How to read that table:
   measured. Both PyTorch baselines are slow for this access pattern (7–11 GB/s and
   2.3 GB/s). The histogram comparison is conservative: `run_histogram` derives its bin
   edges from the data, while `torch.histc` is handed explicit bounds and skips that pass.
-- **Radix sort** is multi-pass, so its *effective* bandwidth is low by construction and
-  the speedup is the meaningful number. It trails `torch.sort` only at the very small
-  end (0.9× at 3·10^5 elements) and reaches 9.8× (median) from 10^6 upwards, peaking at
-  12.3× at 2·10^7. The small end is dominated by the fixed per-call cost rather than by
-  the sort itself.
+- **Radix sort** is multi-pass, so its *effective* bandwidth is low by construction (the
+  column counts one read of the input and one write of the output, not the traffic of
+  every pass) and the speedup is the meaningful number. In `fp16` its weakest point is
+  the very small end (1.3× at 3·10^5 elements); it reaches 9.9× (median) from 10^6
+  upwards and peaks at 12.3× at 2·10^7, the small end being dominated by the fixed
+  per-call cost rather than by the sort itself. The `fp32` path costs about four times
+  as much per element — twice the bytes and twice the passes — so it takes 59.6 ms where
+  `fp16` takes 20.7 ms at 10^8, and lands at 2.7× over `torch.sort`, peaking at 3.6× at
+  10^7; it is at 0.9× at 3·10^5 and 3.2× by 6·10^6, so it breaks even in between.
 - **Top-k** is where the Cube-based approach does not pay off for `fp16`:
   `run_topk_fp16` is **0.50×** of `torch.topk` at k=2048, matching the negative result
   reported in the paper for k ≤ 4096. The `int16` path is ahead at 1.6× (71.7 ms versus

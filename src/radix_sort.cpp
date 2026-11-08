@@ -23,13 +23,17 @@ __aicore__ inline void _radix_sort_iter(GM_ADDR in, GM_ADDR radices_ws,
   // pass materialising it in global memory and no barrier to order it.
   (void)radices_ws;
   tcuscan::run_split_ind<KeyT, false /* ComputeNumOnes */,
-                         true /* MaskFromBit */>(
+                         true /* MaskFromBit */, true /* AIVOnly */>(
       in, radices_ws, indices_in, out, indices_out, split_ws, in_len,
       vec_tile_len, zeros_first, bit_idx);
 }
 
 /**
  * @brief Sort `in` by one bit at a time, carrying the indices along.
+ *
+ * Every stage - the index progression, the encoding, the per-bit counts and
+ * the splits - runs on the vector cores, so the kernel is launched AIV-only
+ * and `blockDim` counts vector cores rather than AI cores.
  *
  * One pass per bit of `T`, alternating between the caller's output buffer and
  * a scratch one; the pass count is even, so the last pass always lands in
@@ -76,7 +80,7 @@ __aicore__ inline void _radix_sort(GM_ADDR in, GM_ADDR out, GM_ADDR indices,
 
   tcuscan::run_arithmetic_progression<int32_t, 0, 1, false /* ForceMixMode */>(
       indices, vec_len, tiling_data.vec_tile_size);
-  SyncAll<false /*isAIVOnly*/>();
+  SyncAll<true /*isAIVOnly*/>();
 
   bool are_zeros_first = !descending;
 
@@ -149,7 +153,7 @@ extern "C" __global__ __aicore__ void radix_sort_fp16(GM_ADDR in, GM_ADDR out,
                                                       GM_ADDR indices,
                                                       GM_ADDR workspace,
                                                       GM_ADDR tiling) {
-  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2);
+  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_AIV_ONLY);
   _radix_sort<half, true /* IsFloat */>(in, out, indices, workspace, tiling);
 }
 
@@ -166,7 +170,7 @@ extern "C" __global__ __aicore__ void radix_sort_fp32(GM_ADDR in, GM_ADDR out,
                                                       GM_ADDR indices,
                                                       GM_ADDR workspace,
                                                       GM_ADDR tiling) {
-  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2);
+  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_AIV_ONLY);
   _radix_sort<float, true /* IsFloat */>(in, out, indices, workspace, tiling);
 }
 
@@ -183,7 +187,7 @@ extern "C" __global__ __aicore__ void radix_sort_int16(GM_ADDR in, GM_ADDR out,
                                                        GM_ADDR indices,
                                                        GM_ADDR workspace,
                                                        GM_ADDR tiling) {
-  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2);
+  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_AIV_ONLY);
   _radix_sort<int16_t, false /* IsFloat */>(in, out, indices, workspace,
                                             tiling);
 }
@@ -201,7 +205,7 @@ extern "C" __global__ __aicore__ void radix_sort_int32(GM_ADDR in, GM_ADDR out,
                                                        GM_ADDR indices,
                                                        GM_ADDR workspace,
                                                        GM_ADDR tiling) {
-  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2);
+  KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_AIV_ONLY);
   _radix_sort<int32_t, false /* IsFloat */>(in, out, indices, workspace,
                                             tiling);
 }

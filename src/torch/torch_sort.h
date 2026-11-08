@@ -65,7 +65,8 @@ std::tuple<at::Tensor, at::Tensor> run_radix_sort(const at::Tensor& x, int S) {
   // `num_tiles` does not have to be divisible by the number of blocks.
   // Requiring divisibility would drop the block count down to 1 whenever
   // `num_tiles` is a prime number.
-  uint32_t block_dim = ascendc_platform->GetCoreNumAic();
+  // The radix sort kernels are AIV-only, so `blockDim` counts vector cores.
+  uint32_t block_dim = ascendc_platform->GetCoreNumAiv();
   if (num_tiles < block_dim) {
     block_dim = num_tiles;
   }
