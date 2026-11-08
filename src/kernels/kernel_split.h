@@ -609,8 +609,22 @@ __aicore__ inline uint32_t run_split_ind(GM_ADDR in, GM_ADDR mask,
 /**
  * @brief Run the `split_ind` kernel on 16-bit keys.
  *
- * Thin alias kept for the callers that predate the key-width template; see
- * `run_split_ind` for the parameters.
+ * Thin alias kept for the callers that predate the key-width template.
+ *
+ * @tparam ComputeNumOnes Whether to return the number of set mask bits.
+ * @tparam MaskFromBit Whether to derive the mask from the selected key bit.
+ * @tparam AIVOnly Whether the kernel uses only AIV cores.
+ * @param [in] in Input keys.
+ * @param [in] mask Bit mask used to partition the keys.
+ * @param [in] indices_in Input indices.
+ * @param [out] out Partitioned keys.
+ * @param [out] indices_out Partitioned indices.
+ * @param [in] workspace Temporary workspace.
+ * @param [in] vec_len Number of keys.
+ * @param [in] tile_len Number of keys per tile.
+ * @param [in] zeros_first Whether zero-bit keys are placed first.
+ * @param [in] bit_idx Bit position used to derive the mask.
+ * @return Number of set mask bits when `ComputeNumOnes` is true.
  */
 template <bool ComputeNumOnes = true, bool MaskFromBit = false,
           bool AIVOnly = false>
