@@ -1,4 +1,4 @@
-.PHONY: all clean setup_once setup_once_aarch64 build test profile
+.PHONY: all clean setup_once setup_once_aarch64 build test profile docs
 
 # Host architecture (e.g. x86_64 or aarch64), used to locate the Ascend toolkit includes.
 ARCH := $(shell uname -m)
