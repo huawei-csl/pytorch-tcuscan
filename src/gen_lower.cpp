@@ -44,7 +44,7 @@ extern "C" __global__ __aicore__ void gen_lower_fp16(GM_ADDR dst,
 // }
 
 /**
- * @brief Run the INT8 `gen_lower` kernel.
+ * @brief Run the `gen_lower` kernel.
  *
  * @param [in] dst Pointer to the destination buffer in global memory.
  * @param [in] workspace Pointer to workspace.
