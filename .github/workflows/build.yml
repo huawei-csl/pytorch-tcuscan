@@ -128,27 +128,12 @@ jobs:
       - uses: actions/checkout@v5
 
       - name: Install doxygen
-        env:
-          DOXYGEN_VERSION: 1.9.1
         run: |
-          set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -yq graphviz
-          # apt only carries the distro's doxygen, so fetch the pinned
-          # upstream binary release instead.
-          # Keep the download out of the checkout so it cannot end up as
-          # doxygen INPUT or in the uploaded artifact.
-          workdir="$(mktemp -d)"
-          curl -fsSL -o "$workdir/doxygen.tar.gz" \
-            "https://github.com/doxygen/doxygen/releases/download/Release_${DOXYGEN_VERSION//./_}/doxygen-${DOXYGEN_VERSION}.linux.bin.tar.gz"
-          mkdir "$workdir/dist"
-          tar -xzf "$workdir/doxygen.tar.gz" -C "$workdir/dist" --strip-components=1
-          sudo install -m 0755 "$workdir/dist/bin/doxygen" /usr/local/bin/doxygen
+          sudo apt-get install -yq doxygen graphviz
 
       - name: Show version
-        run: |
-          doxygen --version
-          doxygen --version | grep -q '^1\.9\.1'
+        run: doxygen --version
 
       - name: Generate documentation
         # Doxyfile sets WARN_AS_ERROR = FAIL_ON_WARNINGS, so any
