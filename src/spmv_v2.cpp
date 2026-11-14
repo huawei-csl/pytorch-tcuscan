@@ -34,7 +34,9 @@ using namespace tcuscan;
  * @param [in] num_segments Number of segments.
  * @param [in] x_len Length of the dense input vector.
  * @param [in] tile_len Tile size used for the matrix multiplication step.
- * @param [in] block_len Block length assigned to each AI Core group.
+ * @param [in] block_len Block length assigned to each vector core. Must be a
+ * multiple of \f$\textit{tile\_len}^2\f$ so that blocks split on matrix tile
+ * boundaries.
  * @param [in] alpha Scaling factor of the SpMV product, applied by the
  * segment reduction as it writes each segment sum.
  * @param [in] beta Scaling factor applied in-place to @p vec_out before the
@@ -82,8 +84,12 @@ __aicore__ inline void run_spmv_v2(GM_ADDR vec_in, GM_ADDR cols_in,
   AscendC::PipeBarrier<PIPE_ALL>();
 
   if ASCEND_IS_AIV {
-    // id is the id of each AI Core (2 AIVs and 1 AIC core)
-    const auto id = GetBlockIdx() / GetTaskRation();
+    // Both vector cores of an AI Core group work on their own block, hence
+    // `id` is the global vector core id in [0, GetBlockNum() * GetTaskRation())
+    // and `segm_offset_per_block` holds one offset per vector core (plus the
+    // trailing sentinel).
+    const uint32_t num_vec_blocks = AscendC::GetBlockNum() * GetTaskRation();
+    const auto id = GetBlockIdx();
 
     // Fused searchsorted: each group derives its own two per-block segment
     // offsets by binary-searching the full indptr for its block boundaries
@@ -104,7 +110,7 @@ __aicore__ inline void run_spmv_v2(GM_ADDR vec_in, GM_ADDR cols_in,
       segm_ind_offset--;
     }
 
-    // Each AI Core group is responsible (offsets) starting from `block_len`
+    // Each vector core is responsible (offsets) starting from `block_len`
     const uint32_t block_vec_offset = id * block_len;
     if (block_vec_offset >= vec_len) {
       return;
