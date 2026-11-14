@@ -196,6 +196,7 @@ ascendc_library(
   src/compare.cpp
   src/histogram.cpp
   src/scan_vec_only.cpp
+  src/block_scan_vec_only.cpp
   src/searchsorted.cpp)
 
 tcuscan_kernel_library_setup(vector_kernels)
