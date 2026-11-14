@@ -28,22 +28,6 @@ extern "C" __global__ __aicore__ void gen_lower_fp16(GM_ADDR dst,
   tcuscan::run_gen_lower<half, false>(dst, tiling_data.matrix_size);
 }
 
-// /**
-//  * @brief Run the `gen_lower` kernel.
-//  *
-//  * @param [in] dst Pointer to the destination buffer in global memory.
-//  * @param [in] workspace Pointer to workspace.
-//  * @param [in] tiling Pointer to tiling vector.
-//  */
-// extern "C" __global__ __aicore__ void gen_lower_fp32(GM_ADDR dst,
-//                                                      GM_ADDR workspace,
-//                                                      GM_ADDR tiling) {
-//   (void)workspace;
-//   GenLowerTiling tiling_data;
-//   GetTilingData(&tiling_data, tiling);
-//   run_gen_lower<float>(dst, tiling_data.matrix_size);
-// }
-
 /**
  * @fn gen_lower_int8(GM_ADDR dst, GM_ADDR workspace, GM_ADDR tiling)
  * @brief Run the `gen_lower` kernel.

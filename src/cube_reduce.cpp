@@ -28,9 +28,10 @@ extern "C" __global__ __aicore__ void cube_reduce_fp16(GM_ADDR vec_in,
 
   const uint32_t vec_len = tiling.vec_len;
   const uint32_t matmul_size = tiling.matmul_size;
+  const uint32_t cube_len = tiling.cube_len;
 
   tcuscan::run_cube_reduce<half>(vec_in, vec_out, workspace, vec_len,
-                                 matmul_size);
+                                 matmul_size, cube_len);
 }
 
 /**
@@ -53,9 +54,10 @@ extern "C" __global__ __aicore__ void cube_reduce_int8(GM_ADDR vec_in,
 
   const uint32_t vec_len = tiling.vec_len;
   const uint32_t matmul_size = tiling.matmul_size;
+  const uint32_t cube_len = tiling.cube_len;
 
   tcuscan::run_cube_reduce<int8_t>(vec_in, vec_out, workspace, vec_len,
-                                   matmul_size);
+                                   matmul_size, cube_len);
 }
 
 /**

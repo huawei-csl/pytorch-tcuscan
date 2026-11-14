@@ -12,6 +12,17 @@
 
 namespace tcuscan::tiling::heuristics::cube_reduce {
 
+/// @brief Shortest input that still pays for the cube pipeline's setup.
+///
+/// The cube path carries a far larger fixed cost than the vector one -- a
+/// 277 us floor against 205 us on this part -- for only a slightly better
+/// streaming rate (600 vs 560 GB/s), so it earns its setup back only on long
+/// inputs. Measured on `fp16`, vector-only against the split: 275 vs 292 us
+/// at 16.7M elements, 347 vs 353 at 33.6M, 376 vs 367 at 41.9M and 586 vs
+/// 549 at 99.9M -- so the two cross between 33.6M and 41.9M. See
+/// `CalculateTiling`.
+constexpr uint32_t CUBE_MIN_ELEMS = 40u * 1024u * 1024u;
+
 /**
  * @brief Determine tiling parameters for cube reduce.
  *
@@ -42,25 +53,38 @@ CubeReduceTiling CalculateTiling(uint32_t vec_len, uint32_t num_aic_cores,
     tiling.matmul_size = 32;
   }
 
-  // Every block must end up with at least one tile. The cube stage writes one
-  // output region per block and the vector stage reads all of them, so a block
-  // left idle contributes an unwritten region -- whatever the workspace
-  // happened to hold -- to the total. Work is handed out as
-  // `CeilDiv(num_tiles, num_blocks)` tiles per block, so drop blocks until
-  // that distribution reaches the last one.
   const uint32_t tile_elems = tiling.matmul_size * tiling.matmul_size;
-  // The kernel pads the input up to whole tiles, so count the padded tiles.
-  const uint32_t num_tiles = host_utils::CeilDiv(vec_len, tile_elems);
 
+  // Who reduces what: the cube units take whole tiles off the front and the
+  // vector units take the rest, the two running concurrently in the one
+  // launch. A short input skips the cube pipeline altogether, and its ragged
+  // tail always belongs to the vector side, which reduces partial tiles
+  // natively -- so the cube side never needs the padding path.
+  tiling.cube_len =
+      vec_len >= CUBE_MIN_ELEMS ? (vec_len / 2 / tile_elems) * tile_elems : 0;
+
+  const uint32_t num_tiles = tiling.cube_len / tile_elems;
+
+  if (num_tiles == 0) {
+    // Vector units only; they are spread over every core.
+    tiling.cube_len = 0;
+    return tiling;
+  }
+
+  // No block may be left idle: the cube stage writes one output region per
+  // block and the vector stage reads all of them, so an untouched region --
+  // whatever the workspace happened to hold -- would land in the total.
+  //
+  // The kernel hands out `CeilDiv(num_tiles, num_blocks)` tiles per block
+  // (see `GetWorkDistribution`), and only `CeilDiv(num_tiles, per_block)`
+  // blocks get one. Using that count is the fixed point of the distribution:
+  // the chunk size it implies is unchanged, and the last block is non-empty.
   if (num_tiles < tiling.num_blocks) {
     tiling.num_blocks = num_tiles;
   }
-  while (tiling.num_blocks > 1 &&
-         host_utils::CeilDiv(num_tiles, tiling.num_blocks) *
-                 (tiling.num_blocks - 1) >=
-             num_tiles) {
-    tiling.num_blocks--;
-  }
+  const uint32_t tiles_per_block =
+      host_utils::CeilDiv(num_tiles, tiling.num_blocks);
+  tiling.num_blocks = host_utils::CeilDiv(num_tiles, tiles_per_block);
 
   if (verbose) {
     std::cout << "[CubeReduce][Tiling] Vector length: " << vec_len << std::endl;
