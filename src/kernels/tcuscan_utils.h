@@ -1306,6 +1306,30 @@ __aicore__ inline void InvalidateLine(const GlobalTensor<T>& global) {
 
 namespace scalar {
 
+/// @brief Value returned by `Log2Exact` when the input is not a power of two.
+constexpr uint32_t LOG2_NOT_EXACT = 0xFFFFFFFFu;
+
+/**
+ * @brief Base-2 logarithm of a power of two.
+ *
+ * Lets a caller replace a division by @p value with a shift, after checking
+ * that the shift is actually equivalent.
+ *
+ * @param [in] value Input value.
+ * @return The exponent, or `LOG2_NOT_EXACT` if @p value is zero or not a power
+ * of two.
+ */
+__aicore__ inline uint32_t Log2Exact(uint32_t value) {
+  if (value == 0 || (value & (value - 1)) != 0) {
+    return LOG2_NOT_EXACT;
+  }
+  uint32_t exponent = 0;
+  while ((value >> exponent) != 1) {
+    exponent++;
+  }
+  return exponent;
+}
+
 /**
  * @brief Rounds an integral value up to the nearest multiple of a given
  * alignment.
