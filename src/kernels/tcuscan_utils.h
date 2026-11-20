@@ -445,7 +445,15 @@ __aicore__ inline void CopyL0CToL1(const LocalTensor<DstDataType>& dst_lt,
   params.nSize = width;
   params.mSize = height;
   params.srcStride = height;
+#if TCUSCAN_IS_DAV_C220_ARCH
   params.dstStride = width;
+#else
+  // dav-c310 (A5): for an NZ destination the stride between two consecutive
+  // C0 column blocks of the destination tile is expressed in elements, i.e.
+  // `mSize * C0`, matching the CANN matmul `CopyOutNZ2NZ` helper
+  // (baseBlockHeight * BLOCK_CUBE * DST_C0SIZE).
+  params.dstStride = height * (DATA_BLOCK_SIZE / sizeof(DstDataType));
+#endif
   params.ndNum = 1;
   params.quantPre = QuantMode_t::F322F16;
 
@@ -589,16 +597,20 @@ __aicore__ inline void CopyCL0ToGlobal(
   // mSize / strides), and the NZ->ND conversion is selected through the
   // CFG_ROW_MAJOR FixpipeConfig template parameter instead of an nz2ndEn flag.
   // Field mapping follows the CANN matmul copy-out utility (row-major output).
+  //
+  // Note the naming: in the legacy parameters above `height` ends up as the
+  // NZ2ND `originalNSize` (the N extent of the ND output and its row stride)
+  // and `width` as the M extent, so the same mapping has to be kept here.
   FixpipeParamsArch3510<CO2Layout::ROW_MAJOR> params;
-  params.nSize = width;
-  params.mSize = height;
+  params.nSize = height;
+  params.mSize = width;
   // Source stride in L0C is the M dimension aligned up to a fractal.
-  params.srcStride = (height + fractal_size - 1) / fractal_size * fractal_size;
+  params.srcStride = (width + fractal_size - 1) / fractal_size * fractal_size;
   // Row stride of the contiguous row-major output matrix.
-  params.dstStride = width;
+  params.dstStride = height;
   // Single ND matrix (ndNum == 1); the ND strides are unused in that case.
-  params.params = Nz2NdParams(/*ndNum=*/1, /*srcNdStride=*/height,
-                              /*dstNdStride=*/height);
+  params.params = Nz2NdParams(/*ndNum=*/1, /*srcNdStride=*/0,
+                              /*dstNdStride=*/0);
 
   Fixpipe<DataType, DataType, CFG_ROW_MAJOR>(global, lt, params);
 #endif
@@ -789,16 +801,21 @@ __aicore__ inline void CopyPlainGmToL1B(TQue<QuePosition::B1, QNumBuffers>& q,
  * @param [in] transpose Indicates whether or not to transpose the matrix. If
  * set, the function performs an NZ to ZN transformation. Otherwise, it performs
  * NZ to ZZ one.
+ * @param [in] dst_fractals Number of fractals along the non-K dimension of the
+ * destination tile (`fractals_h` for an A operand, `fractals_w` for a
+ * transposed B operand). Only used on dav-c310.
  */
 template <uint16_t FractalHeight, uint16_t FractalWidth, typename DataType>
 __aicore__ inline void CopyL1ToL0(const LocalTensor<DataType>& dst,
                                   const LocalTensor<DataType>& src,
                                   uint16_t fractals_h, uint16_t fractals_w,
-                                  bool transpose) {
+                                  bool transpose, uint16_t dst_fractals) {
   exec_mode::AssertIsAIC();
   exec_mode::AssertLocalTensorIsInL1(src);
   exec_mode::AssertLocalTensorIsInL0(dst);
 
+#if TCUSCAN_IS_DAV_C220_ARCH
+  (void)dst_fractals;
   int src_offset = 0;
   int dst_offset = 0;
 
@@ -813,6 +830,27 @@ __aicore__ inline void CopyL1ToL0(const LocalTensor<DataType>& dst,
     src_offset += FractalWidth * FractalHeight;
     dst_offset += fractals_w * FractalWidth * FractalHeight;
   }
+#else
+  // dav-c310 (A5): the legacy `LoadData2dParams` overload is lowered onto the
+  // load2dv2 intrinsic with `mStep` hard-wired to 1, so the per-fractal-row
+  // loop above reads the wrong L1 fractals. The whole NZ tile is instead
+  // loaded with a single load2dv2 call, whose parameters follow the CANN
+  // matmul `LoadToL0A`/`LoadToL0B` helpers:
+  //   mStep     - number of fractals along the non-K dimension of the source,
+  //   kStep     - number of fractals along the K dimension,
+  //   srcStride - fractal stride between K columns of the NZ tile in L1,
+  //   dstStride - fractal stride of the destination tile.
+  LoadData2DParamsV2 params;
+  params.mStartPosition = 0;
+  params.kStartPosition = 0;
+  params.mStep = fractals_h;
+  params.kStep = fractals_w;
+  params.srcStride = fractals_h;
+  params.dstStride = dst_fractals;
+  params.ifTranspose = transpose;
+
+  LoadData(dst, src, params);
+#endif
 }
 
 /**
@@ -843,7 +881,8 @@ __aicore__ inline void CopyL1ToL0A(TQue<QuePosition::A2, L0NumBuffers>& l0_q,
   LocalTensor<DataType> l1_lt = l1_q.template DeQue<DataType>();
 
   CopyL1ToL0<GetFractalMN<DataType>(), GetFractalK<DataType>()>(
-      l0_lt, l1_lt, fractals_h, fractals_w, false /* transpose */);
+      l0_lt, l1_lt, fractals_h, fractals_w, false /* transpose */,
+      fractals_h /* dst_fractals */);
 
   if constexpr (FreeSrc) {
     l1_q.FreeTensor(l1_lt);
@@ -897,7 +936,8 @@ __aicore__ inline void CopyL1ToL0B(TQue<QuePosition::B2, L0NumBuffers>& l0_q,
   const LocalTensor<DataType> l0_lt = l0_q.template AllocTensor<DataType>();
   constexpr bool transpose = ShouldTransposeB<DataType>();
   CopyL1ToL0<GetFractalK<DataType>(), GetFractalMN<DataType>()>(
-      l0_lt, l1_lt, fractals_h, fractals_w, transpose);
+      l0_lt, l1_lt, fractals_h, fractals_w, transpose,
+      fractals_w /* dst_fractals */);
 
   if constexpr (FreeSrc) {
     l1_q.FreeTensor(l1_lt);
@@ -932,7 +972,8 @@ __aicore__ inline void CopyL1ToL0B(TQue<QuePosition::B2, L0NumBuffers>& l0_q,
   const LocalTensor<DataType> l0_lt = l0_q.template AllocTensor<DataType>();
   constexpr bool transpose = ShouldTransposeB<DataType>();
   CopyL1ToL0<GetFractalK<DataType>(), GetFractalMN<DataType>()>(
-      l0_lt, l1_lt, fractals_h, fractals_w, transpose);
+      l0_lt, l1_lt, fractals_h, fractals_w, transpose,
+      fractals_w /* dst_fractals */);
 
   l0_q.EnQue(l0_lt);
 }
