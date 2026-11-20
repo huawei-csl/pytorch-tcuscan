@@ -12,7 +12,7 @@ CONDA_ENV_NAME="pytorch_tcuscan"
 
 TORCH_NPU_VER=2.10.0
 
-ASCEND_DEVICE=Ascend910B4
+ASCEND_DEVICE=Ascend950PR
 DEVICE_TYPE?=npu
 
 all: build test
