@@ -1289,7 +1289,45 @@ __aicore__ inline void SyncGroup() {
     return;
   }
 #else
-// TODO(anastasios): Fix this for David!
+  // dav-c310 (A5): the cross-core notify/wait intrinsics changed signature
+  // (`wait_flag_dev` now takes the waiting pipe, and the message is built by
+  // the runtime), so the portable `CrossCoreSetFlag`/`CrossCoreWaitFlag`
+  // wrappers are used instead of the raw intrinsics. The notifying pipe must
+  // belong to the notifying core: MTE3 for the vector cores, FIX for the cube
+  // cores. PIPE_S is valid on both sides for the waiters.
+  constexpr uint8_t mode = 2;
+  constexpr uint16_t AIV_SET_FLAG_ID = 11;
+  constexpr uint16_t AIC_SET_FLAG_ID = 12;
+
+  if constexpr (Dir == GroupSyncDirection::CUBE_WAIT_FOR_VEC) {
+    if ASCEND_IS_AIV {
+      CrossCoreSetFlag<mode, PIPE_MTE3>(AIV_SET_FLAG_ID);
+    }
+    if ASCEND_IS_AIC {
+      CrossCoreWaitFlag<mode, PIPE_S>(AIV_SET_FLAG_ID);
+    }
+    return;
+  }
+  if constexpr (Dir == GroupSyncDirection::VEC_WAIT_FOR_CUBE) {
+    if ASCEND_IS_AIC {
+      CrossCoreSetFlag<mode, PIPE_FIX>(AIC_SET_FLAG_ID);
+    }
+    if ASCEND_IS_AIV {
+      CrossCoreWaitFlag<mode, PIPE_S>(AIC_SET_FLAG_ID);
+    }
+    return;
+  }
+  if constexpr (Dir == GroupSyncDirection::FULL) {
+    if ASCEND_IS_AIV {
+      CrossCoreSetFlag<mode, PIPE_MTE3>(AIV_SET_FLAG_ID);
+      CrossCoreWaitFlag<mode, PIPE_S>(AIC_SET_FLAG_ID);
+    }
+    if ASCEND_IS_AIC {
+      CrossCoreSetFlag<mode, PIPE_FIX>(AIC_SET_FLAG_ID);
+      CrossCoreWaitFlag<mode, PIPE_S>(AIV_SET_FLAG_ID);
+    }
+    return;
+  }
 #endif
 }
 
