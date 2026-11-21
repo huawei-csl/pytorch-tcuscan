@@ -483,8 +483,7 @@ class KernelInvTriuRecUnroll {
                                           const LocalTensor<InputT>& src,
                                           uint16_t repeat_times,
                                           uint16_t src_stride,
-                                          uint16_t dst_stride,
-                                          bool transpose) {
+                                          uint16_t dst_stride, bool transpose) {
     const uint16_t n_elems_per_fractal = fractal_size_ * fractal_size_;
 #if TCUSCAN_IS_DAV_C220_ARCH
     LoadData2DParams params;

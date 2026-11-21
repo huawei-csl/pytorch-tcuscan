@@ -517,8 +517,7 @@ inline __aicore__ void run_matmul_cce(GM_ADDR x, GM_ADDR y, GM_ADDR z, int M,
         AscendC::LocalTensor<half> src = b1_q.DeQue<half>();
         const AscendC::LocalTensor<half> dst = b2_q.AllocTensor<half>();
         AscendC::LoadData2dParams params;
-        params.repeatTimes =
-            (kNTile / kFractal) * (kKTile / kFractal);
+        params.repeatTimes = (kNTile / kFractal) * (kKTile / kFractal);
         params.srcStride = 1;
         params.ifTranspose = false;
         AscendC::LoadData(dst, src, params);
