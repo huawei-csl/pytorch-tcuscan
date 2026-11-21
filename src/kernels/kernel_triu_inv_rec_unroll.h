@@ -168,6 +168,11 @@ class KernelInvTriuRecUnroll {
     pipe_.InitBuffer(CO1_q_, 1, tile_len_ * sizeof(OutputT));
     pipe_.InitBuffer(A2_q_, 1, tile_len_ * sizeof(InputT));
     pipe_.InitBuffer(B2_q_, 1, tile_len_ * sizeof(InputT));
+#if !TCUSCAN_IS_DAV_C220_ARCH
+    // dav-c310 (A5) cannot clear an L0A/L0B tile in place (see ZeroL0Tile), so
+    // an all-zero L1 tile is kept around to clear them by a bulk load.
+    pipe_.InitBuffer(zero_buf_, tile_len_ * sizeof(InputT));
+#endif
   }
   /**
    * @brief Main method to compute the inverse.
@@ -424,6 +429,90 @@ class KernelInvTriuRecUnroll {
   }
 
   /**
+   * @brief Clear a whole L0A/L0B tile to zero.
+   *
+   * `InitConstValue` only reaches L0A/L0B on dav-c220; on dav-c310 (A5) the
+   * CANN implementation of `create_ca_matrix`/`create_cb_matrix` is a
+   * debug-only assert, so in a release build the call silently leaves the
+   * tile holding whatever the previous iteration wrote. The block-selection
+   * helpers below rely on the untouched fractals being zero, so on A5 the
+   * tile is cleared by bulk-loading an all-zero L1 tile over it instead.
+   *
+   * @tparam Pos Position of the destination tile, A2 or B2.
+   *
+   * @param [in] dst Destination tile in L0A or L0B.
+   */
+  template <TPosition Pos>
+  __aicore__ inline void ZeroL0Tile(const LocalTensor<InputT>& dst) {
+#if TCUSCAN_IS_DAV_C220_ARCH
+    const uint16_t n_data_blocks = tile_len_ * sizeof(InputT) / (uint16_t)512;
+    AscendC::InitConstValue(dst, {1, n_data_blocks, 0, 0});
+#else
+    const LocalTensor<InputT> zero_lt = zero_buf_.Get<InputT>();
+    tcuscan::cube_unit::InitConstL1<InputT, TPosition::B1>(
+        zero_lt, static_cast<InputT>(0), static_cast<uint16_t>(tile_len_));
+    AscendC::PipeBarrier<PIPE_ALL>();
+    AscendC::DataSyncBarrier<MemDsbT::ALL>();
+    tcuscan::copy::CopyL1ToL0<tcuscan::GetFractalMN<InputT>(),
+                              tcuscan::GetFractalK<InputT>()>(
+        dst, zero_lt, n_fractals_, n_fractals_, Pos == TPosition::B2,
+        n_fractals_);
+#endif
+  }
+
+  /**
+   * @brief Copy `repeat_times` single fractals from an L1 tensor to an L0
+   * tensor, walking the source in steps of `src_stride` fractals and the
+   * destination in steps of `dst_stride` fractals.
+   *
+   * On dav-c220 this is one `LoadData2dParams` burst. On dav-c310 (A5) the
+   * legacy overload is lowered onto the load2dv2 intrinsic with `mStep`
+   * pinned to 1, which changes what `srcStride` and `dstGap` mean, so the
+   * burst is issued as `repeat_times` single-fractal loads instead - with
+   * one fractal per call the strides are not consulted at all and the two
+   * architectures move exactly the same data.
+   *
+   * @param [in] dst Destination tensor in L0A or L0B.
+   * @param [in] src Source tensor in L1.
+   * @param [in] repeat_times Number of fractals to copy.
+   * @param [in] src_stride Source step, in fractals.
+   * @param [in] dst_stride Destination step, in fractals.
+   * @param [in] transpose Whether each fractal is transposed on the fly.
+   */
+  __aicore__ inline void LoadFractalBurst(const LocalTensor<InputT>& dst,
+                                          const LocalTensor<InputT>& src,
+                                          uint16_t repeat_times,
+                                          uint16_t src_stride,
+                                          uint16_t dst_stride,
+                                          bool transpose) {
+    const uint16_t n_elems_per_fractal = fractal_size_ * fractal_size_;
+#if TCUSCAN_IS_DAV_C220_ARCH
+    LoadData2DParams params;
+    params.startIndex = 0;
+    params.repeatTimes = repeat_times;
+    params.srcStride = src_stride;
+    params.sid = 0;  // Reserved parameter, always 0
+    params.dstGap = dst_stride - 1;
+    params.addrMode = 0;  // Reserved parameter, always 0
+    params.ifTranspose = transpose;
+    LoadData(dst, src, params);
+#else
+    LoadData2DParams params;
+    params.startIndex = 0;
+    params.repeatTimes = 1;
+    params.srcStride = 1;
+    params.sid = 0;
+    params.dstGap = 0;
+    params.addrMode = 0;
+    params.ifTranspose = transpose;
+    for (uint16_t t = 0; t < repeat_times; ++t) {
+      LoadData(dst[t * dst_stride * n_elems_per_fractal],
+               src[t * src_stride * n_elems_per_fractal], params);
+    }
+#endif
+  }
+
+  /**
    * @brief This method copies the even (0,2,4...) diagonal blocks of size
    * block_size * block_size of the matrix that is stored in A1_1_q_ to
    * the local tensor in the A2_q_. The two matrices have the same size.
@@ -435,29 +524,33 @@ class KernelInvTriuRecUnroll {
     LocalTensor<InputT> A1_X_lt = A1_1_q_.DeQue<InputT>();
     LocalTensor<InputT> A2_LX_lt = A2_q_.template AllocTensor<InputT>();
 
-    const uint16_t n_data_blocks = tile_len_ * sizeof(InputT) / (uint16_t)512;
-    AscendC::InitConstValue(A2_LX_lt, {1, n_data_blocks, 0, 0});
+    ZeroL0Tile<TPosition::A2>(A2_LX_lt);
     AscendC::PipeBarrier<PIPE_ALL>();
     AscendC::DataSyncBarrier<MemDsbT::ALL>();
 
     uint16_t n_fractals_per_block = block_size / fractal_size_;
     uint16_t n_elems_per_fractal = fractal_size_ * fractal_size_;
-    LoadData2DParams params;
-    params.startIndex = 0;
-    params.repeatTimes = matrix_size_ / (2 * block_size);
-    params.srcStride =
+    const uint16_t repeat_times = matrix_size_ / (2 * block_size);
+    const uint16_t fractal_stride =
         2 * n_fractals_ * n_fractals_per_block + 2 * n_fractals_per_block;
-    params.sid = 0;  // Reserved parameter, always 0
-    params.dstGap = params.srcStride - 1;
-    params.addrMode = 0;  // Reserved parameter, always 0
-    params.ifTranspose = false;
     for (uint16_t i = 0; i < n_fractals_per_block; ++i) {
       for (uint16_t j = 0; j < n_fractals_per_block; ++j) {
         uint16_t src_start_index =
             j * n_fractals_ * n_elems_per_fractal + i * n_elems_per_fractal;
+        // The fractals of an L0 tile are indexed row-major on dav-c220 but
+        // column-major on dav-c310 (load2dv2 steps the destination by
+        // `mStep` fractals per k, see `CopyL1ToL0`), so the NZ source index
+        // is carried over unchanged there.
+#if TCUSCAN_IS_DAV_C220_ARCH
         uint16_t dst_start_index =
             i * n_fractals_ * n_elems_per_fractal + j * n_elems_per_fractal;
-        LoadData(A2_LX_lt[dst_start_index], A1_X_lt[src_start_index], params);
+#else
+        uint16_t dst_start_index =
+            j * n_fractals_ * n_elems_per_fractal + i * n_elems_per_fractal;
+#endif
+        LoadFractalBurst(A2_LX_lt[dst_start_index], A1_X_lt[src_start_index],
+                         repeat_times, fractal_stride, fractal_stride,
+                         false /* transpose */);
         AscendC::PipeBarrier<PIPE_ALL>();
         AscendC::DataSyncBarrier<MemDsbT::ALL>();
       }
@@ -480,22 +573,15 @@ class KernelInvTriuRecUnroll {
     LocalTensor<InputT> B1_X_lt = B1_X_q_.template DeQue<InputT>();
     LocalTensor<InputT> B2_RX_lt = B2_q_.template AllocTensor<InputT>();
 
-    const uint16_t n_data_blocks = tile_len_ * sizeof(InputT) / (uint16_t)512;
-    AscendC::InitConstValue(B2_RX_lt, {1, n_data_blocks, 0, 0});
+    ZeroL0Tile<TPosition::B2>(B2_RX_lt);
     AscendC::PipeBarrier<PIPE_ALL>();
     AscendC::DataSyncBarrier<MemDsbT::ALL>();
 
     uint16_t n_fractals_per_block = block_size / fractal_size_;
     uint16_t n_elems_per_fractal = fractal_size_ * fractal_size_;
-    LoadData2DParams params;
-    params.startIndex = 0;
-    params.repeatTimes = matrix_size_ / (2 * block_size);
-    params.srcStride =
+    const uint16_t repeat_times = matrix_size_ / (2 * block_size);
+    const uint16_t fractal_stride =
         2 * n_fractals_ * n_fractals_per_block + 2 * n_fractals_per_block;
-    params.sid = 0;  // Reserved parameter, always 0
-    params.dstGap = params.srcStride - 1;
-    params.addrMode = 0;  // Reserved parameter, always 0
-    params.ifTranspose = true;
     for (uint16_t i = 0; i < n_fractals_per_block; ++i) {
       for (uint16_t j = 0; j < n_fractals_per_block; ++j) {
         uint16_t src_start_index =
@@ -506,7 +592,9 @@ class KernelInvTriuRecUnroll {
             n_fractals_ * n_fractals_per_block * n_elems_per_fractal +
             n_fractals_per_block * n_elems_per_fractal +
             i * n_fractals_ * n_elems_per_fractal + j * n_elems_per_fractal;
-        LoadData(B2_RX_lt[dst_start_index], B1_X_lt[src_start_index], params);
+        LoadFractalBurst(B2_RX_lt[dst_start_index], B1_X_lt[src_start_index],
+                         repeat_times, fractal_stride, fractal_stride,
+                         true /* transpose */);
         AscendC::PipeBarrier<PIPE_ALL>();
         AscendC::DataSyncBarrier<MemDsbT::ALL>();
       }
@@ -638,6 +726,9 @@ class KernelInvTriuRecUnroll {
 
   TQue<QuePosition::A1, 1> A1_2_q_;
   TQue<QuePosition::A1, 1> A1_1_q_;
+#if !TCUSCAN_IS_DAV_C220_ARCH
+  TBuf<QuePosition::B1> zero_buf_;
+#endif
   TQue<QuePosition::B1, 1> B1_1_q_;
   TQue<QuePosition::B1, 1> B1_2_q_;
 
