@@ -117,7 +117,12 @@ def test_tri_inv_col_sweep(
     torch.npu.synchronize()
 
     assert actual.shape == expected.shape, "Output shape does not match expected shape."
-    assert torch.equal(actual, expected)
+    # `np_triu_inv_cs` emulates the column sweep with scalar numpy arithmetic,
+    # which rounds differently from the NPU's fused multiply-accumulate, so the
+    # two results are close but not bit-identical. The entries of the inverse
+    # grow with the matrix size, so the tolerance follows the dtype's epsilon.
+    atol, rtol = (1e-2, 5e-3) if data_type == np.float16 else (1e-5, 1e-5)
+    assert torch.allclose(actual, expected, atol=atol, rtol=rtol)
 
 
 @pytest.mark.parametrize("batch_size", [1, 2, 4, 40, 256])
