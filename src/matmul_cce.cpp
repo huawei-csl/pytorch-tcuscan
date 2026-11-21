@@ -1,6 +1,6 @@
 #include "kernels/ascendc_kernel_operator.h"
 
-#ifdef __DAV_C220_CUBE__
+#if defined(__DAV_C220_CUBE__) || defined(__DAV_C310_CUBE__)
 // Cube-specific CCE intrinsics need to be inside this MACRO
 
 #include "kernels/kernel_matmul_cce.h"
@@ -36,13 +36,13 @@ extern "C" __global__ __aicore__ void matmul_cce(GM_ADDR x, GM_ADDR y,
   tcuscan::GetTilingData(&t, tiling_gm);
 
   const int M = t.M;
-  const int N = t.K;
+  const int N = t.N;
   const int K = t.K;
 
   run_matmul_cce(x, y, z, M, N, K);
 }
 
-#else  // __DAV_C220_VEC__
+#else  // vector compile path
 
 // Stub for vector compile path
 extern "C" __global__ __aicore__ void matmul_cce(GM_ADDR a, GM_ADDR b,

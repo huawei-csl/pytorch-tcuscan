@@ -367,7 +367,184 @@ inline __aicore__ void run_matmul_cce(GM_ADDR x, GM_ADDR y, GM_ADDR z, int M,
   wait_flag(PIPE_M, PIPE_MTE1, EVENT_ID1);
 }
 
-#else  // __DAV_C220_VEC__
+#elif defined(__DAV_C310_CUBE__)
+// dav-c310 (A5) cube path.
+//
+// The dav-c220 implementation above is written directly against the CCE
+// intrinsics (`load_cbuf_to_ca`, `copy_matrix_cc_to_gm`, manual L1/L0 base
+// addresses and `set_flag`/`wait_flag` pipelines). Every one of those either
+// does not exist on A5 or took a different signature there, so the kernel
+// used to compile down to the vector stub and produced garbage. This is a
+// straightforward re-implementation on top of the AscendC API, which keeps
+// the same semantics (C = A @ B^T, fp16 in and out) without the hand-rolled
+// double buffering and L2 swizzle of the dav-c220 version.
+
+#include "tcuscan_utils.h"
+
+/**
+ * @brief Copy a `rows` x `cols` tile out of a row-major global matrix into an
+ * L1 tensor, converting ND to NZ on the fly.
+ *
+ * Unlike `tcuscan::copy::CopyGmToL1A` this takes the leading dimension of the
+ * source separately, so it can read a tile out of a wider matrix.
+ *
+ * @param [in] dst Destination tensor in L1.
+ * @param [in] src Source global tensor, positioned at the tile origin.
+ * @param [in] rows Number of rows of the tile.
+ * @param [in] cols Number of columns of the tile.
+ * @param [in] src_leading_dim Number of columns of the full source matrix.
+ */
+inline __aicore__ void MatmulCceCopyTileToL1(
+    const AscendC::LocalTensor<half> &dst,
+    const AscendC::GlobalTensor<half> &src, uint16_t rows, uint16_t cols,
+    uint16_t src_leading_dim) {
+  AscendC::Nd2NzParams params;
+  params.ndNum = 1;
+  params.nValue = rows;
+  params.dValue = cols;
+  params.srcNdMatrixStride = 0;
+  params.srcDValue = src_leading_dim;
+  params.dstNzC0Stride = rows;
+  params.dstNzNStride = 1;
+  params.dstNzMatrixStride = 0;
+  AscendC::DataCopy(dst, src, params);
+}
+
+/**
+ * @brief Write an `m_size` x `n_size` fp32 tile from L0C into a row-major fp16
+ * global matrix, at a row stride of `dst_leading_dim`.
+ *
+ * @param [in] dst Destination global tensor, positioned at the tile origin.
+ * @param [in] src Source tensor in L0C.
+ * @param [in] m_size Number of rows of the tile.
+ * @param [in] n_size Number of columns of the tile.
+ * @param [in] dst_leading_dim Number of columns of the full destination.
+ */
+inline __aicore__ void MatmulCceCopyTileToGm(
+    const AscendC::GlobalTensor<half> &dst,
+    const AscendC::LocalTensor<float> &src, uint16_t m_size, uint16_t n_size,
+    uint32_t dst_leading_dim) {
+  constexpr uint16_t fractal = 16;
+  AscendC::FixpipeParamsArch3510<AscendC::CO2Layout::ROW_MAJOR> params;
+  params.nSize = n_size;
+  params.mSize = m_size;
+  params.srcStride = (m_size + fractal - 1) / fractal * fractal;
+  params.dstStride = dst_leading_dim;
+  params.quantPre = QuantMode_t::F322F16;
+  params.params = AscendC::Nz2NdParams(/*ndNum=*/1, /*srcNdStride=*/0,
+                                       /*dstNdStride=*/0);
+  AscendC::Fixpipe<half, float, AscendC::CFG_ROW_MAJOR>(dst, src, params);
+}
+
+/**
+ * @brief Compute C = A @ B^T on the cube unit.
+ *
+ * As in the dav-c220 version, `M`, `N` and `K` are assumed to be multiples of
+ * the 128-element tile size.
+ *
+ * @param [in] x Pointer to A, a row-major `M` x `K` fp16 matrix.
+ * @param [in] y Pointer to B, a row-major `N` x `K` fp16 matrix.
+ * @param [in] z Pointer to C, a row-major `M` x `N` fp16 matrix.
+ * @param [in] M Number of rows of A.
+ * @param [in] N Number of rows of B.
+ * @param [in] K Number of columns of A and B.
+ */
+inline __aicore__ void run_matmul_cce(GM_ADDR x, GM_ADDR y, GM_ADDR z, int M,
+                                      int N, int K) {
+  using tcuscan::GetFractalMN;
+
+  constexpr uint16_t kFractal = 16;
+  // 128x128 fp32 accumulator is 64 KB of L0C; the A and B tiles are 32 KB
+  // each in L1 and in L0A/L0B.
+  constexpr uint16_t kMTile = 128;
+  constexpr uint16_t kNTile = 128;
+  constexpr uint16_t kKTile = 128;
+
+  const uint32_t m_loop = tcuscan::scalar::CeilDiv<uint32_t>(M, kMTile);
+  const uint32_t n_loop = tcuscan::scalar::CeilDiv<uint32_t>(N, kNTile);
+  const uint32_t k_loop = tcuscan::scalar::CeilDiv<uint32_t>(K, kKTile);
+
+  AscendC::GlobalTensor<half> global_a;
+  AscendC::GlobalTensor<half> global_b;
+  AscendC::GlobalTensor<half> global_c;
+  global_a.SetGlobalBuffer((__gm__ half *)x);
+  global_b.SetGlobalBuffer((__gm__ half *)y);
+  global_c.SetGlobalBuffer((__gm__ half *)z);
+
+  AscendC::TPipe pipe;
+  AscendC::TQue<AscendC::QuePosition::A1, 1> a1_q;
+  AscendC::TQue<AscendC::QuePosition::B1, 1> b1_q;
+  AscendC::TQue<AscendC::QuePosition::A2, 1> a2_q;
+  AscendC::TQue<AscendC::QuePosition::B2, 1> b2_q;
+  AscendC::TQue<AscendC::QuePosition::CO1, 1> co1_q;
+
+  pipe.InitBuffer(a1_q, 1, kMTile * kKTile * sizeof(half));
+  pipe.InitBuffer(b1_q, 1, kNTile * kKTile * sizeof(half));
+  pipe.InitBuffer(a2_q, 1, kMTile * kKTile * sizeof(half));
+  pipe.InitBuffer(b2_q, 1, kNTile * kKTile * sizeof(half));
+  pipe.InitBuffer(co1_q, 1, kMTile * kNTile * sizeof(float));
+
+  const uint32_t num_tiles = m_loop * n_loop;
+  const uint32_t block_idx = AscendC::GetBlockIdx();
+  const uint32_t block_num = AscendC::GetBlockNum();
+
+  for (uint32_t tile = block_idx; tile < num_tiles; tile += block_num) {
+    const uint32_t m_idx = tile / n_loop;
+    const uint32_t n_idx = tile % n_loop;
+    const uint32_t m_off = m_idx * kMTile;
+    const uint32_t n_off = n_idx * kNTile;
+
+    for (uint32_t k_idx = 0; k_idx < k_loop; ++k_idx) {
+      const uint32_t k_off = k_idx * kKTile;
+
+      // A tile: rows [m_off, m_off + kMTile) of the M x K matrix.
+      const AscendC::LocalTensor<half> a1_lt = a1_q.AllocTensor<half>();
+      MatmulCceCopyTileToL1(a1_lt, global_a[m_off * K + k_off], kMTile, kKTile,
+                            static_cast<uint16_t>(K));
+      a1_q.EnQue(a1_lt);
+      tcuscan::copy::CopyL1ToL0A<half, true>(a2_q, a1_q, kMTile / kFractal,
+                                             kKTile / kFractal);
+
+      // B tile: rows [n_off, n_off + kNTile) of the N x K matrix. Because B is
+      // stored transposed with respect to the cube's B operand, the ND -> NZ
+      // conversion already yields the ZN layout `Mmad` expects, so the L1 ->
+      // L0B step is a plain contiguous copy.
+      const AscendC::LocalTensor<half> b1_lt = b1_q.AllocTensor<half>();
+      MatmulCceCopyTileToL1(b1_lt, global_b[n_off * K + k_off], kNTile, kKTile,
+                            static_cast<uint16_t>(K));
+      b1_q.EnQue(b1_lt);
+      {
+        AscendC::LocalTensor<half> src = b1_q.DeQue<half>();
+        const AscendC::LocalTensor<half> dst = b2_q.AllocTensor<half>();
+        AscendC::LoadData2dParams params;
+        params.repeatTimes =
+            (kNTile / kFractal) * (kKTile / kFractal);
+        params.srcStride = 1;
+        params.ifTranspose = false;
+        AscendC::LoadData(dst, src, params);
+        b1_q.FreeTensor(src);
+        b2_q.EnQue(dst);
+      }
+
+      if (k_idx == 0) {
+        tcuscan::cube_unit::Multiply<half, false, true, true>(
+            a2_q, b2_q, co1_q, kMTile, kNTile, kKTile);
+      } else {
+        tcuscan::cube_unit::Multiply<half, true, true, true>(
+            a2_q, b2_q, co1_q, kMTile, kNTile, kKTile);
+      }
+      AscendC::PipeBarrier<PIPE_ALL>();
+    }
+
+    AscendC::LocalTensor<float> co1_lt = co1_q.DeQue<float>();
+    MatmulCceCopyTileToGm(global_c[m_off * N + n_off], co1_lt, kMTile, kNTile,
+                          static_cast<uint32_t>(N));
+    co1_q.FreeTensor(co1_lt);
+    AscendC::PipeBarrier<PIPE_ALL>();
+  }
+}
+
+#else  // __DAV_C220_VEC__ / __DAV_C310_VEC__
 
 // Stub for vector compile path
 inline __aicore__ void run_matmul_cce(GM_ADDR a, GM_ADDR b, GM_ADDR c, int M,
@@ -375,4 +552,4 @@ inline __aicore__ void run_matmul_cce(GM_ADDR a, GM_ADDR b, GM_ADDR c, int M,
   pipe_barrier(PIPE_ALL);
 }
 
-#endif  // end of __DAV_C220_CUBE__ vs __DAV_C220_VEC__ switch
+#endif  // end of cube vs vector compile path switch
