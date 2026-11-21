@@ -1,4 +1,4 @@
-.PHONY: all clean setup_once setup_once_aarch64 build test profile
+.PHONY: all clean setup_once setup_once_aarch64 build test profile docs
 
 # Host architecture (e.g. x86_64 or aarch64), used to locate the Ascend toolkit includes.
 ARCH := $(shell uname -m)
@@ -12,7 +12,7 @@ CONDA_ENV_NAME="pytorch_tcuscan"
 
 TORCH_NPU_VER=2.10.0
 
-ASCEND_DEVICE=Ascend910B4
+ASCEND_DEVICE=Ascend910B # or Ascend950
 DEVICE_TYPE?=npu
 
 all: build test
@@ -52,20 +52,28 @@ build: build.sh
 pypackage:
 	./build-pypackage.sh -v ${ASCEND_DEVICE}
 
-# 'make compile_vadd' compiles 'kernel_vadd.cpp' into 'libkernel_vadd.so' without building the whole project.
+# 'make compile_vadd' compiles 'kernel_vadd.cpp' into 'libkernel_vadd_a2.so' without building the whole project.
 # This is useful for development and debugging of individual kernels.
 compile_%:
-	bisheng -fPIC -shared -xcce -O2 -std=c++17 \
-		-Isrc/kernel \
-		-I$(ASCEND_TOOLKIT_HOME)/$(ARCH)-linux/tikcpp/tikcfw \
-		-I$(ASCEND_TOOLKIT_HOME)/$(ARCH)-linux/asc/include/interface \
-		-I$(ASCEND_TOOLKIT_HOME)/$(ARCH)-linux/asc/impl/basic_api \
+	mkdir -p build/lib/
+	bisheng -fPIC -shared -O2 --asc-aicore-lang \
+		-Isrc/kernel -Isrc \
 		--npu-arch=dav-2201 \
-		-mllvm -cce-aicore-stack-size=0x8000 \
-		-mllvm -cce-aicore-function-stack-size=0x8000 \
 		-Wno-ignored-attributes \
 		src/$*.cpp \
-		-o libkernel_$*.so
+		-o build/lib/libkernel_$*_a2.so \
+		-ltiling_api -lplatform -lascendalog
+
+# Same as compile_%, but targeting A5 (ascend950 -> dav-3510).
+compile_a5_%:
+	mkdir -p build/lib/
+	bisheng -fPIC -shared -O2 --asc-aicore-lang \
+		-Isrc/kernel -Isrc \
+		--npu-arch=dav-3510 \
+		-Wno-ignored-attributes \
+		src/$*.cpp \
+		-o build/lib/libkernel_$*_a5.so \
+		-ltiling_api -lplatform -lascendalog
 
 build_tidy: build-tidy.sh
 	./build-tidy.sh -v ${ASCEND_DEVICE}
@@ -262,7 +270,7 @@ profile_fp16_diff_real:
 profile_fp32_revert_mcscan:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench seg_scan_mc_revert --dtype fp32 --num_cores 20 --s 128 --density ${DENSITY}
 
-profile_radix_sort: profile_fp16_radix_sort profile_int16_radix_sort
+profile_radix_sort: profile_fp16_radix_sort profile_int16_radix_sort profile_fp32_radix_sort profile_int32_radix_sort
 
 profile_fp16_radix_sort:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench sort --dtype fp16 --s 128 --num_cores 20
@@ -275,6 +283,18 @@ profile_int16_radix_sort:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench radix_sort --dtype int16 --s 32 --num_cores 20 --iter-step-multiplier 4
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench radix_sort --dtype int16 --s 64 --num_cores 20 --iter-step-multiplier 2
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench radix_sort --dtype int16 --s 128 --num_cores 20
+
+profile_fp32_radix_sort:
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench sort --dtype fp32 --s 128 --num_cores 20
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench radix_sort --dtype fp32 --s 32 --num_cores 20 --iter-step-multiplier 4
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench radix_sort --dtype fp32 --s 64 --num_cores 20 --iter-step-multiplier 2
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench radix_sort --dtype fp32 --s 128 --num_cores 20
+
+profile_int32_radix_sort:
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench sort --dtype int32 --s 128 --num_cores 20
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench radix_sort --dtype int32 --s 32 --num_cores 20 --iter-step-multiplier 4
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench radix_sort --dtype int32 --s 64 --num_cores 20 --iter-step-multiplier 2
+	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench radix_sort --dtype int32 --s 128 --num_cores 20
 
 profile_int16_topk:
 	python3 ${PROFILING_SCRIPTS_PATH}/profile_tcuscan_ops.py --bench topk --dtype int16 --s 128 --num_cores 20

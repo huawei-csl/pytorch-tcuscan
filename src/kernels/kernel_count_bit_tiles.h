@@ -25,8 +25,20 @@ namespace tcuscan {
  * The block partitioning matches `KernelSplit` exactly, so entry `i` of the
  * output is the number of ones in the range block `i` will later process.
  */
+template <typename KeyT = uint16_t>
 class KernelCountBitTiles {
   using AccT = int32_t;
+  /// @brief Signed view of the key, which `Cast` accepts as a source.
+  using SignedKeyT =
+      typename std::conditional<sizeof(KeyT) == 2, int16_t, int32_t>::type;
+  /// @brief Float wide enough to hold a key's sign after the shift.
+  using FloatT =
+      typename std::conditional<sizeof(KeyT) == 2, half, float>::type;
+  /// @brief Index of the sign bit of a key.
+  constexpr static KeyT SIGN_BIT = sizeof(KeyT) * 8 - 1;
+
+  static_assert(sizeof(KeyT) == 2 || sizeof(KeyT) == 4,
+                "Radix keys are 16 or 32 bits wide.");
 
  public:
   /**
@@ -52,10 +64,10 @@ class KernelCountBitTiles {
    * @param [in] output Pointer to the per-block counts in global memory.
    */
   __aicore__ inline void Init(GM_ADDR input, GM_ADDR output) {
-    global_input_.SetGlobalBuffer((__gm__ uint16_t*)input, vec_len_);
+    global_input_.SetGlobalBuffer((__gm__ KeyT*)input, vec_len_);
     global_output_.SetGlobalBuffer((__gm__ AccT*)output, vec_core_num_);
 
-    pipe_.InitBuffer(in_q_, 2, tile_len_ * sizeof(uint16_t));
+    pipe_.InitBuffer(in_q_, 2, tile_len_ * sizeof(KeyT));
     pipe_.InitBuffer(acc_buf_, tile_len_ * sizeof(float));
     pipe_.InitBuffer(res_q_, 1, MIN_VEC_SIZE * sizeof(AccT));
   }
@@ -77,21 +89,30 @@ class KernelCountBitTiles {
           scalar::NextTileLen(tile_len_, global_offset, vec_len_);
       if (num_elems > 0) {
         copy::CopyGmToVec(in_q_, global_input_[global_offset], num_elems);
-        LocalTensor<uint16_t> in_lt = in_q_.DeQue<uint16_t>();
+        LocalTensor<KeyT> in_lt = in_q_.template DeQue<KeyT>();
 
         // Move the wanted bit into the sign position and back down, leaving
         // 0 or 1 per element. Both casts below are exact for those values.
-        ShiftLeft(in_lt, in_lt, static_cast<uint16_t>(15 - bit_idx_),
+        ShiftLeft(in_lt, in_lt, static_cast<KeyT>(SIGN_BIT - bit_idx_),
                   num_elems);
         PipeBarrier<PIPE_V>();
-        ShiftRight(in_lt, in_lt, static_cast<uint16_t>(15), num_elems);
+        ShiftRight(in_lt, in_lt, SIGN_BIT, num_elems);
         PipeBarrier<PIPE_V>();
 
-        const LocalTensor<half> half_lt = in_lt.ReinterpretCast<half>();
-        const LocalTensor<int16_t> int_lt = in_lt.ReinterpretCast<int16_t>();
-        Cast(half_lt, int_lt, RoundMode::CAST_NONE, num_elems);
+        const LocalTensor<FloatT> float_lt =
+            in_lt.template ReinterpretCast<FloatT>();
+        const LocalTensor<SignedKeyT> int_lt =
+            in_lt.template ReinterpretCast<SignedKeyT>();
+        Cast(float_lt, int_lt, RoundMode::CAST_NONE, num_elems);
         PipeBarrier<PIPE_V>();
-        Cast(acc_lt, half_lt, RoundMode::CAST_NONE, num_elems);
+        if constexpr (sizeof(KeyT) == 2) {
+          // A 32-bit key already casts straight to `float`; a 16-bit one
+          // lands in `half` and needs widening before it can accumulate.
+          Cast(acc_lt, float_lt, RoundMode::CAST_NONE, num_elems);
+        } else {
+          DataCopy(acc_lt, float_lt,
+                   scalar::AlignUp(num_elems, UB_ALIGNMENT / sizeof(float)));
+        }
 
         ReduceSum(acc_lt, acc_lt, acc_lt, num_elems);
         sum += AscendC::GetAccVal<float>();
@@ -112,7 +133,7 @@ class KernelCountBitTiles {
   TQue<QuePosition::VECOUT, 1> res_q_;
   TBuf<QuePosition::VECCALC> acc_buf_;
 
-  GlobalTensor<uint16_t> global_input_;
+  GlobalTensor<KeyT> global_input_;
   GlobalTensor<AccT> global_output_;
 
   constexpr static int32_t MIN_VEC_SIZE = UB_ALIGNMENT / sizeof(AccT);

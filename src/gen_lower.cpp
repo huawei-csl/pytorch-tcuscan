@@ -10,6 +10,7 @@
 #include "tiling/tiling_gen_lower.h"
 
 /**
+ * @fn gen_lower_fp16(GM_ADDR dst, GM_ADDR workspace, GM_ADDR tiling)
  * @brief Run the `gen_lower` kernel.
  *
  * @param [in] dst Pointer to the destination buffer in global memory.
@@ -44,6 +45,7 @@ extern "C" __global__ __aicore__ void gen_lower_fp16(GM_ADDR dst,
 // }
 
 /**
+ * @fn gen_lower_int8(GM_ADDR dst, GM_ADDR workspace, GM_ADDR tiling)
  * @brief Run the `gen_lower` kernel.
  *
  * @param [in] dst Pointer to the destination buffer in global memory.

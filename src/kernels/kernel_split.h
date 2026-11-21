@@ -52,6 +52,18 @@ class KernelSplit {
   using _GatherMaskT =
       typename std::conditional<sizeof(_InputT) == 2, uint16_t, uint32_t>::type;
 
+  /// @brief Unsigned view of a key, for the shift in `ComputeMaskFromInput`.
+  using KeyT =
+      typename std::conditional<sizeof(T) == 2, uint16_t, uint32_t>::type;
+  /// @brief Signed view of a key, which `Cast` accepts as a source.
+  using SignedKeyT =
+      typename std::conditional<sizeof(T) == 2, int16_t, int32_t>::type;
+  /// @brief Float as wide as a key, so the shifted sign survives the cast.
+  using MaskFloatT =
+      typename std::conditional<sizeof(T) == 2, half, float>::type;
+  /// @brief Index of the sign bit of a key.
+  constexpr static uint32_t SIGN_BIT = sizeof(T) * 8 - 1;
+
  public:
   /**
    * @brief Class constructor.
@@ -94,7 +106,7 @@ class KernelSplit {
       global_mask_.SetGlobalBuffer((__gm__ MaskT*)mask, vec_len_);
       pipe.InitBuffer(mask_in_q_, 1, tile_len_ * sizeof(MaskT));
     }
-    pipe.InitBuffer(mask_fp16_buf_, tile_len_ * sizeof(half));
+    pipe.InitBuffer(mask_work_buf_, tile_len_ * sizeof(MaskFloatT));
     pipe.InitBuffer(packed_mask_buf_,
                     packed_mask_tile_size_ * sizeof(PackedMaskT));
     pipe.InitBuffer(gathered_out_q_, 2, tile_len_ * sizeof(T));
@@ -279,7 +291,7 @@ class KernelSplit {
     // input.
     // Load a whole mask tile even if not a full tile, GatherMask will
     // ignore the uninitialized part
-    const LocalTensor<half> mask_fp16_lt = mask_fp16_buf_.Get<half>();
+    const LocalTensor<half> mask_fp16_lt = mask_work_buf_.Get<half>();
     // The assumption here is that if the output tensor is larger than
     // the input tensor, the operation will modify only some part of the
     // output tensor and there is no undefined behavior.
@@ -304,25 +316,26 @@ class KernelSplit {
    */
   __aicore__ inline void ComputeMaskFromInput(const LocalTensor<T>& input_lt,
                                               uint32_t num_elems) {
-    const LocalTensor<half> work_fp16_lt = mask_fp16_buf_.Get<half>();
-    const LocalTensor<uint16_t> work_u16_lt =
-        work_fp16_lt.template ReinterpretCast<uint16_t>();
-    const LocalTensor<int16_t> work_i16_lt =
-        work_fp16_lt.template ReinterpretCast<int16_t>();
-    const LocalTensor<uint16_t> input_u16_lt =
-        input_lt.template ReinterpretCast<uint16_t>();
+    const LocalTensor<MaskFloatT> work_float_lt =
+        mask_work_buf_.template Get<MaskFloatT>();
+    const LocalTensor<KeyT> work_key_lt =
+        work_float_lt.template ReinterpretCast<KeyT>();
+    const LocalTensor<SignedKeyT> work_int_lt =
+        work_float_lt.template ReinterpretCast<SignedKeyT>();
+    const LocalTensor<KeyT> input_key_lt =
+        input_lt.template ReinterpretCast<KeyT>();
 
-    const uint32_t size = work_fp16_lt.GetSize();
-    ShiftLeft(work_u16_lt, input_u16_lt, static_cast<uint16_t>(15 - bit_idx_),
+    const uint32_t size = work_float_lt.GetSize();
+    ShiftLeft(work_key_lt, input_key_lt, static_cast<KeyT>(SIGN_BIT - bit_idx_),
               size);
 
     PipeBarrier<PIPE_V>();
 
-    Cast(work_fp16_lt, work_i16_lt, RoundMode::CAST_NONE, size);
+    Cast(work_float_lt, work_int_lt, RoundMode::CAST_NONE, size);
 
     const LocalTensor<PackedMaskT> packed_mask_8b =
         packed_mask_buf_.Get<PackedMaskT>();
-    CompareScalar(packed_mask_8b, work_fp16_lt, static_cast<half>(0),
+    CompareScalar(packed_mask_8b, work_float_lt, static_cast<MaskFloatT>(0),
                   CMPMODE::LT, size);
   }
 
@@ -382,7 +395,7 @@ class KernelSplit {
   TQue<QuePosition::VECIN, 1> vec_in_q_;
   TQue<QuePosition::VECIN, 1> mask_in_q_;
   TQue<QuePosition::VECIN, 1> pos_in_q_;
-  TBuf<QuePosition::VECCALC> mask_fp16_buf_;
+  TBuf<QuePosition::VECCALC> mask_work_buf_;
   TBuf<QuePosition::VECCALC> packed_mask_buf_;
   TQue<QuePosition::VECOUT, 2> gathered_out_q_;
 
@@ -534,19 +547,26 @@ __aicore__ inline void run_split_uint16(GM_ADDR in, GM_ADDR mask, GM_ADDR out,
  * @param [in] bit_idx Index of the bit to retrieve.
  * @return Number of ones in the mask.
  */
-template <bool ComputeNumOnes = true, bool MaskFromBit = false>
-__aicore__ inline uint32_t run_split_ind_uint16(
-    GM_ADDR in, GM_ADDR mask, GM_ADDR indices_in, GM_ADDR out,
-    GM_ADDR indices_out, GM_ADDR workspace, uint32_t vec_len, uint32_t tile_len,
-    bool zeros_first, uint16_t bit_idx = 0) {
-  exec_mode::EnableCubeCores();
+template <typename KeyT, bool ComputeNumOnes = true, bool MaskFromBit = false,
+          bool AIVOnly = false>
+__aicore__ inline uint32_t run_split_ind(GM_ADDR in, GM_ADDR mask,
+                                         GM_ADDR indices_in, GM_ADDR out,
+                                         GM_ADDR indices_out, GM_ADDR workspace,
+                                         uint32_t vec_len, uint32_t tile_len,
+                                         bool zeros_first,
+                                         uint16_t bit_idx = 0) {
+  if constexpr (!AIVOnly) {
+    // The caller is a mix-mode kernel, so the cube cores have to be given
+    // something to do for the barriers below to be the mix-mode ones.
+    exec_mode::EnableCubeCores();
+  }
 
   GM_ADDR const sums = workspace;
 
   if ASCEND_IS_AIV {
     if constexpr (MaskFromBit) {
       // Counting straight off the keys keeps the mask out of global memory.
-      KernelCountBitTiles op_count(tile_len, vec_len, bit_idx);
+      KernelCountBitTiles<KeyT> op_count(tile_len, vec_len, bit_idx);
       op_count.Init(in, sums);
       op_count.Process();
     } else {
@@ -556,17 +576,17 @@ __aicore__ inline uint32_t run_split_ind_uint16(
     }
   }
 
-  SyncAll<false /*isAIVOnly*/>();
+  SyncAll<AIVOnly>();
 
   if ASCEND_IS_AIV {
     constexpr bool with_indices = true;
-    KernelSplit<uint16_t, with_indices, MaskFromBit> op(vec_len, tile_len,
-                                                        zeros_first, bit_idx);
+    KernelSplit<KeyT, with_indices, MaskFromBit> op(vec_len, tile_len,
+                                                    zeros_first, bit_idx);
     op.Init(in, mask, sums, out, indices_in, indices_out);
     op.Process();
   }
 
-  SyncAll<false /*isAIVOnly*/>();
+  SyncAll<AIVOnly>();
 
   // Callers that only need the partitioned output - radix sort, for one - can
   // skip the reduction and the barrier it needs, since the split above has
@@ -580,10 +600,41 @@ __aicore__ inline uint32_t run_split_ind_uint16(
       op_reduce.Process();
     }
 
-    SyncAll<false /*isAIVOnly*/>();
+    SyncAll<AIVOnly>();
 
     return scalar::GetGMValue<int32_t>(sums, 0, GetBlockNum());
   }
+}
+
+/**
+ * @brief Run the `split_ind` kernel on 16-bit keys.
+ *
+ * Thin alias kept for the callers that predate the key-width template.
+ *
+ * @tparam ComputeNumOnes Whether to return the number of set mask bits.
+ * @tparam MaskFromBit Whether to derive the mask from the selected key bit.
+ * @tparam AIVOnly Whether the kernel uses only AIV cores.
+ * @param [in] in Input keys.
+ * @param [in] mask Bit mask used to partition the keys.
+ * @param [in] indices_in Input indices.
+ * @param [out] out Partitioned keys.
+ * @param [out] indices_out Partitioned indices.
+ * @param [in] workspace Temporary workspace.
+ * @param [in] vec_len Number of keys.
+ * @param [in] tile_len Number of keys per tile.
+ * @param [in] zeros_first Whether zero-bit keys are placed first.
+ * @param [in] bit_idx Bit position used to derive the mask.
+ * @return Number of set mask bits when `ComputeNumOnes` is true.
+ */
+template <bool ComputeNumOnes = true, bool MaskFromBit = false,
+          bool AIVOnly = false>
+__aicore__ inline uint32_t run_split_ind_uint16(
+    GM_ADDR in, GM_ADDR mask, GM_ADDR indices_in, GM_ADDR out,
+    GM_ADDR indices_out, GM_ADDR workspace, uint32_t vec_len, uint32_t tile_len,
+    bool zeros_first, uint16_t bit_idx = 0) {
+  return run_split_ind<uint16_t, ComputeNumOnes, MaskFromBit, AIVOnly>(
+      in, mask, indices_in, out, indices_out, workspace, vec_len, tile_len,
+      zeros_first, bit_idx);
 }
 
 }  // namespace tcuscan

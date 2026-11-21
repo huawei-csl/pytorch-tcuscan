@@ -128,7 +128,7 @@ PYBIND11_MODULE(tcuscan_ops, m) {
         pybind11::arg("idxs"), pybind11::arg("tile_len"),
         pybind11::arg("alpha") = 1.0, "Vector Multi Core Gather SPMV");
   m.def("run_radix_sort", &tcuscan::run_radix_sort,
-        "Radix sort using cube units");
+        "Radix sort using cube units (fp16, fp32, int16, int32)");
   m.def("run_matmul_cce", &tcuscan::matmul_cce,
         "Matrix multiplication CCE kernel (B dims must be a multiple of 512)");
   m.def("run_row_scan", &tcuscan::run_row_scan,

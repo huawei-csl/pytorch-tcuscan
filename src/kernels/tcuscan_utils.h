@@ -15,6 +15,19 @@ using namespace AscendC;
 
 namespace tcuscan {
 
+/// @brief True when AscendC::Nz2NdParams carries the NZ->ND enable flag.
+///
+/// On dav-c310 (__NPU_ARCH__ 3510/5102) the struct drops `nz2ndEn` and
+/// `originalNSize`; the NZ->ND conversion is selected through the FixpipeConfig
+/// template parameter instead. This must gate the preprocessor rather than an
+/// `if constexpr`, because the member names are looked up even in a discarded
+/// branch.
+#if defined(__NPU_ARCH__) && ((__NPU_ARCH__ == 3510) || (__NPU_ARCH__ == 5102))
+#define TCUSCAN_IS_DAV_C220_ARCH 0
+#else
+#define TCUSCAN_IS_DAV_C220_ARCH 1
+#endif
+
 /// @brief Number of bytes for a required alignment in UB.
 constexpr uint16_t UB_ALIGNMENT = 32;
 /// @brief Number of bytes for the UB size (A2A3).
@@ -432,7 +445,15 @@ __aicore__ inline void CopyL0CToL1(const LocalTensor<DstDataType>& dst_lt,
   params.nSize = width;
   params.mSize = height;
   params.srcStride = height;
+#if TCUSCAN_IS_DAV_C220_ARCH
   params.dstStride = width;
+#else
+  // dav-c310 (A5): for an NZ destination the stride between two consecutive
+  // C0 column blocks of the destination tile is expressed in elements, i.e.
+  // `mSize * C0`, matching the CANN matmul `CopyOutNZ2NZ` helper
+  // (baseBlockHeight * BLOCK_CUBE * DST_C0SIZE).
+  params.dstStride = height * (DATA_BLOCK_SIZE / sizeof(DstDataType));
+#endif
   params.ndNum = 1;
   params.quantPre = QuantMode_t::F322F16;
 
@@ -555,6 +576,10 @@ __aicore__ inline void CopyCL0ToGlobal(
 
   LocalTensor<DataType> lt = src_q.template DeQue<DataType>();
 
+#if TCUSCAN_IS_DAV_C220_ARCH
+  // Pre-dav-c310: the legacy DMA-style Fixpipe overload takes the generic
+  // FixpipeParams<T>, and the NZ->ND conversion is requested through the
+  // nz2ndEn flag on the params struct.
   FixpipeParams<DataType> params;
   params.cburstNum = height;
   params.burstLen = width * fractal_size * sizeof(DataType) / DATA_BLOCK_SIZE;
@@ -566,6 +591,29 @@ __aicore__ inline void CopyCL0ToGlobal(
   params.nz2ndParams = nz2nd_params;
 
   Fixpipe(global, lt, params);
+#else
+  // dav-c310 (A5): the generic FixpipeParams<T> overload no longer exists. The
+  // L0C->GM copy is described with FixpipeParamsArch3510 (matmul-style nSize /
+  // mSize / strides), and the NZ->ND conversion is selected through the
+  // CFG_ROW_MAJOR FixpipeConfig template parameter instead of an nz2ndEn flag.
+  // Field mapping follows the CANN matmul copy-out utility (row-major output).
+  //
+  // Note the naming: in the legacy parameters above `height` ends up as the
+  // NZ2ND `originalNSize` (the N extent of the ND output and its row stride)
+  // and `width` as the M extent, so the same mapping has to be kept here.
+  FixpipeParamsArch3510<CO2Layout::ROW_MAJOR> params;
+  params.nSize = height;
+  params.mSize = width;
+  // Source stride in L0C is the M dimension aligned up to a fractal.
+  params.srcStride = (width + fractal_size - 1) / fractal_size * fractal_size;
+  // Row stride of the contiguous row-major output matrix.
+  params.dstStride = height;
+  // Single ND matrix (ndNum == 1); the ND strides are unused in that case.
+  params.params = Nz2NdParams(/*ndNum=*/1, /*srcNdStride=*/0,
+                              /*dstNdStride=*/0);
+
+  Fixpipe<DataType, DataType, CFG_ROW_MAJOR>(global, lt, params);
+#endif
 
   src_q.FreeTensor(lt);
 }
@@ -753,16 +801,21 @@ __aicore__ inline void CopyPlainGmToL1B(TQue<QuePosition::B1, QNumBuffers>& q,
  * @param [in] transpose Indicates whether or not to transpose the matrix. If
  * set, the function performs an NZ to ZN transformation. Otherwise, it performs
  * NZ to ZZ one.
+ * @param [in] dst_fractals Number of fractals along the non-K dimension of the
+ * destination tile (`fractals_h` for an A operand, `fractals_w` for a
+ * transposed B operand). Only used on dav-c310.
  */
 template <uint16_t FractalHeight, uint16_t FractalWidth, typename DataType>
 __aicore__ inline void CopyL1ToL0(const LocalTensor<DataType>& dst,
                                   const LocalTensor<DataType>& src,
                                   uint16_t fractals_h, uint16_t fractals_w,
-                                  bool transpose) {
+                                  bool transpose, uint16_t dst_fractals) {
   exec_mode::AssertIsAIC();
   exec_mode::AssertLocalTensorIsInL1(src);
   exec_mode::AssertLocalTensorIsInL0(dst);
 
+#if TCUSCAN_IS_DAV_C220_ARCH
+  (void)dst_fractals;
   int src_offset = 0;
   int dst_offset = 0;
 
@@ -777,6 +830,27 @@ __aicore__ inline void CopyL1ToL0(const LocalTensor<DataType>& dst,
     src_offset += FractalWidth * FractalHeight;
     dst_offset += fractals_w * FractalWidth * FractalHeight;
   }
+#else
+  // dav-c310 (A5): the legacy `LoadData2dParams` overload is lowered onto the
+  // load2dv2 intrinsic with `mStep` hard-wired to 1, so the per-fractal-row
+  // loop above reads the wrong L1 fractals. The whole NZ tile is instead
+  // loaded with a single load2dv2 call, whose parameters follow the CANN
+  // matmul `LoadToL0A`/`LoadToL0B` helpers:
+  //   mStep     - number of fractals along the non-K dimension of the source,
+  //   kStep     - number of fractals along the K dimension,
+  //   srcStride - fractal stride between K columns of the NZ tile in L1,
+  //   dstStride - fractal stride of the destination tile.
+  LoadData2DParamsV2 params;
+  params.mStartPosition = 0;
+  params.kStartPosition = 0;
+  params.mStep = fractals_h;
+  params.kStep = fractals_w;
+  params.srcStride = fractals_h;
+  params.dstStride = dst_fractals;
+  params.ifTranspose = transpose;
+
+  LoadData(dst, src, params);
+#endif
 }
 
 /**
@@ -807,7 +881,8 @@ __aicore__ inline void CopyL1ToL0A(TQue<QuePosition::A2, L0NumBuffers>& l0_q,
   LocalTensor<DataType> l1_lt = l1_q.template DeQue<DataType>();
 
   CopyL1ToL0<GetFractalMN<DataType>(), GetFractalK<DataType>()>(
-      l0_lt, l1_lt, fractals_h, fractals_w, false /* transpose */);
+      l0_lt, l1_lt, fractals_h, fractals_w, false /* transpose */,
+      fractals_h /* dst_fractals */);
 
   if constexpr (FreeSrc) {
     l1_q.FreeTensor(l1_lt);
@@ -861,7 +936,8 @@ __aicore__ inline void CopyL1ToL0B(TQue<QuePosition::B2, L0NumBuffers>& l0_q,
   const LocalTensor<DataType> l0_lt = l0_q.template AllocTensor<DataType>();
   constexpr bool transpose = ShouldTransposeB<DataType>();
   CopyL1ToL0<GetFractalK<DataType>(), GetFractalMN<DataType>()>(
-      l0_lt, l1_lt, fractals_h, fractals_w, transpose);
+      l0_lt, l1_lt, fractals_h, fractals_w, transpose,
+      fractals_w /* dst_fractals */);
 
   if constexpr (FreeSrc) {
     l1_q.FreeTensor(l1_lt);
@@ -896,7 +972,8 @@ __aicore__ inline void CopyL1ToL0B(TQue<QuePosition::B2, L0NumBuffers>& l0_q,
   const LocalTensor<DataType> l0_lt = l0_q.template AllocTensor<DataType>();
   constexpr bool transpose = ShouldTransposeB<DataType>();
   CopyL1ToL0<GetFractalK<DataType>(), GetFractalMN<DataType>()>(
-      l0_lt, l1_lt, fractals_h, fractals_w, transpose);
+      l0_lt, l1_lt, fractals_h, fractals_w, transpose,
+      fractals_w /* dst_fractals */);
 
   l0_q.EnQue(l0_lt);
 }
@@ -1174,7 +1251,9 @@ __aicore__ inline int GetSyncConf(int mode, int flag_id) {
  */
 template <GroupSyncDirection Dir = GroupSyncDirection::FULL>
 __aicore__ inline void SyncGroup() {
-  const int mode = 2;
+#if TCUSCAN_IS_DAV_C220_ARCH
+
+  constexpr int mode = 2;
 
   if constexpr (Dir == GroupSyncDirection::CUBE_WAIT_FOR_VEC) {
     const int AIV_SET_FLAG_ID = 11;
@@ -1209,6 +1288,47 @@ __aicore__ inline void SyncGroup() {
     }
     return;
   }
+#else
+  // dav-c310 (A5): the cross-core notify/wait intrinsics changed signature
+  // (`wait_flag_dev` now takes the waiting pipe, and the message is built by
+  // the runtime), so the portable `CrossCoreSetFlag`/`CrossCoreWaitFlag`
+  // wrappers are used instead of the raw intrinsics. The notifying pipe must
+  // belong to the notifying core: MTE3 for the vector cores, FIX for the cube
+  // cores. PIPE_S is valid on both sides for the waiters.
+  constexpr uint8_t mode = 2;
+  constexpr uint16_t AIV_SET_FLAG_ID = 11;
+  constexpr uint16_t AIC_SET_FLAG_ID = 12;
+
+  if constexpr (Dir == GroupSyncDirection::CUBE_WAIT_FOR_VEC) {
+    if ASCEND_IS_AIV {
+      CrossCoreSetFlag<mode, PIPE_MTE3>(AIV_SET_FLAG_ID);
+    }
+    if ASCEND_IS_AIC {
+      CrossCoreWaitFlag<mode, PIPE_S>(AIV_SET_FLAG_ID);
+    }
+    return;
+  }
+  if constexpr (Dir == GroupSyncDirection::VEC_WAIT_FOR_CUBE) {
+    if ASCEND_IS_AIC {
+      CrossCoreSetFlag<mode, PIPE_FIX>(AIC_SET_FLAG_ID);
+    }
+    if ASCEND_IS_AIV {
+      CrossCoreWaitFlag<mode, PIPE_S>(AIC_SET_FLAG_ID);
+    }
+    return;
+  }
+  if constexpr (Dir == GroupSyncDirection::FULL) {
+    if ASCEND_IS_AIV {
+      CrossCoreSetFlag<mode, PIPE_MTE3>(AIV_SET_FLAG_ID);
+      CrossCoreWaitFlag<mode, PIPE_S>(AIC_SET_FLAG_ID);
+    }
+    if ASCEND_IS_AIC {
+      CrossCoreSetFlag<mode, PIPE_FIX>(AIC_SET_FLAG_ID);
+      CrossCoreWaitFlag<mode, PIPE_S>(AIV_SET_FLAG_ID);
+    }
+    return;
+  }
+#endif
 }
 
 /**

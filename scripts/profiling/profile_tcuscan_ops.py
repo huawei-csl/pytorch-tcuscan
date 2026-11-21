@@ -759,7 +759,7 @@ def scscan_benchmark(
 
 
 def radix_sort_benchmark(device: Device, vec_len: int, dtype: torch.dtype, s: int):
-    if dtype == torch.int16:
+    if not dtype.is_floating_point:
         x = (
             torch.randint(torch.iinfo(dtype).min, torch.iinfo(dtype).max, (vec_len,))
             .to(dtype)
@@ -1774,10 +1774,10 @@ if __name__ == "__main__":  # noqa
             sizes,
             density,
         )
-    elif bench == "sort" and dtype in ["int16", "fp16"]:
+    elif bench == "sort" and dtype in ["int16", "fp16", "int32", "fp32"]:
         tdtype = STR_TO_DTYPE[dtype]
         benchmark(device, "sort", dtype, partial(sort_benchmark, dtype=tdtype), sizes)
-    elif bench == "radix_sort" and dtype in ["int16", "fp16"]:
+    elif bench == "radix_sort" and dtype in ["int16", "fp16", "int32", "fp32"]:
         tdtype = STR_TO_DTYPE[dtype]
         benchmark(
             device,

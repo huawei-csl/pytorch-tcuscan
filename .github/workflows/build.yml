@@ -123,7 +123,9 @@ jobs:
 
   doxygen:
     name: Doxygen
-    runs-on: ubuntu-latest
+    # Pinned (not ubuntu-latest) so the doxygen version stays 1.9.x: Ubuntu
+    # 24.04 ships doxygen 1.9.8, matching what developers run locally.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
 
@@ -133,7 +135,13 @@ jobs:
           sudo apt-get install -yq doxygen graphviz
 
       - name: Show version
-        run: doxygen --version
+        # Fail loudly if the runner image ever moves off the 1.9.x series,
+        # since newer doxygen reports different warnings and WARN_AS_ERROR
+        # would turn those into unrelated job failures.
+        run: |
+          set -euo pipefail
+          doxygen --version
+          doxygen --version | grep -q '^1\.9\.'
 
       - name: Generate documentation
         # Doxyfile sets WARN_AS_ERROR = FAIL_ON_WARNINGS, so any
