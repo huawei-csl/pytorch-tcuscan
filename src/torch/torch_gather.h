@@ -172,8 +172,20 @@ at::Tensor run_csr_gather(const at::Tensor& values, const at::Tensor& cols,
   // Floor to a 32-byte boundary so the buffer allocation stays aligned.
   const uint32_t x_bytes_max =
       (static_cast<uint32_t>(ub_size) - reserved_bytes) & ~uint32_t{31};
-  const uint32_t X_TILE_ELEMS_MAX =
-      host_utils::FloorDiv(x_bytes_max, elem_size);
+  uint32_t X_TILE_ELEMS_MAX = host_utils::FloorDiv(x_bytes_max, elem_size);
+
+  // `AscendC::Gather` takes byte offsets, but for 16-bit element types the
+  // dav-c310 (A5) implementation narrows them to a uint16 element index
+  // (`VfGatherApi0B16` shifts the uint32 offset right by one and packs the
+  // low half), so only the first 65536 elements of the staging buffer are
+  // addressable. Unified Buffer is large enough on A5 to hold more than
+  // that, so the chunk has to be capped explicitly or the gather silently
+  // wraps around. The cap also keeps the single-load fast path, which is
+  // picked when `x` fits in one chunk, inside the same limit.
+  constexpr uint32_t GATHER_B16_MAX_ELEMS = 1u << 16;
+  if (elem_size == 2 && X_TILE_ELEMS_MAX > GATHER_B16_MAX_ELEMS) {
+    X_TILE_ELEMS_MAX = GATHER_B16_MAX_ELEMS;
+  }
 
   const CSRGatherTiling tiling{values_len, x_len, TILE_LEN, X_TILE_ELEMS_MAX};
   const at::Tensor tiling_device = alloc_copy_tiling_tensor(tiling, device);
