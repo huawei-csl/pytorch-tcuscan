@@ -16,6 +16,46 @@ using namespace AscendC;
 
 namespace tcuscan {
 
+/// @brief True when the cube core can write the result of a matmul from L0C
+/// straight into the UB of the vector cores it is paired with.
+///
+/// Only dav-c310 (A5) has that data path (`copy_matrix_cc_to_ub`). On
+/// dav-c220 the result has to be staged through global memory.
+constexpr bool kUseL0CToUB = !TCUSCAN_IS_DAV_C220_ARCH;
+
+/// @brief Bytes of UB available on a single vector core.
+constexpr uint32_t kVecUbBytes =
+    TCUSCAN_IS_DAV_C220_ARCH ? UB_SIZE_BYTES : 248u * 1024u;
+
+/// @brief Number of row-scan tiles staged in UB by the cube core.
+///
+/// Two buffers are enough to let the cube core compute tile `i + 1` while the
+/// vector core still consumes tile `i`: the group synchronization at the end
+/// of every iteration keeps the cube core at most one tile ahead.
+constexpr uint32_t kUbStagingBuffers = 2;
+
+/// @brief Alignment of a staging tile in UB.
+constexpr uint32_t kUbStagingAlignment = 512;
+
+/**
+ * @brief Offset in UB of a cube -> vector staging buffer.
+ *
+ * The staging buffers are carved out of the top of UB so that they never
+ * collide with the buffers the vector core allocates from its `TPipe` (which
+ * grow from the bottom). The cube core cannot query the allocator of the
+ * vector core, so both sides derive the very same address from the tile size.
+ *
+ * @param [in] tile_bytes Size in bytes of a single staging tile.
+ * @param [in] buf_idx Index of the staging buffer.
+ * @return Offset in bytes from the start of UB.
+ */
+__aicore__ inline uint32_t UbStagingOffsetBytes(uint32_t tile_bytes,
+                                                uint32_t buf_idx) {
+  const uint32_t aligned_bytes =
+      scalar::AlignUp(tile_bytes, kUbStagingAlignment);
+  return kVecUbBytes - (kUbStagingBuffers - buf_idx) * aligned_bytes;
+}
+
 /**
  * @brief Performs a "row-wise" inclusive-scan on multiple input vectors.
  *
@@ -92,24 +132,53 @@ class KernelRowScanBatch {
     // Load the B matrix only once from global memory
     LoadBToL0();
     for (uint32_t idx = 0; idx < num_tiles_per_vec_; ++idx) {
-      // Compute multiple output vectors at the time
+      // Compute multiple output vectors at the time. The i-th vector is
+      // consumed by the i-th vector core of the group, so it is also the
+      // sub-block the result is written to when going straight to UB.
       for (uint32_t i = 0; i < num_vec_; i++)
-        CubeIter(idx + i * num_tiles_per_vec_);
+        CubeIter(idx + i * num_tiles_per_vec_, idx % kUbStagingBuffers,
+                 /* sub_block_id */ i != 0);
       sync::SyncGroup<sync::GroupSyncDirection::FULL>();
+    }
+    if constexpr (kUseL0CToUB) {
+      // The staging buffers in UB are reused by the next vector of the batch,
+      // so the cube core must not run ahead of the vector cores still reading
+      // the last tile of this one.
+      sync::SyncGroup<sync::GroupSyncDirection::CUBE_WAIT_FOR_VEC>();
     }
     queue::FreeFromQ<InputT>(b2_q_);
   }
 
  private:
-  __aicore__ inline void CubeIter(uint32_t iter_idx) {
+  __aicore__ inline void CubeIter(uint32_t iter_idx, uint32_t buf_idx,
+                                  bool sub_block_id) {
     copy::CopyGmToL1A(a1_q_, global_A_[iter_idx * a_cube_tile_size_], m_blocks_,
                       k_blocks_);
     LoadA1ToA2();
     cube_unit::Multiply<InputT, false /* accumulate_c */, true /* free_a*/,
                         false /* free_b */>(a2_q_, b2_q_, co1_q_,
                                             matmul_m_size_, N_, K_);
-    copy::CopyCL0ToGlobal(global_C_[iter_idx * c_cube_tile_size_], co1_q_,
-                          matmul_m_size_, N_);
+    if constexpr (kUseL0CToUB) {
+      // L0C -> UB: the row-wise scan is handed over to the vector core
+      // without ever touching global memory.
+      copy::CopyCL0ToUB<OutputT, OutputT>(StagingTensor(buf_idx), co1_q_,
+                                          matmul_m_size_, N_, sub_block_id);
+    } else {
+      copy::CopyCL0ToGlobal(global_C_[iter_idx * c_cube_tile_size_], co1_q_,
+                            matmul_m_size_, N_);
+    }
+  }
+
+  /**
+   * @brief Tensor describing a staging buffer in the UB of the vector cores.
+   *
+   * The buffer belongs to the vector cores of the group, so it is addressed by
+   * its absolute offset in UB rather than through the allocator of this core.
+   */
+  __aicore__ inline LocalTensor<OutputT> StagingTensor(uint32_t buf_idx) {
+    return pipe.template GetAbsAddr<TPosition::VECCALC, OutputT>(
+        UbStagingOffsetBytes(c_cube_tile_size_ * sizeof(OutputT), buf_idx),
+        c_cube_tile_size_);
   }
   __aicore__ inline void LoadBToL0() {
     copy::CopyTransposedGmToL0B(b2_q_, b1_q_, global_B_, k_blocks_, n_blocks_);
@@ -209,9 +278,26 @@ class KernelCompleteRowsBatched {
             (GetBlockIdx() * vec_len_ * vec_cube_ratio_ / GetTaskRation()),
         vec_len_);
 
-    pipe.InitBuffer(vecin_q_, 1, tile_size_ * sizeof(InputT));
     pipe.InitBuffer(vecout_q_, 1, tile_size_ * sizeof(InputT));
-    pipe.InitBuffer(work_buf_, tile_size_ * sizeof(InputT));
+    if constexpr (kUseL0CToUB) {
+      // The staging buffers sit at the top of UB and the VECOUT queue is
+      // allocated from the bottom of it, so they must not meet.
+      ASCENDC_ASSERT(
+          (kUbStagingBuffers + 1) *
+                  scalar::AlignUp<uint32_t>(
+                      static_cast<uint32_t>(tile_size_ * sizeof(InputT)),
+                                            kUbStagingAlignment) <=
+              kVecUbBytes,
+          {
+            KERNEL_LOG(KERNEL_ERROR,
+                       "A tile of %u bytes does not leave room in UB for %u "
+                       "staging buffers.",
+                       tile_size_ * sizeof(InputT), kUbStagingBuffers);
+          });
+    } else {
+      pipe.InitBuffer(vecin_q_, 1, tile_size_ * sizeof(InputT));
+      pipe.InitBuffer(work_buf_, tile_size_ * sizeof(InputT));
+    }
   }
 
   /**
@@ -228,14 +314,45 @@ class KernelCompleteRowsBatched {
 
       running_sum = VecIter(idx, running_sum);
     }
+    if constexpr (kUseL0CToUB) {
+      // Tell the cube core that the staging buffers can be reused (see
+      // `KernelRowScanBatch::Process`).
+      sync::SyncGroup<sync::GroupSyncDirection::CUBE_WAIT_FOR_VEC>();
+    }
   }
 
  private:
   __aicore__ inline InputT VecIter(uint32_t iter_idx, InputT initial_sum) {
-    copy::CopyGmToVec(vecin_q_, global_input_[iter_idx * tile_size_]);
-    const InputT sum = ReduceWithVec(initial_sum);
-    StoreVecToGlobal(iter_idx);
-    return sum;
+    if constexpr (kUseL0CToUB) {
+      // The tile is already in UB: the cube core of the group wrote it there
+      // with an L0C -> UB fixpipe, so there is nothing to copy in. The scan
+      // is completed in place in the staging buffer.
+      const uint32_t buf_idx = iter_idx % kUbStagingBuffers;
+      // Get 2 local tensors pointing to the same buffer: this is needed to
+      // trick the compiler into considering operations on them independent.
+      const InputT sum =
+          ReduceInPlace(StagingTensor(buf_idx), StagingTensor(buf_idx),
+                        initial_sum);
+      StoreVecToGlobal(iter_idx, StagingTensor(buf_idx));
+      return sum;
+    } else {
+      copy::CopyGmToVec(vecin_q_, global_input_[iter_idx * tile_size_]);
+      const InputT sum = ReduceWithVec(initial_sum);
+      StoreVecToGlobal(iter_idx, work_buf_.Get<InputT>());
+      return sum;
+    }
+  }
+
+  /**
+   * @brief Tensor describing a staging buffer written by the cube core.
+   *
+   * The buffer is placed at a fixed offset at the top of UB, outside of the
+   * region managed by `TPipe`, because the address has to be agreed upon with
+   * the cube core (see `UbStagingOffsetBytes`).
+   */
+  __aicore__ inline LocalTensor<InputT> StagingTensor(uint32_t buf_idx) {
+    return pipe.template GetAbsAddr<TPosition::VECCALC, InputT>(
+        UbStagingOffsetBytes(tile_size_ * sizeof(InputT), buf_idx), tile_size_);
   }
 
   __aicore__ inline InputT ReduceWithVec(InputT initial_sum) {
@@ -248,6 +365,12 @@ class KernelCompleteRowsBatched {
     DataCopy(vec_buf1, vec_lt, vec_lt.GetSize());
     vecin_q_.FreeTensor(vec_lt);
 
+    return ReduceInPlace(vec_buf1, vec_buf2, initial_sum);
+  }
+
+  __aicore__ inline InputT ReduceInPlace(const LocalTensor<InputT>& vec_buf1,
+                                         const LocalTensor<InputT>& vec_buf2,
+                                         InputT initial_sum) {
     sync::ScalarWaitForVec();
 
     uint32_t first_offset = 0;
@@ -271,9 +394,9 @@ class KernelCompleteRowsBatched {
     return first_sum;
   }
 
-  __aicore__ inline void StoreVecToGlobal(uint32_t iter_idx) {
+  __aicore__ inline void StoreVecToGlobal(uint32_t iter_idx,
+                                         const LocalTensor<InputT>& lt) {
     const uint32_t dst_offset = iter_idx * tile_size_;
-    const LocalTensor<InputT> lt = work_buf_.Get<InputT>();
 
     if (iter_idx == num_tiles_ - 1 && vec_len_ % tile_size_)
       copy::CopyVecToGm<InputT>(global_output_[dst_offset], vecout_q_, lt,
