@@ -619,6 +619,110 @@ __aicore__ inline void CopyCL0ToGlobal(
 }
 
 /**
+ * @brief Copy a tensor from L0C (CO1) directly into the Unified Buffer of a
+ * vector core, bypassing global memory.
+ *
+ * Only available on dav-c310 (A5): the fixpipe unit of a cube core can write
+ * into the UB of the two vector cores it is paired with
+ * (`copy_matrix_cc_to_ub`). On dav-c220 the only destinations of the fixpipe
+ * are L1 and global memory, so the caller has to keep using
+ * `CopyCL0ToGlobal`.
+ *
+ * The NZ->ND conversion and the parameter mapping are exactly the ones used by
+ * `CopyCL0ToGlobal`, so an L0C->GM copy can be swapped for an L0C->UB one
+ * without touching the tile geometry: `height` is the N extent of the ND
+ * destination (and its row stride) and `width` is the M extent.
+ *
+ * The destination tensor must live in UB (VECIN/VECCALC/VECOUT) and start at a
+ * 32-byte aligned offset. Because the copy is issued by the cube core while
+ * the buffer belongs to the vector core, the caller is responsible for the
+ * cross-core synchronization (see `sync::SyncGroup`).
+ *
+ * @tparam DstDataType Data type of the destination tensor.
+ * @tparam SrcDataType Data type of the source tensor.
+ *
+ * @param [in] dst_lt Destination local tensor. Must be allocated in UB.
+ * @param [in] src_lt Source local tensor. Must be allocated in L0C.
+ * @param [in] height Height of the matrix.
+ * @param [in] width Width of the matrix.
+ * @param [in] sub_block_id Which of the two vector cores paired with this cube
+ * core owns the destination buffer.
+ */
+#if !TCUSCAN_IS_DAV_C220_ARCH
+/// @brief Fixpipe configuration selecting an NZ->ND copy into UB.
+///
+/// The destination memory of a fixpipe is picked by the `isToUB` flag of the
+/// configuration and not by the position of the destination tensor, so
+/// `CFG_ROW_MAJOR` would silently write to L1 instead.
+constexpr FixpipeConfig CFG_ROW_MAJOR_TO_UB = {CO2Layout::ROW_MAJOR,
+                                               /*isToUB=*/true};
+#endif
+
+template <typename DstDataType, typename SrcDataType>
+__aicore__ inline void CopyL0CToUB(const LocalTensor<DstDataType>& dst_lt,
+                                   const LocalTensor<SrcDataType>& src_lt,
+                                   uint32_t height, uint32_t width,
+                                   bool sub_block_id = false) {
+#if TCUSCAN_IS_DAV_C220_ARCH
+  static_assert(sizeof(DstDataType) == 0,
+                "L0C -> UB fixpipe is only available on dav-c310 (A5). Use "
+                "CopyCL0ToGlobal on dav-c220.");
+#else
+  exec_mode::AssertIsAIC();
+  exec_mode::AssertLocalTensorIsIn(src_lt, QuePosition::CO1);
+  constexpr uint16_t fractal_size = GetFractalMN<SrcDataType>();
+
+  FixpipeParamsArch3510<CO2Layout::ROW_MAJOR> params;
+  params.nSize = height;
+  params.mSize = width;
+  // Source stride in L0C is the M dimension aligned up to a fractal.
+  params.srcStride = (width + fractal_size - 1) / fractal_size * fractal_size;
+  // Row stride of the contiguous row-major destination tile in UB.
+  params.dstStride = height;
+  // Single ND matrix (ndNum == 1); the ND strides are unused in that case.
+  params.params = Nz2NdParams(/*ndNum=*/1, /*srcNdStride=*/0,
+                              /*dstNdStride=*/0);
+  // Write to one of the two vector cores of the group, not to both.
+  params.dualDstCtl = 0;
+  params.subBlockId = sub_block_id;
+
+  Fixpipe<DstDataType, SrcDataType, CFG_ROW_MAJOR_TO_UB>(dst_lt, src_lt,
+                                                         params);
+#endif
+}
+
+/**
+ * @brief Copy a tensor from a CO1 queue directly into the Unified Buffer of a
+ * vector core.
+ *
+ * Drop-in replacement for `CopyCL0ToGlobal` on dav-c310 (A5): it dequeues and
+ * frees the source tensor in the same way, but the data never reaches global
+ * memory. See `CopyL0CToUB` for the limitations.
+ *
+ * @tparam DstDataType Data type of the destination tensor.
+ * @tparam SrcDataType Data type of the source tensor.
+ * @tparam QNumBuffers Depth of the source queue.
+ *
+ * @param [in] dst_lt Destination local tensor. Must be allocated in UB.
+ * @param [in] src_q Source queue. The position must be CO1.
+ * @param [in] height Height of the matrix.
+ * @param [in] width Width of the matrix.
+ * @param [in] sub_block_id Which of the two vector cores paired with this cube
+ * core owns the destination buffer.
+ */
+template <typename DstDataType, typename SrcDataType, int32_t QNumBuffers>
+__aicore__ inline void CopyCL0ToUB(const LocalTensor<DstDataType>& dst_lt,
+                                   TQue<QuePosition::CO1, QNumBuffers>& src_q,
+                                   uint32_t height, uint32_t width,
+                                   bool sub_block_id = false) {
+  exec_mode::AssertIsAIC();
+  LocalTensor<SrcDataType> lt = src_q.template DeQue<SrcDataType>();
+  CopyL0CToUB<DstDataType, SrcDataType>(dst_lt, lt, height, width,
+                                        sub_block_id);
+  src_q.FreeTensor(lt);
+}
+
+/**
  * @brief Copy a tensor from global memory to the local tensor in L1 memory.
  *
  * The queue's position must be either A1 or B1. The data layout is transformed
